@@ -8,7 +8,7 @@ import SwiftUI
 ///
 /// Live Activity は Phase 13-C で追加予定。今は通常の Queue / Detail / Settings のみ。
 @main
-struct SentinelMobileApp: App {
+struct VigiliMobileApp: App {
   @StateObject private var coordinator = MobileAppCoordinator()
 
   init() {

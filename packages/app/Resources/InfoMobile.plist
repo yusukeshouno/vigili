@@ -20,9 +20,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>io.sentinel.mobile</string>
+			<string>io.vigili.mobile</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>vigili</string>
 				<string>sentinel</string>
 			</array>
 		</dict>
@@ -37,13 +38,14 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_sentinel._tcp</string>
+		<string>_vigili._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan the QR code shown on your Mac to connect.</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>© 2026 Sentinel</string>
+	<string>© 2026 Vigili</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Find Sentinel running on your Mac in the local network.</string>
+	<string>Find Vigili running on your Mac in the local network.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIAppFonts</key>

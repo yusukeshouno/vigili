@@ -1,13 +1,13 @@
 # xcodegen の declarative project 設定。
 # `brew install xcodegen` 後、このディレクトリで `xcodegen` を実行すると
-# Sentinel.xcodeproj が生成される。
+# Vigili.xcodeproj が生成される。
 #
 # 手で .xcodeproj を編集しない (xcodegen で再生成される)。
 # 設定変更はこの project.yml だけを触る。
 
-name: Sentinel
+name: Vigili
 options:
-  bundleIdPrefix: io.sentinel
+  bundleIdPrefix: io.vigili
   createIntermediateGroups: true
   groupSortPosition: top
   generateEmptyDirectories: false
@@ -27,12 +27,12 @@ targets:
   # ============================================================
   # macOS: メニューバー常駐アプリ
   # ============================================================
-  Sentinel:
+  Vigili:
     type: application
     platform: macOS
     deploymentTarget: "13.0"
     sources:
-      - path: Sources/Sentinel
+      - path: Sources/Vigili
       - path: Sources/Shared
       # Asset Catalog (Mac/iOS のアイコン + 起動画面色)
       - path: Assets.xcassets
@@ -53,7 +53,7 @@ targets:
       path: Resources/Info.plist
       properties:
         LSUIElement: true
-        NSHumanReadableCopyright: "© 2026 Sentinel"
+        NSHumanReadableCopyright: "© 2026 Vigili"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSAppTransportSecurity:
@@ -64,27 +64,27 @@ targets:
           - "JetBrainsMono.ttf"
     settings:
       base:
-        PRODUCT_NAME: Sentinel
-        PRODUCT_BUNDLE_IDENTIFIER: io.sentinel.app
+        PRODUCT_NAME: Vigili
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.app
         MACOSX_DEPLOYMENT_TARGET: "13.0"
         ENABLE_HARDENED_RUNTIME: "NO"
         SKIP_INSTALL: "NO"
         # Mac は iOS と別の Asset Catalog icon set を使う
         ASSETCATALOG_COMPILER_APPICON_NAME: MacAppIcon
     entitlements:
-      path: Resources/Sentinel.entitlements
+      path: Resources/Vigili.entitlements
       properties:
         com.apple.security.app-sandbox: false
 
   # ============================================================
   # iOS: iPhone / iPad アプリ (Live Activity 対応予定)
   # ============================================================
-  SentinelMobile:
+  VigiliMobile:
     type: application
     platform: iOS
     deploymentTarget: "16.2"
     sources:
-      - path: Sources/SentinelMobile
+      - path: Sources/VigiliMobile
       - path: Sources/Shared
       - path: Sources/SharedMobile
       # Asset Catalog (AppIcon + LaunchScreenBackground + MenuBarIcon)
@@ -95,14 +95,14 @@ targets:
       - path: Resources/Fonts/JetBrainsMono.ttf
         buildPhase: resources
     dependencies:
-      - target: SentinelActivity
+      - target: VigiliActivity
         embed: true
     info:
       path: Resources/InfoMobile.plist
       properties:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        NSHumanReadableCopyright: "© 2026 Sentinel"
+        NSHumanReadableCopyright: "© 2026 Vigili"
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         UIAppFonts:
@@ -117,26 +117,29 @@ targets:
         # QR スキャンでカメラを使うために必須の usage description。
         NSCameraUsageDescription: "Scan the QR code shown on your Mac to connect."
         # Local Network 探索の許可 (Bonjour で同 LAN 上の Mac を見つけるため必須)。
-        NSLocalNetworkUsageDescription: "Find Sentinel running on your Mac in the local network."
+        NSLocalNetworkUsageDescription: "Find Vigili running on your Mac in the local network."
         # Bonjour で browse する service type を列挙 (iOS 14+ で必須)。
+        # 旧 daemon との互換のため _sentinel._tcp も残す (新 _vigili._tcp 移行は
+        # daemon 側の advertise も同期して変える必要があるため次フェーズ)。
         NSBonjourServices:
           - _sentinel._tcp
+          - _vigili._tcp
         # Launch Screen を明示することで、iOS の "iPhone X 互換モード"
         # (上下に黒帯) を回避し、画面全体を使えるようにする。
         # 背景色は Assets.xcassets/LaunchScreenBackground.colorset を参照。
         UILaunchScreen:
           UIColorName: LaunchScreenBackground
-        # カスタム URL スキーム: sentinel://setup?u=...&t=... をタップすると
-        # iOS が Sentinel.app を開く。Mac で生成したリンクを AirDrop / iMessage で
-        # iPhone に送るだけで、Setup 画面をスキップして即接続できる。
+        # カスタム URL スキーム: vigili://setup?u=...&t=... と
+        # 旧 sentinel://setup?u=...&t=... の両方をサポート (移行期)。
         CFBundleURLTypes:
-          - CFBundleURLName: io.sentinel.mobile
+          - CFBundleURLName: io.vigili.mobile
             CFBundleURLSchemes:
+              - vigili
               - sentinel
     settings:
       base:
-        PRODUCT_NAME: Sentinel
-        PRODUCT_BUNDLE_IDENTIFIER: io.sentinel.mobile
+        PRODUCT_NAME: Vigili
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile
         IPHONEOS_DEPLOYMENT_TARGET: "16.2"
         TARGETED_DEVICE_FAMILY: "1"
         # iOS 実機にインストールするには有効な signing が必須。
@@ -150,25 +153,25 @@ targets:
   # ============================================================
   # iOS: Widget Extension (Live Activity 用)
   # ============================================================
-  SentinelActivity:
+  VigiliActivity:
     type: app-extension
     platform: iOS
     deploymentTarget: "16.2"
     sources:
-      - path: Sources/SentinelActivity
+      - path: Sources/VigiliActivity
       - path: Sources/SharedMobile
     info:
       path: Resources/InfoActivity.plist
       properties:
-        CFBundleDisplayName: SentinelActivity
+        CFBundleDisplayName: VigiliActivity
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
-        PRODUCT_NAME: SentinelActivity
-        PRODUCT_BUNDLE_IDENTIFIER: io.sentinel.mobile.activity
+        PRODUCT_NAME: VigiliActivity
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile.activity
         IPHONEOS_DEPLOYMENT_TARGET: "16.2"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
@@ -198,9 +201,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: VigiliWidget
-        # main app `io.sentinel.app` の子 ID として `.widget` を付ける。
-        # (R-4 で io.vigili.* に揃える)
-        PRODUCT_BUNDLE_IDENTIFIER: io.sentinel.app.widget
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.app.widget
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SKIP_INSTALL: "YES"
         ENABLE_HARDENED_RUNTIME: "NO"

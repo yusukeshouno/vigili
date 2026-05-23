@@ -12,7 +12,7 @@ import SwiftUI
 ///
 /// 表示のみ。タップ → アプリ起動。
 /// インタラクティブな Allow/Deny ボタンは次フェーズ (App Intents) で追加。
-struct SentinelLiveActivity: Widget {
+struct VigiliLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: SentinelActivityAttributes.self) { context in
       LockScreenView(state: context.state)

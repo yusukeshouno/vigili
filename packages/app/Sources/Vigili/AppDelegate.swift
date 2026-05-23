@@ -9,7 +9,7 @@ import AppKit
 /// SwiftUI 単独だとアプリ終了時の cleanup タイミングが曖昧なので、
 /// AppKit の `applicationWillTerminate` をフックする。
 final class AppDelegate: NSObject, NSApplicationDelegate {
-  /// `SentinelApp` の `AppCoordinator` と同じインスタンスを参照したいので
+  /// `VigiliApp` の `AppCoordinator` と同じインスタンスを参照したいので
   /// `applicationDidFinishLaunching` の時点で注入する。
   /// (現状は AppCoordinator がシングルトン的に動くので直接アクセスで足りる)
   static let shared = AppDelegate()

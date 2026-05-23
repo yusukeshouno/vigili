@@ -7,7 +7,7 @@ import SwiftUI
 /// - pending > 0 のときはアイコン横に数字バッジを出す (MenuBarExtra の label に Text/Image を組み合わせ)
 /// - `.menuBarExtraStyle(.window)` でポップオーバー風の独自 UI
 @main
-struct SentinelApp: App {
+struct VigiliApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @StateObject private var coordinator = AppCoordinator()
 
