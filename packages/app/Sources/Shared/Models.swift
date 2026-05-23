@@ -158,3 +158,44 @@ struct StatsBuckets {
     return "median \(format(humanResponse.p50)) · p95 \(format(humanResponse.p95))"
   }
 }
+
+/// daemon の `Message` (shared/src/message.ts) と対応する Swift モデル。
+/// 人間 → Claude の reply text。
+struct Message: Identifiable, Hashable {
+  let id: String
+  let sessionId: String
+  let body: String
+  let createdAt: Date
+  /// drain されて Claude に届けられた時刻。未配送なら nil。
+  let deliveredAt: Date?
+
+  init(id: String, sessionId: String, body: String, createdAt: Date, deliveredAt: Date?) {
+    self.id = id
+    self.sessionId = sessionId
+    self.body = body
+    self.createdAt = createdAt
+    self.deliveredAt = deliveredAt
+  }
+
+  init?(dict: [String: Any]) {
+    guard
+      let id = dict["id"] as? String,
+      let sessionId = dict["session_id"] as? String,
+      let body = dict["body"] as? String,
+      let createdMs = (dict["created_at"] as? NSNumber)?.doubleValue
+    else {
+      return nil
+    }
+    let deliveredAt: Date? = {
+      guard let n = dict["delivered_at"] as? NSNumber else { return nil }
+      return Date(timeIntervalSince1970: n.doubleValue / 1000.0)
+    }()
+    self.id = id
+    self.sessionId = sessionId
+    self.body = body
+    self.createdAt = Date(timeIntervalSince1970: createdMs / 1000.0)
+    self.deliveredAt = deliveredAt
+  }
+
+  var isDelivered: Bool { deliveredAt != nil }
+}

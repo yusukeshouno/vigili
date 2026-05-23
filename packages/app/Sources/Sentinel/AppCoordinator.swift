@@ -25,6 +25,7 @@ final class AppCoordinator: ObservableObject {
   // 表示用に publish するもの
   @Published var pendingCount: Int = 0
   @Published var pending: [ApprovalRequest] = []
+  @Published var messages: [Message] = []
   @Published var todayStats: StatsBuckets?
   @Published var daemonStatus: DaemonController.Status = .stopped
   @Published var wsState: DaemonWsClient.State = .disconnected
@@ -80,6 +81,11 @@ final class AppCoordinator: ObservableObject {
       }
       .store(in: &cancellables)
 
+    // messages を coordinator にも mirror
+    wsClient.$messages
+      .receive(on: DispatchQueue.main)
+      .assign(to: &$messages)
+
     // 起動
     daemonController.start()
     // daemon の socket / WS が立ち上がるまで少し時間がかかるので 2 秒遅延
@@ -128,6 +134,11 @@ final class AppCoordinator: ObservableObject {
   /// PopoverContentView から呼ばれる Allow / Deny。
   func decide(id: String, decision: String) {
     wsClient.decide(id: id, decision: decision)
+  }
+
+  /// MessageComposerView から呼ばれる: Claude にひとこと送る。
+  func sendMessage(sessionId: String, body: String) {
+    wsClient.sendMessage(sessionId: sessionId, body: body)
   }
 
   private func tickPending() async {

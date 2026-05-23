@@ -24,6 +24,8 @@ final class DaemonWsClient: ObservableObject {
   /// 現在の pending リスト。WS の snapshot / pending / resolved を統合した結果。
   @Published private(set) var pending: [ApprovalRequest] = []
   @Published private(set) var state: State = .disconnected
+  /// 直近 + 未配送のメッセージ (created_at 降順)。composer の history 表示用。
+  @Published private(set) var messages: [Message] = []
 
   /// 接続先 (例: `ws://127.0.0.1:7878` または `wss://my-mac.tail-xxxx.ts.net`)。
   private var urlBase: URL
@@ -93,6 +95,32 @@ final class DaemonWsClient: ObservableObject {
     sendJson(msg, on: task)
     // optimistic update: ローカルでも消しておく (resolved で本確認)
     pending.removeAll { $0.id == id }
+  }
+
+  /// Composer から呼ばれる: 指定 session_id 宛にメッセージを enqueue する。
+  /// daemon が次回 gate fire 時に additionalContext として Claude に届ける。
+  func sendMessage(sessionId: String, body: String) {
+    let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionId.isEmpty, !trimmed.isEmpty else { return }
+    guard let task = task, case .connected = state else {
+      appLog("ws.sendMessage: not connected, ignoring")
+      return
+    }
+    let msg: [String: Any] = [
+      "type": "send-message",
+      "session_id": sessionId,
+      "body": trimmed,
+    ]
+    sendJson(msg, on: task)
+    // optimistic ack: server からの message-added で正式に上書きされる
+    let placeholder = Message(
+      id: "tmp-\(Int(Date().timeIntervalSince1970 * 1000))",
+      sessionId: sessionId,
+      body: trimmed,
+      createdAt: Date(),
+      deliveredAt: nil
+    )
+    messages.insert(placeholder, at: 0)
   }
 
   // MARK: - private
@@ -175,6 +203,9 @@ final class DaemonWsClient: ObservableObject {
         pending = arr.compactMap(ApprovalRequest.init(dict:))
         appLog("ws.snapshot \(pending.count) pending")
       }
+      if let arr = obj["messages"] as? [[String: Any]] {
+        messages = arr.compactMap(Message.init(dict:))
+      }
     case "pending":
       if let r = obj["request"] as? [String: Any], let req = ApprovalRequest(dict: r) {
         // 既存に同じ id が無いか確認 (snapshot との競合防止)
@@ -187,6 +218,40 @@ final class DaemonWsClient: ObservableObject {
       if let id = obj["id"] as? String {
         pending.removeAll { $0.id == id }
         appLog("ws.resolved -1 total=\(pending.count)")
+      }
+    case "message-added":
+      if let m = obj["message"] as? [String: Any], let msg = Message(dict: m) {
+        // 同じ id が既にあれば上書き (optimistic placeholder の差し替え)、
+        // 無ければ降順 (新しい順) で頭に挿入し最大 100 件保持。
+        if let idx = messages.firstIndex(where: { $0.id == msg.id }) {
+          messages[idx] = msg
+        } else {
+          // tmp- placeholder と body 一致なら差し替え
+          if let idx = messages.firstIndex(where: {
+            $0.id.hasPrefix("tmp-") && $0.body == msg.body && $0.sessionId == msg.sessionId
+          }) {
+            messages[idx] = msg
+          } else {
+            messages.insert(msg, at: 0)
+            if messages.count > 100 { messages.removeLast(messages.count - 100) }
+          }
+        }
+        appLog("ws.message-added \(msg.id) → \(msg.sessionId)")
+      }
+    case "message-delivered":
+      if let id = obj["id"] as? String,
+         let delivered = (obj["delivered_at"] as? NSNumber)?.doubleValue {
+        if let idx = messages.firstIndex(where: { $0.id == id && $0.deliveredAt == nil }) {
+          let old = messages[idx]
+          messages[idx] = Message(
+            id: old.id,
+            sessionId: old.sessionId,
+            body: old.body,
+            createdAt: old.createdAt,
+            deliveredAt: Date(timeIntervalSince1970: delivered / 1000.0)
+          )
+          appLog("ws.message-delivered \(id)")
+        }
       }
     default:
       break

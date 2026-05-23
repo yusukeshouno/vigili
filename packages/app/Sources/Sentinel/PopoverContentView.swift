@@ -20,8 +20,13 @@ struct PopoverContentView: View {
       if coordinator.pending.isEmpty {
         divider
         footer
+        Spacer(minLength: 14)
+        MessageComposerView()
       } else {
         actionsBar
+        Spacer(minLength: 12)
+        MessageComposerView()
+        Spacer(minLength: 12)
         divider
         footer
       }

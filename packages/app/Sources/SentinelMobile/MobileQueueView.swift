@@ -15,8 +15,16 @@ struct MobileQueueView: View {
         Spacer()
         StandingWatchView(wsState: coordinator.wsState)
         Spacer()
+        MobileMessageComposerView()
+          .environmentObject(coordinator)
+          .padding(.horizontal, 18)
+          .padding(.bottom, 22)
       } else {
         cardList
+        MobileMessageComposerView()
+          .environmentObject(coordinator)
+          .padding(.horizontal, 18)
+          .padding(.top, 4)
         actionsBar
       }
     }

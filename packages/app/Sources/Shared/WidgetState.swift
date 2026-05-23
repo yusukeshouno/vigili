@@ -74,6 +74,22 @@ public struct WidgetState: Codable, Equatable, Sendable {
   )
 }
 
+// MARK: - cross-platform helpers
+
+extension WidgetState {
+  /// updatedAtMs が古ければ stale (offline 扱い)。
+  public var isStale: Bool {
+    guard updatedAtMs > 0 else { return true }
+    let now = Date().timeIntervalSince1970 * 1000
+    return (now - Double(updatedAtMs)) / 1000 > Self.staleThresholdSeconds
+  }
+}
+
+// MARK: - macOS-only file IO
+// iOS は ~/.vigili/ にアクセスできない (sandbox) ので、これらは macOS / Widget extension
+// 限定。type 定義 (上記) は cross-platform で共有する。
+
+#if os(macOS)
 extension WidgetState {
   /// 配置先のファイル URL。
   /// `VIGILI_HOME` env override に従い、無ければ `~/.vigili/widget-state.json`。
@@ -120,14 +136,8 @@ extension WidgetState {
     }
     return decoded
   }
-
-  /// updatedAtMs が古ければ stale (offline 扱い)。
-  public var isStale: Bool {
-    guard updatedAtMs > 0 else { return true }
-    let now = Date().timeIntervalSince1970 * 1000
-    return (now - Double(updatedAtMs)) / 1000 > Self.staleThresholdSeconds
-  }
 }
+#endif
 
 /// MARK: - NSLog import shim (Foundation 経由で参照できるよう)
 #if canImport(os)

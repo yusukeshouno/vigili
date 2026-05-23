@@ -15,6 +15,7 @@ final class MobileAppCoordinator: ObservableObject {
 
   @Published var pending: [ApprovalRequest] = []
   @Published var pendingCount: Int = 0
+  @Published var messages: [Message] = []
   @Published var wsState: DaemonWsClient.State = .disconnected
   @Published var isConfigured: Bool = MobileSettings.isConfigured
 
@@ -39,6 +40,10 @@ final class MobileAppCoordinator: ObservableObject {
     wsClient.$state
       .receive(on: DispatchQueue.main)
       .assign(to: &$wsState)
+
+    wsClient.$messages
+      .receive(on: DispatchQueue.main)
+      .assign(to: &$messages)
 
     if isConfigured {
       reconfigureAndConnect()
@@ -73,6 +78,12 @@ final class MobileAppCoordinator: ObservableObject {
   /// Allow / Deny ボタンから呼ばれる。
   func decide(id: String, decision: String) {
     wsClient.decide(id: id, decision: decision)
+  }
+
+  /// iOS composer から呼ばれる: 指定 session 宛にメッセージを送る。
+  /// 配送は daemon が次に gate fire したタイミング。
+  func sendMessage(sessionId: String, body: String) {
+    wsClient.sendMessage(sessionId: sessionId, body: body)
   }
 
   /// `sentinel://setup?u=<host>&t=<token>` を受け取り、設定 + 接続まで一気に進める。
