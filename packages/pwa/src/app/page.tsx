@@ -103,7 +103,9 @@ function EmptyState({ state }: { state: ConnectionState }) {
   }
   return (
     <div className="flex flex-col items-center gap-5 py-20 text-center">
-      <HandDrawnShield size={64} scale={1.6} />
+      <div className="standing-watch-spin">
+        <HandDrawnShield size={64} scale={1.6} />
+      </div>
       <p className="label" style={{ letterSpacing: "0.22em" }}>
         standing watch
       </p>

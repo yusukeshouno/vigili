@@ -277,6 +277,38 @@ textarea {
   }
 }
 
+/* standing watch: たまにロゴをくるりと回す (18 秒に 1 回、1.4 秒で 1 回転)
+ *
+ * 0% → ~7.8% (= 1.4s/18s) でロゴが 0° → 360° に。
+ * 7.8% → 100% は 360° で待機 (見た目は 0°)。
+ * cubic-bezier で ease-in-out、回り終わりが「とん」と止まる。
+ *
+ * prefers-reduced-motion: reduce ではアニメーション無効 (アクセシビリティ)。
+ */
+@keyframes occasional-spin {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  7.8% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.standing-watch-spin {
+  display: inline-block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .standing-watch-spin {
+    animation: occasional-spin 18s linear infinite;
+    transform-origin: 50% 50%;
+    will-change: transform;
+  }
+}
+
 /* scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
