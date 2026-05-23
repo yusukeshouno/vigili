@@ -1,56 +1,51 @@
 import SwiftUI
 
-/// PWA の `Brand.tsx` と同じ 4 弁花ロゴを SwiftUI の Shape で直接描く。
+/// PWA の `Brand.tsx` と同じ 8 突点星ロゴを SwiftUI の Shape で直接描く。
 /// Asset Catalog 経由だと build cache / template-rendering で不安定なため、
 /// vector 計算を Swift 側に持ってきて確実に描画する。
 ///
-/// viewBox は 32×32、花は中心 (16,16) 周りの 4 回回転対称。
+/// 原典 viewBox 0 0 105 118.52、bbox 中心 (52.5, 59.26)。
+/// 名前は `FlowerLogo` のままだが、4 弁花から 8 突星に差し替え済み (リブランド)。
 struct FlowerLogo: View {
-  /// 1 弁の塗り色。pendingCount=0 のときは fgMid、>0 で accent に。
+  /// 塗り色。pendingCount=0 のときは fgMid、>0 で accent に。
   var color: Color = .primary
   var size: CGFloat = 18
 
+  /// 16 頂点 (8 突点 + 8 凹点)。原典 SVG の polygon points と同じ順序。
+  private static let starPoints: [CGPoint] = [
+    CGPoint(x: 59.94, y: 45.86), CGPoint(x: 89.54, y: 23.53),
+    CGPoint(x: 67.84, y: 53.59), CGPoint(x: 105, y: 58.73),
+    CGPoint(x: 67.95, y: 64.65), CGPoint(x: 85.38, y: 89.44),
+    CGPoint(x: 60.22, y: 72.54), CGPoint(x: 55.18, y: 118.52),
+    CGPoint(x: 49.17, y: 72.66), CGPoint(x: 19.57, y: 94.98),
+    CGPoint(x: 41.27, y: 64.93), CGPoint(x: 0, y: 59.79),
+    CGPoint(x: 41.15, y: 53.87), CGPoint(x: 23.73, y: 29.08),
+    CGPoint(x: 48.89, y: 45.98), CGPoint(x: 53.93, y: 0),
+  ]
+  private static let starCenter = CGPoint(x: 52.5, y: 59.26)
+  /// 星の最大半径 (中心 → 最遠突点)。viewBox 高さの半分 = 59.26。
+  private static let starExtent: CGFloat = 59.26
+
   var body: some View {
     Canvas { ctx, _ in
-      let scale = size / 32.0
-      let cx = size / 2
-      let cy = size / 2
+      let canvasCenter = CGPoint(x: size / 2, y: size / 2)
+      // canvas 半径いっぱいの 92% で fit (薄い margin)
+      let scale = (size / 2) / Self.starExtent * 0.92
 
-      // 1 弁を 4 回転して描く
-      for rotation in stride(from: 0, to: 360, by: 90) {
-        var t = CGAffineTransform.identity
-        t = t.translatedBy(x: cx, y: cy)
-        t = t.rotated(by: CGFloat(rotation) * .pi / 180)
-        t = t.scaledBy(x: scale, y: scale)
-        t = t.translatedBy(x: -16, y: -16)
-
-        // PWA と同じ Bezier path: M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z
-        var path = Path()
-        path.move(to: CGPoint(x: 16, y: 14))
-        path.addCurve(
-          to: CGPoint(x: 16, y: 4),
-          control1: CGPoint(x: 13, y: 11),
-          control2: CGPoint(x: 13, y: 7)
+      var path = Path()
+      for (i, p) in Self.starPoints.enumerated() {
+        let pt = CGPoint(
+          x: canvasCenter.x + (p.x - Self.starCenter.x) * scale,
+          y: canvasCenter.y + (p.y - Self.starCenter.y) * scale
         )
-        path.addCurve(
-          to: CGPoint(x: 16, y: 14),
-          control1: CGPoint(x: 19, y: 7),
-          control2: CGPoint(x: 19, y: 11)
-        )
-        path.closeSubpath()
-
-        let transformed = path.applying(t)
-        ctx.fill(transformed, with: .color(color))
+        if i == 0 {
+          path.move(to: pt)
+        } else {
+          path.addLine(to: pt)
+        }
       }
-
-      // 中央の小さい円 (r=1.5 を 1.55 倍 ≈ 2.3)
-      let dotPath = Path(ellipseIn: CGRect(
-        x: cx - 1.2 * scale * 1.55,
-        y: cy - 1.2 * scale * 1.55,
-        width: 2.4 * scale * 1.55,
-        height: 2.4 * scale * 1.55
-      ))
-      ctx.fill(dotPath, with: .color(color))
+      path.closeSubpath()
+      ctx.fill(path, with: .color(color))
     }
     .frame(width: size, height: size)
   }
