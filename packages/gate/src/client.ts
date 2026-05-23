@@ -4,6 +4,7 @@ import {
   AskResolutionSchema,
   type Decision,
   DecisionSchema,
+  type Message,
   type ToolRequest,
 } from "@vigili/shared";
 
@@ -25,8 +26,8 @@ export class GateConnectionError extends Error {
 }
 
 export type GateResult =
-  | { decision: "allow"; reason?: string }
-  | { decision: "deny"; reason?: string };
+  | { decision: "allow"; reason?: string; messages?: Message[] }
+  | { decision: "deny"; reason?: string; messages?: Message[] };
 
 /**
  * gate のクライアント本体。
@@ -83,14 +84,18 @@ async function exchange(
   const parsed = parseLine(first, DecisionSchema, "Decision");
 
   if (parsed.decision === "allow") {
-    return parsed.reason !== undefined
-      ? { decision: "allow", reason: parsed.reason }
-      : { decision: "allow" };
+    return {
+      decision: "allow",
+      ...(parsed.reason !== undefined ? { reason: parsed.reason } : {}),
+      ...(parsed.messages && parsed.messages.length > 0 ? { messages: parsed.messages } : {}),
+    };
   }
   if (parsed.decision === "deny") {
-    return parsed.reason !== undefined
-      ? { decision: "deny", reason: parsed.reason }
-      : { decision: "deny" };
+    return {
+      decision: "deny",
+      ...(parsed.reason !== undefined ? { reason: parsed.reason } : {}),
+      ...(parsed.messages && parsed.messages.length > 0 ? { messages: parsed.messages } : {}),
+    };
   }
 
   // ask: 同じソケット上で resolution を待つ
@@ -112,9 +117,13 @@ async function waitForResolution(
       `ask に対する resolution の request_id が一致しません: expected=${requestId} got=${resolution.request_id}`,
     );
   }
-  return resolution.reason !== undefined
-    ? { decision: resolution.decision, reason: resolution.reason }
-    : { decision: resolution.decision };
+  return {
+    decision: resolution.decision,
+    ...(resolution.reason !== undefined ? { reason: resolution.reason } : {}),
+    ...(resolution.messages && resolution.messages.length > 0
+      ? { messages: resolution.messages }
+      : {}),
+  };
 }
 
 function parseLine<T>(

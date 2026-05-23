@@ -11,6 +11,7 @@ import {
   ToolRequestSchema,
 } from "@vigili/shared";
 import { type SentinelConfig, loadConfigFile } from "./config.js";
+import { type MessageStore, createMessageStore } from "./db/messages.js";
 import { type RequestStore, openStore } from "./db/store.js";
 import { computeStats, pruneOldRequests } from "./db/stats.js";
 import { createNtfyNotifier } from "./notify/ntfy.js";
@@ -78,6 +79,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const initialPolicy = options.policy ?? (await loadPolicyFile(p.policy));
   const config = options.config ?? (await loadConfigFile(p.config));
   const store = openStore(p.db);
+  // messages テーブルは queue.db に同居する (small, single DB で OK)
+  const messageStore = createMessageStore(store.raw().db);
   const queue = createPendingQueue();
   const token = loadOrCreateToken(p.token);
 
@@ -103,12 +106,15 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const ctx: DaemonContext = {
     policy: initialPolicy,
     store,
+    messageStore,
     queue,
     sessionTags,
     notifier,
     log,
     policyPath: p.policy,
     generatedPolicyPath: p.policyGenerated,
+    onMessageAdded: () => {},
+    onMessageDelivered: () => {},
   };
 
   const socket = startSocketServer(p.socket, (line, conn) => handleLine(line, conn, ctx));
@@ -126,8 +132,25 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         if (msg.type !== "decide" || !msg.promote) return;
         void handlePromote(msg.promote, ctx);
       },
+      onSendMessage: (session_id, body) => {
+        const id = randomUUID();
+        return ctx.messageStore.insert({
+          id,
+          session_id,
+          body,
+          created_at: Date.now(),
+        });
+      },
+      recentMessages: () => ctx.messageStore.listRecent(50),
       ...(pushVapid && pushStore ? { push: { vapid: pushVapid, store: pushStore } } : {}),
     });
+    // ctx の broadcast コールバックを実体に差し替える
+    ctx.onMessageAdded = (m) => {
+      ws?.broadcast({ type: "message-added", message: m });
+    };
+    ctx.onMessageDelivered = (id, delivered_at) => {
+      ws?.broadcast({ type: "message-delivered", id, delivered_at });
+    };
   }
 
   // SIGHUP で policy をホットリロード (CLI / launchd 経由で利用可)
@@ -248,12 +271,17 @@ interface DaemonContext {
   /** ホットリロード可能なため mutable。reloadPolicy() で差し替える。 */
   policy: PolicyConfig;
   store: RequestStore;
+  messageStore: MessageStore;
   queue: PendingQueue;
   sessionTags: Record<string, string>;
   notifier: Notifier;
   log: (msg: string) => void;
   policyPath: string;
   generatedPolicyPath: string;
+  /** WS から PWA に message-added / message-delivered を broadcast するコールバック。
+   *  WS server が起動後に差し替える。startDaemon の構築時点では noop。 */
+  onMessageAdded: (m: import("@vigili/shared").Message) => void;
+  onMessageDelivered: (id: string, delivered_at: number) => void;
 }
 
 async function handleLine(line: string, conn: ConnContext, ctx: DaemonContext): Promise<void> {
@@ -370,13 +398,24 @@ async function handleToolRequest(
 
   const result = decide(req, ctx.policy, { sessionTags: ctx.sessionTags });
 
+  // この session 宛にキューされているメッセージを drain し、Decision に同梱する。
+  // session_id 未指定 (gate が --session 渡さなかった) なら drain しない。
+  const drained =
+    req.session_id !== undefined && req.session_id !== ""
+      ? ctx.messageStore.drainForSession(req.session_id, Date.now())
+      : [];
+  for (const m of drained) {
+    if (m.delivered_at !== null) ctx.onMessageDelivered(m.id, m.delivered_at);
+  }
+
   if (result.action !== "ask") {
     finalizeImmediate(id, result, ctx);
-    conn.send(toDecisionResponse(result));
+    conn.send(toDecisionResponse(result, drained));
     return;
   }
 
   // ask: ID を gate に知らせ、resolution を待つ。
+  // drained messages は ask resolution に同梱する (ここでは送らない)。
   conn.send({ decision: "ask", request_id: id } satisfies Decision);
 
   const approvalRow = ctx.store.get(id);
@@ -420,6 +459,7 @@ async function handleToolRequest(
       request_id: id,
       decision: resolution.decision,
       ...(resolution.reason !== null ? { reason: resolution.reason } : {}),
+      ...(drained.length > 0 ? { messages: drained } : {}),
     };
     conn.send(payload);
   }
@@ -450,9 +490,22 @@ function persistResolution(
   });
 }
 
-function toDecisionResponse(result: DecisionResult): Decision {
-  const base = { decision: result.action === "allow" ? "allow" : "deny" } as const;
-  return result.reason !== undefined ? { ...base, reason: result.reason } : base;
+function toDecisionResponse(
+  result: DecisionResult,
+  messages: import("@vigili/shared").Message[] = [],
+): Decision {
+  if (result.action === "allow") {
+    return {
+      decision: "allow",
+      ...(result.reason !== undefined ? { reason: result.reason } : {}),
+      ...(messages.length > 0 ? { messages } : {}),
+    };
+  }
+  return {
+    decision: "deny",
+    ...(result.reason !== undefined ? { reason: result.reason } : {}),
+    ...(messages.length > 0 ? { messages } : {}),
+  };
 }
 
 /** 当日 00:00:00 (ローカル時刻) を UNIX ms で返す。 */

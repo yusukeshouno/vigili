@@ -5,6 +5,7 @@ import { AuroraBackground } from "@/components/AuroraBackground";
 import { Brand, HandDrawnShield } from "@/components/Brand";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { SettingsIcon } from "@/components/Icon";
+import { MessageComposer } from "@/components/MessageComposer";
 import { SwipeStack } from "@/components/SwipeStack";
 import { useQueue } from "@/lib/queue-context";
 import type { ConnectionState } from "@/lib/ws-client";
@@ -61,7 +62,7 @@ export default function QueuePage() {
 
       {/* Stack / Empty */}
       <section className="safe-px relative z-10 flex flex-1 items-center justify-center px-6 pb-28 sm:px-10">
-        <div className="relative w-full" style={{ maxWidth: 560 }}>
+        <div className="relative flex w-full flex-col gap-5" style={{ maxWidth: 560 }}>
           {total === 0 ? (
             <EmptyState state={state} />
           ) : (
@@ -73,6 +74,7 @@ export default function QueuePage() {
               renderCard={(item, ctx) => <ApprovalCard request={item} progress={ctx.progress} />}
             />
           )}
+          <MessageComposer />
         </div>
       </section>
     </main>

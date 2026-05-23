@@ -174,13 +174,17 @@ async function main(): Promise<number> {
       trace: (event, detail) => dbg("daemon trace:", event, detail),
     });
     dbg("daemon result:", result);
+    const additional = formatMessagesAsContext(result.messages);
+    if (additional) {
+      console.error(`[vigili-gate] delivering ${result.messages?.length ?? 0} user message(s) to Claude`);
+    }
     if (result.decision === "allow") {
-      emitHookDecision("allow", result.reason ?? "approved via Sentinel", hookEvent);
+      emitHookDecision("allow", result.reason ?? "approved via Vigili", hookEvent, additional);
       if (result.reason) console.error(`[vigili-gate] allow: ${result.reason}`);
       dbg("→ exit 0 (allow JSON emitted to stdout)");
       return 0;
     }
-    emitHookDecision("deny", result.reason ?? "denied via Sentinel", hookEvent);
+    emitHookDecision("deny", result.reason ?? "denied via Vigili", hookEvent, additional);
     console.error(`[vigili-gate] deny${result.reason ? `: ${result.reason}` : ""}`);
     dbg("→ exit 2 (deny)");
     return 2;
@@ -212,12 +216,15 @@ function emitHookDecision(
   verdict: "allow" | "deny",
   reason: string,
   hookEvent: "PreToolUse" | "PermissionRequest",
+  additionalContext?: string,
 ): void {
   // Claude Code は hook イベントごとに JSON 形式が異なる。
   //  - PreToolUse:       hookSpecificOutput.permissionDecision: "allow"|"deny"|"ask"|"defer"
   //  - PermissionRequest: hookSpecificOutput.decision: { behavior: "allow"|"deny" }
+  // `additionalContext` (top-level) は Claude が次のターンで読む context として
+  // 追加される (Claude Code hook v2 仕様)。messages の配送はここに乗せる。
   // stdout には JSON だけを書く (改行なし、strict パーサ対応)。
-  let payload: unknown;
+  let payload: Record<string, unknown>;
   if (hookEvent === "PermissionRequest") {
     payload = {
       hookSpecificOutput: {
@@ -237,9 +244,30 @@ function emitHookDecision(
       },
     };
   }
+  if (additionalContext) {
+    payload.additionalContext = additionalContext;
+  }
   const json = JSON.stringify(payload);
   process.stdout.write(json);
   dbg("emitted:", hookEvent, json);
+}
+
+/**
+ * Vigili が受け取った人間 → Claude のメッセージを additionalContext 用の
+ * 文字列に整形する。Claude にそのまま提示されるので、人間が書いたものだと分かる
+ * 形にラベリングする (誤って Claude 自身の system context と混同させない)。
+ */
+function formatMessagesAsContext(messages?: import("@vigili/shared").Message[]): string | undefined {
+  if (!messages || messages.length === 0) return undefined;
+  const lines = messages.map((m) => {
+    const time = new Date(m.created_at).toISOString().replace(/\.\d+Z$/, "Z");
+    return `[${time}] ${m.body}`;
+  });
+  return [
+    "The user sent the following message(s) via Vigili while you were running:",
+    ...lines,
+    "Take them into account before the next tool call.",
+  ].join("\n");
 }
 
 main().then(

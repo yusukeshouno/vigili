@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ApprovalRequestSchema } from "./approval-request.js";
 import { FinalDecisionSchema } from "./decision.js";
+import { MessageSchema } from "./message.js";
 
 /**
  * PWA がルール昇格 (Allow & promote to rule) を送るときの提案。
@@ -24,6 +25,8 @@ export const WsServerMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("snapshot"),
     pending: z.array(ApprovalRequestSchema),
+    /** 接続時点で未配送 / 直近配送済みのメッセージ (composer の history 用)。 */
+    messages: z.array(MessageSchema).optional(),
   }),
   z.object({
     type: z.literal("pending"),
@@ -33,6 +36,18 @@ export const WsServerMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("resolved"),
     id: z.string().uuid(),
     decision: FinalDecisionSchema,
+  }),
+  // --- messages ---
+  z.object({
+    /** 新しいメッセージが queue された (送信者を含む全 WS クライアントに broadcast)。 */
+    type: z.literal("message-added"),
+    message: MessageSchema,
+  }),
+  z.object({
+    /** queued されていたメッセージが gate で drain されて Claude に届いた。 */
+    type: z.literal("message-delivered"),
+    id: z.string().uuid(),
+    delivered_at: z.number().int().nonnegative(),
   }),
 ]);
 
@@ -45,6 +60,12 @@ export const WsClientMessageSchema = z.discriminatedUnion("type", [
     id: z.string().uuid(),
     decision: FinalDecisionSchema,
     promote: PromoteRuleSchema.nullable().optional(),
+  }),
+  z.object({
+    /** session 宛に新しいメッセージを enqueue する。 */
+    type: z.literal("send-message"),
+    session_id: z.string().min(1),
+    body: z.string().min(1).max(2000),
   }),
 ]);
 

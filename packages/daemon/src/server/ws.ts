@@ -1,5 +1,6 @@
 import fastifyWebsocket from "@fastify/websocket";
 import {
+  type Message,
   type WsClientMessage,
   WsClientMessageSchema,
   type WsServerMessage,
@@ -16,6 +17,14 @@ export interface WsServerOptions {
   queue: PendingQueue;
   /** WS client が decide で promote を含めてきたときに呼ばれる。Phase 7 で実装。 */
   onPromote?: (req: WsClientMessage) => void;
+  /**
+   * PWA が新しいメッセージを送ってきたときの hook。daemon 側で messages テーブルに
+   * insert して、永続化された Message を返すと WS が全クライアントに broadcast する。
+   * 何も返さない (undefined) と broadcast されない (rate limit / 不正入力時用)。
+   */
+  onSendMessage?: (session_id: string, body: string) => Message | undefined;
+  /** snapshot に同梱する recent messages を取得するコールバック (省略時は空配列)。 */
+  recentMessages?: () => Message[];
   log?: (msg: string) => void;
   /** Web Push のエンドポイントも同じ Fastify インスタンスに乗せる場合に渡す。 */
   push?: { vapid: VapidKeys; store: SubscriptionStore };
@@ -24,6 +33,8 @@ export interface WsServerOptions {
 export interface RunningWsServer {
   url: string;
   close(): Promise<void>;
+  /** 外部 (daemon の handleToolRequest 等) から message-added / message-delivered を流す。 */
+  broadcast(msg: WsServerMessage): void;
 }
 
 /**
@@ -88,7 +99,12 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
       sockets.add(wrap);
 
       // snapshot を送信
-      wrap.send({ type: "snapshot", pending: options.queue.list() });
+      const recent = options.recentMessages?.() ?? [];
+      wrap.send(
+        recent.length > 0
+          ? { type: "snapshot", pending: options.queue.list(), messages: recent }
+          : { type: "snapshot", pending: options.queue.list() },
+      );
 
       socket.on("message", (raw: Buffer) => {
         let parsed: unknown;
@@ -106,7 +122,7 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
           );
           return;
         }
-        handleClientMessage(result.data, options);
+        handleClientMessage(result.data, options, broadcast);
       });
 
       socket.on("close", () => {
@@ -116,13 +132,14 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
   );
 
   // queue → broadcast bridges
-  const offPending = options.queue.onPending((req) => {
-    const msg: WsServerMessage = { type: "pending", request: req };
+  const broadcast = (msg: WsServerMessage): void => {
     for (const s of sockets) s.send(msg);
+  };
+  const offPending = options.queue.onPending((req) => {
+    broadcast({ type: "pending", request: req });
   });
   const offResolved = options.queue.onResolved((id, decision) => {
-    const msg: WsServerMessage = { type: "resolved", id, decision };
-    for (const s of sockets) s.send(msg);
+    broadcast({ type: "resolved", id, decision });
   });
 
   const host = options.host ?? "127.0.0.1";
@@ -181,10 +198,15 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
       sockets.clear();
       await app.close();
     },
+    broadcast,
   };
 }
 
-function handleClientMessage(msg: WsClientMessage, options: WsServerOptions): void {
+function handleClientMessage(
+  msg: WsClientMessage,
+  options: WsServerOptions,
+  broadcast: (msg: WsServerMessage) => void,
+): void {
   if (msg.type === "decide") {
     if (msg.promote && options.onPromote) {
       try {
@@ -199,6 +221,19 @@ function handleClientMessage(msg: WsClientMessage, options: WsServerOptions): vo
     if (!ok) {
       (options.log ?? console.error)(`[vigili-ws] decide: id ${msg.id} は既に決着済み / 未知`);
     }
+    return;
+  }
+  if (msg.type === "send-message") {
+    if (!options.onSendMessage) return;
+    try {
+      const stored = options.onSendMessage(msg.session_id, msg.body);
+      if (stored) broadcast({ type: "message-added", message: stored });
+    } catch (err) {
+      (options.log ?? console.error)(
+        `[vigili-ws] send-message handler error: ${(err as Error).message}`,
+      );
+    }
+    return;
   }
 }
 
