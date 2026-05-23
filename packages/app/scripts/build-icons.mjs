@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 /**
- * Sentinel.app の Asset Catalog 用に PWA の 4 弁花ロゴから:
+ * Vigili.app の Asset Catalog 用に 4 弁花ロゴから:
  *   - MenuBarIcon (template image, 黒+透明、template flag を立てる前提)
- *   - AppIcon (角丸背景 + 花、全 10 サイズ)
+ *   - AppIcon (角丸背景 + 花、macOS 10 サイズ + iOS 9 サイズ)
+ *   - MacAppIcon (Mac-only icon set)
+ *   - PWA の icon.svg + icon-192.png + icon-512.png + apple-touch-icon.png
  * を SVG → PNG 焼き出しで生成する。
  *
  * 実行: node packages/app/scripts/build-icons.mjs
- * 依存: packages/pwa/node_modules/sharp (既にインストール済み)
+ * 依存: pnpm hoisted の sharp (PWA 経由で入る)
+ *
+ * 花弁スケール: 1.75 (PWA Brand component の見た目に近づける)。
+ * 1.55 だと 64x64 canvas に対して余白が広く、Dock / Home screen で
+ * 沈んで見えたので少し大きくした。色は brand accent #c96442 を継承。
  */
 
 import { fileURLToPath } from "node:url";
@@ -29,31 +35,44 @@ const require = createRequire(sharpPkgJson);
 const sharp = require("sharp");
 
 // ---------------------------------------------------------------------
+// 共通定数
+// ---------------------------------------------------------------------
+
+/** brand accent (花の色)。PWA Brand component と揃える。 */
+const ACCENT = "#c96442";
+/** brand background (角丸の中の色)。 */
+const BG = "#262624";
+/** 花弁スケール。1.55 → 1.75 に拡大 (icon polish)。 */
+const PETAL_SCALE = 1.75;
+/** 4 弁花の path (上向き 1 枚、N/E/S/W に rotate して 4 弁に)。 */
+const PETAL_PATH = "M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z";
+
+// ---------------------------------------------------------------------
 // SVG ソース
 // ---------------------------------------------------------------------
 
 /** メニューバー用: 単色テンプレ。背景なし、花だけ黒。 */
 function menuBarSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">
-  <g fill="black" transform="translate(32 32) scale(1.55) translate(-16 -16)">
-    <path d="M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z"/>
-    <path d="M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z" transform="rotate(90 16 16)"/>
-    <path d="M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z" transform="rotate(180 16 16)"/>
-    <path d="M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z" transform="rotate(270 16 16)"/>
+  <g fill="black" transform="translate(32 32) scale(${PETAL_SCALE}) translate(-16 -16)">
+    <path d="${PETAL_PATH}"/>
+    <path d="${PETAL_PATH}" transform="rotate(90 16 16)"/>
+    <path d="${PETAL_PATH}" transform="rotate(180 16 16)"/>
+    <path d="${PETAL_PATH}" transform="rotate(270 16 16)"/>
     <circle cx="16" cy="16" r="1.6"/>
   </g>
 </svg>`;
 }
 
-/** Dock / Finder 用: PWA と揃えた角丸ダーク背景 + 花。 */
+/** Dock / Finder / iOS Home / PWA Home screen 用: 角丸ダーク背景 + 花。 */
 function appIconSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">
-  <rect width="64" height="64" rx="14" fill="#262624"/>
-  <g fill="#c96442" transform="translate(32 32) scale(1.55) translate(-16 -16)">
-    <path d="M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z"/>
-    <path d="M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z" transform="rotate(90 16 16)"/>
-    <path d="M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z" transform="rotate(180 16 16)"/>
-    <path d="M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z" transform="rotate(270 16 16)"/>
+  <rect width="64" height="64" rx="14" fill="${BG}"/>
+  <g fill="${ACCENT}" transform="translate(32 32) scale(${PETAL_SCALE}) translate(-16 -16)">
+    <path d="${PETAL_PATH}"/>
+    <path d="${PETAL_PATH}" transform="rotate(90 16 16)"/>
+    <path d="${PETAL_PATH}" transform="rotate(180 16 16)"/>
+    <path d="${PETAL_PATH}" transform="rotate(270 16 16)"/>
     <circle cx="16" cy="16" r="1.6"/>
   </g>
 </svg>`;
@@ -64,14 +83,13 @@ function appIconSvg(size) {
 // ---------------------------------------------------------------------
 
 const assets = join(appRoot, "Assets.xcassets");
-
-// MenuBarIcon imageset
 const menuBarSet = join(assets, "MenuBarIcon.imageset");
 mkdirSync(menuBarSet, { recursive: true });
-
-// AppIcon set (既存。中身を埋め直す)
 const appIconSet = join(assets, "AppIcon.appiconset");
 mkdirSync(appIconSet, { recursive: true });
+const macAppIconSet = join(assets, "MacAppIcon.appiconset");
+mkdirSync(macAppIconSet, { recursive: true });
+const pwaPublic = join(repoRoot, "packages/pwa/public");
 
 // ---------------------------------------------------------------------
 // MenuBarIcon: 16x16 + 32x32 PNG (template flag は Contents.json で指定)
@@ -84,32 +102,19 @@ async function buildMenuBar() {
     await sharp(svg).resize(size, size).png().toFile(out);
     console.log("→", out);
   }
-
-  // Contents.json: template-rendering 指定
   const contents = {
     images: [
-      {
-        idiom: "universal",
-        filename: "MenuBarIcon@1x.png",
-        scale: "1x",
-      },
-      {
-        idiom: "universal",
-        filename: "MenuBarIcon@2x.png",
-        scale: "2x",
-      },
+      { idiom: "universal", filename: "MenuBarIcon@1x.png", scale: "1x" },
+      { idiom: "universal", filename: "MenuBarIcon@2x.png", scale: "2x" },
     ],
     info: { author: "xcode", version: 1 },
     properties: { "template-rendering-intent": "template" },
   };
-  writeFileSync(
-    join(menuBarSet, "Contents.json"),
-    JSON.stringify(contents, null, 2) + "\n",
-  );
+  writeFileSync(join(menuBarSet, "Contents.json"), JSON.stringify(contents, null, 2) + "\n");
 }
 
 // ---------------------------------------------------------------------
-// AppIcon: macOS は 16, 32, 64, 128, 256, 512, 1024 px (1x + 2x)
+// AppIcon (legacy combined): macOS 10 + iOS 9
 // ---------------------------------------------------------------------
 
 const macIconSpec = [
@@ -122,27 +127,23 @@ const macIconSpec = [
   { size: 256, scale: 1 },
   { size: 256, scale: 2 },
   { size: 512, scale: 1 },
-  { size: 512, scale: 2 }, // = 1024
+  { size: 512, scale: 2 },
 ];
 
-// iOS は同じ pt サイズで @2x / @3x を出す。
-// iPhone のみ前提だが iOS marketing 1024 は必須 (App Store / Xcode 内の表示)。
 const iosIconSpec = [
-  { size: 20, scale: 2, idiom: "iphone" },  // notification @2x
-  { size: 20, scale: 3, idiom: "iphone" },  // notification @3x
-  { size: 29, scale: 2, idiom: "iphone" },  // settings @2x
+  { size: 20, scale: 2, idiom: "iphone" },
+  { size: 20, scale: 3, idiom: "iphone" },
+  { size: 29, scale: 2, idiom: "iphone" },
   { size: 29, scale: 3, idiom: "iphone" },
-  { size: 40, scale: 2, idiom: "iphone" },  // spotlight @2x
+  { size: 40, scale: 2, idiom: "iphone" },
   { size: 40, scale: 3, idiom: "iphone" },
-  { size: 60, scale: 2, idiom: "iphone" },  // app @2x
-  { size: 60, scale: 3, idiom: "iphone" },  // app @3x (180x180)
+  { size: 60, scale: 2, idiom: "iphone" },
+  { size: 60, scale: 3, idiom: "iphone" },
   { size: 1024, scale: 1, idiom: "ios-marketing" },
 ];
 
 async function buildAppIcon() {
   const images = [];
-
-  // macOS
   for (const { size, scale } of macIconSpec) {
     const px = size * scale;
     const filename = `app-mac-${size}x${size}@${scale}x.png`;
@@ -150,46 +151,69 @@ async function buildAppIcon() {
     const svg = Buffer.from(appIconSvg(px));
     await sharp(svg).resize(px, px).png().toFile(out);
     console.log("→", out);
-    images.push({
-      idiom: "mac",
-      size: `${size}x${size}`,
-      scale: `${scale}x`,
-      filename,
-    });
+    images.push({ idiom: "mac", size: `${size}x${size}`, scale: `${scale}x`, filename });
   }
-
-  // iOS
   for (const { size, scale, idiom } of iosIconSpec) {
     const px = size * scale;
     const filename = `app-ios-${size}x${size}@${scale}x.png`;
     const out = join(appIconSet, filename);
     const svg = Buffer.from(appIconSvg(px));
-    // iOS の 1024 marketing は α が許されない (App Store 上でアートとして表示)。
-    // 他もアルファ無しで OK。flatten で背景を黒に固める (角丸は iOS が自動で被せる)。
     await sharp(svg)
       .resize(px, px)
       .flatten({ background: { r: 38, g: 38, b: 36 } })
       .png()
       .toFile(out);
     console.log("→", out);
-    images.push({
-      idiom,
-      size: `${size}x${size}`,
-      scale: `${scale}x`,
-      filename,
-    });
+    images.push({ idiom, size: `${size}x${size}`, scale: `${scale}x`, filename });
   }
-
-  const contents = {
-    images,
-    info: { author: "xcode", version: 1 },
-  };
   writeFileSync(
     join(appIconSet, "Contents.json"),
-    JSON.stringify(contents, null, 2) + "\n",
+    JSON.stringify({ images, info: { author: "xcode", version: 1 } }, null, 2) + "\n",
   );
+}
+
+// ---------------------------------------------------------------------
+// MacAppIcon (Mac-only set, used by some Mac targets)
+// ---------------------------------------------------------------------
+
+async function buildMacAppIcon() {
+  const images = [];
+  for (const { size, scale } of macIconSpec) {
+    const px = size * scale;
+    const filename = `app-mac-${size}x${size}@${scale}x.png`;
+    const out = join(macAppIconSet, filename);
+    const svg = Buffer.from(appIconSvg(px));
+    await sharp(svg).resize(px, px).png().toFile(out);
+    console.log("→", out);
+    images.push({ idiom: "mac", size: `${size}x${size}`, scale: `${scale}x`, filename });
+  }
+  writeFileSync(
+    join(macAppIconSet, "Contents.json"),
+    JSON.stringify({ images, info: { author: "xcode", version: 1 } }, null, 2) + "\n",
+  );
+}
+
+// ---------------------------------------------------------------------
+// PWA: icon.svg + icon-192.png + icon-512.png + apple-touch-icon.png
+// ---------------------------------------------------------------------
+
+async function buildPwaIcons() {
+  writeFileSync(join(pwaPublic, "icon.svg"), appIconSvg(512) + "\n");
+  console.log("→", join(pwaPublic, "icon.svg"));
+  for (const [size, name] of [
+    [192, "icon-192.png"],
+    [512, "icon-512.png"],
+    [180, "apple-touch-icon.png"],
+  ]) {
+    const out = join(pwaPublic, name);
+    const svg = Buffer.from(appIconSvg(size));
+    await sharp(svg).resize(size, size).png().toFile(out);
+    console.log("→", out);
+  }
 }
 
 await buildMenuBar();
 await buildAppIcon();
+await buildMacAppIcon();
+await buildPwaIcons();
 console.log("done.");
