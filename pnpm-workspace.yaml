@@ -1,0 +1,10 @@
+packages:
+  - packages/*
+  # packages/app/ は Swift / Xcode プロジェクト。pnpm の対象外。
+  - "!packages/app"
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - "@biomejs/biome"
+  - esbuild
+  - sharp

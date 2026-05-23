@@ -1,0 +1,19 @@
+# Xcode artifacts (xcodegen で再生成可能)
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+*.dSYM/
+
+# Build outputs
+*.app
+*.dmg
+*.pkg
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+
+# macOS junk
+.DS_Store

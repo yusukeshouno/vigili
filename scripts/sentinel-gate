@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# sentinel-gate — packages/gate/dist/cli.js への薄い launcher。
+# Claude Code hook が stdin に JSON を流し、引数で --session / --tag 等を渡す前提。
+
+set -euo pipefail
+
+# symlink 経由でも repo root を解決
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "${SOURCE}" ]; do
+  DIR="$(cd -P "$(dirname "${SOURCE}")" && pwd)"
+  SOURCE="$(readlink "${SOURCE}")"
+  [[ "${SOURCE}" != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "${SOURCE}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CLI_JS="${REPO_ROOT}/packages/gate/dist/cli.js"
+
+if [[ ! -f "${CLI_JS}" ]]; then
+  echo "sentinel-gate: ${CLI_JS} が見つかりません。先に \`pnpm --filter gate build\` を実行してください。" >&2
+  exit 2
+fi
+
+exec node "${CLI_JS}" "$@"

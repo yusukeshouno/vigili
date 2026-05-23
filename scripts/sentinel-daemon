@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# sentinel-daemon — Sentinel daemon の起動 / 停止 / 再起動 / ログ確認ラッパー
+#
+# repo 内の packages/daemon/dist/cli.js を直接 node で起動する。
+# pnpm install で symlink を張らずに済むよう、シェルスクリプト 1 本で完結させる。
+#
+# Usage:
+#   sentinel-daemon start         # フォアグラウンドで起動 (Ctrl+C で停止、launchd の代わりに使う場合)
+#   sentinel-daemon start-bg      # nohup + & でバックグラウンド起動、ログは ~/.sentinel/daemon.log
+#   sentinel-daemon stop          # PID ファイル経由で SIGTERM
+#   sentinel-daemon restart       # stop → 1 秒待つ → start-bg
+#   sentinel-daemon status        # 動いているかと PID を表示
+#   sentinel-daemon logs [N]      # daemon.log の末尾 N 行 (default 40)
+#   sentinel-daemon tail          # tail -F で追従
+#   sentinel-daemon reload        # SIGHUP を投げて policy をホットリロード
+#   sentinel-daemon ...           # 上記以外は cli.js にそのまま透過 (version / help など)
+
+set -euo pipefail
+
+# このスクリプトの位置から repo root を解決する。
+# symlink 経由 (~/.local/bin から張ってあるケース) でも壊れないよう symlink を辿る。
+# macOS 標準 bash 3.2 互換のため readlink -f は使わずループで解決する。
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "${SOURCE}" ]; do
+  DIR="$(cd -P "$(dirname "${SOURCE}")" && pwd)"
+  SOURCE="$(readlink "${SOURCE}")"
+  [[ "${SOURCE}" != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "${SOURCE}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CLI_JS="${REPO_ROOT}/packages/daemon/dist/cli.js"
+
+SENTINEL_HOME="${SENTINEL_HOME:-${HOME}/.sentinel}"
+PID_FILE="${SENTINEL_HOME}/daemon.pid"
+LOG_FILE="${SENTINEL_HOME}/daemon.log"
+LAUNCHD_LABEL="io.sentinel.daemon"
+
+# launchd で管理されているか? (`launchctl list <label>` が 0 を返したら yes)
+is_launchd_managed() {
+  launchctl list "${LAUNCHD_LABEL}" >/dev/null 2>&1
+}
+
+launchd_kickstart() {
+  # -k: 既存プロセスを kill してから再起動。コード差し替え後の reload に使う。
+  launchctl kickstart -k "gui/${UID}/${LAUNCHD_LABEL}"
+}
+
+if [[ ! -f "${CLI_JS}" ]]; then
+  echo "sentinel-daemon: ${CLI_JS} が見つかりません。先に \`pnpm --filter daemon build\` を実行してください。" >&2
+  exit 1
+fi
+
+mkdir -p "${SENTINEL_HOME}"
+
+is_alive() {
+  local pid="$1"
+  [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+}
+
+read_pid() {
+  [[ -f "${PID_FILE}" ]] && cat "${PID_FILE}" || true
+}
+
+cmd_start_bg() {
+  local pid
+  pid="$(read_pid)"
+  if is_alive "${pid}"; then
+    echo "sentinel-daemon: 既に動作中 (pid=${pid})"
+    return 0
+  fi
+  # nohup + setsid 風: 親シェルを抜けても生き残らせる
+  nohup node "${CLI_JS}" start >> "${LOG_FILE}" 2>&1 &
+  disown || true
+  # 起動完了を 3 秒だけ待つ (PID ファイルが出るのを目視)
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.3
+    pid="$(read_pid)"
+    if is_alive "${pid}"; then
+      echo "sentinel-daemon: started (pid=${pid}, log=${LOG_FILE})"
+      return 0
+    fi
+  done
+  echo "sentinel-daemon: 起動を 3 秒待ちましたが PID ファイルが出ませんでした。${LOG_FILE} を確認してください。" >&2
+  exit 1
+}
+
+cmd_stop() {
+  if is_launchd_managed; then
+    echo "sentinel-daemon: launchd 管理下です。完全に止めるには:" >&2
+    echo "  launchctl bootout gui/${UID} ~/Library/LaunchAgents/${LAUNCHD_LABEL}.plist" >&2
+    echo "それ以外 (一時的な再起動) には restart を使ってください。" >&2
+    exit 1
+  fi
+  local pid
+  pid="$(read_pid)"
+  if ! is_alive "${pid}"; then
+    echo "sentinel-daemon: 動いていません (PID file: ${pid:-none})"
+    return 0
+  fi
+  kill -TERM "${pid}"
+  echo "sentinel-daemon: sent SIGTERM to ${pid}"
+  # 終了確認を最大 5 秒
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.5
+    if ! is_alive "${pid}"; then
+      echo "sentinel-daemon: stopped"
+      return 0
+    fi
+  done
+  echo "sentinel-daemon: 5 秒待っても止まりません。kill -9 する場合は: kill -9 ${pid}" >&2
+  exit 1
+}
+
+cmd_restart() {
+  if is_launchd_managed; then
+    # launchd 管理下: kickstart -k で再起動 (KeepAlive を尊重)
+    launchd_kickstart
+    echo "sentinel-daemon: launchctl kickstart -k ${LAUNCHD_LABEL}"
+    sleep 1
+    cmd_status
+  else
+    cmd_stop || true
+    sleep 0.5
+    cmd_start_bg
+  fi
+}
+
+cmd_start() {
+  if is_launchd_managed; then
+    echo "sentinel-daemon: launchd 管理下です。restart を使うか、launchctl bootout で外してから start してください。" >&2
+    exit 1
+  fi
+  local pid
+  pid="$(read_pid)"
+  if is_alive "${pid}"; then
+    echo "sentinel-daemon: 既に動作中 (pid=${pid})。先に stop してください。" >&2
+    exit 1
+  fi
+  exec node "${CLI_JS}" start "$@"
+}
+
+cmd_status() {
+  local pid
+  pid="$(read_pid)"
+  if is_alive "${pid}"; then
+    echo "running (pid=${pid})"
+    ps -p "${pid}" -o pid,etime,command | tail -n +1
+  else
+    echo "not running"
+    return 1
+  fi
+}
+
+cmd_logs() {
+  local n="${1:-40}"
+  if [[ ! -f "${LOG_FILE}" ]]; then
+    echo "sentinel-daemon: ${LOG_FILE} がありません"
+    return 0
+  fi
+  tail -n "${n}" "${LOG_FILE}"
+}
+
+cmd_tail() {
+  if [[ ! -f "${LOG_FILE}" ]]; then
+    : > "${LOG_FILE}"
+  fi
+  tail -F "${LOG_FILE}"
+}
+
+cmd_reload() {
+  local pid
+  pid="$(read_pid)"
+  if ! is_alive "${pid}"; then
+    echo "sentinel-daemon: 動いていません"
+    exit 1
+  fi
+  kill -HUP "${pid}"
+  echo "sentinel-daemon: sent SIGHUP to ${pid} (policy reload)"
+}
+
+main() {
+  local sub="${1:-status}"
+  shift || true
+  case "${sub}" in
+    start)     cmd_start "$@" ;;
+    start-bg|bg|daemon)
+               cmd_start_bg ;;
+    stop)      cmd_stop ;;
+    restart)   cmd_restart ;;
+    status)    cmd_status ;;
+    logs|log)  cmd_logs "$@" ;;
+    tail)      cmd_tail ;;
+    reload)    cmd_reload ;;
+    --help|-h|help)
+      # cli.js のヘルプを表示
+      exec node "${CLI_JS}" help
+      ;;
+    *)
+      # version などは cli.js に透過
+      exec node "${CLI_JS}" "${sub}" "$@"
+      ;;
+  esac
+}
+
+main "$@"

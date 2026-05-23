@@ -1,0 +1,291 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Sentinel — Claude design language (handoff bundle v2).
+ * - Anthropic warm dark base (#262624) + cream text
+ * - Claude coral accent (#C96442)
+ * - flat surfaces, thin warm borders, minimal shadows
+ * - no glass, no animated bg, no glow, no shimmer
+ * ──────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* base */
+  --color-bg: #262624;
+  --color-bg-rise: #2d2b29;
+  --color-bg-rise2: #34322f;
+  --color-bg-code: #1f1e1d;
+
+  /* warm cream borders */
+  --color-border: rgba(250, 247, 242, 0.08);
+  --color-border-strong: rgba(250, 247, 242, 0.14);
+
+  /* warm cream text */
+  --color-fg: rgba(250, 247, 242, 0.95);
+  --color-fg-mid: rgba(250, 247, 242, 0.62);
+  --color-fg-dim: rgba(250, 247, 242, 0.4);
+  --color-fg-faint: rgba(250, 247, 242, 0.18);
+
+  /* Claude coral */
+  --color-accent: #c96442;
+  --color-accent-soft: #d97757;
+  --color-accent-dim: #8a4329;
+
+  /* semantic — desaturated */
+  --color-green: #7bae89;
+  --color-green-soft: #a6d3b0;
+  --color-red: #d6766c;
+  --color-red-soft: #e89a92;
+  --color-amber: #d4936d;
+
+  --font-display: var(--font-bricolage), -apple-system, system-ui, sans-serif;
+  --font-ui: var(--font-bricolage), -apple-system, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
+}
+
+/* ─────────── base reset ─────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#__next {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+html {
+  font-family: var(--font-ui);
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: contain;
+  min-height: 100dvh;
+}
+
+em {
+  font-style: normal;
+  font-variation-settings: "wdth" 80;
+}
+
+button {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* uppercase mono label */
+.label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 11px;
+  color: var(--color-fg-mid);
+}
+
+/* ─────────── safe-area ─────────── */
+.safe-px {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+.safe-pt {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+.safe-pb {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* ─────────── flat surfaces ─────────── */
+.a-surface {
+  background: var(--color-bg-rise);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+}
+.a-surface-raised {
+  background: var(--color-bg-rise2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 14px;
+}
+
+.a-input {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.a-input:focus-within {
+  border-color: var(--color-accent);
+  background: rgba(201, 100, 66, 0.04);
+}
+
+/* ─────────── buttons ─────────── */
+.a-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  color: #fff;
+  border: 1px solid var(--color-accent);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s, transform 0.1s;
+}
+.a-btn-primary:hover {
+  background: var(--color-accent-soft);
+}
+.a-btn-primary:active {
+  transform: scale(0.99);
+}
+.a-btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.a-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-fg);
+  border: 1px solid var(--color-border-strong);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
+}
+.a-btn-ghost:hover {
+  background: rgba(250, 247, 242, 0.04);
+  border-color: var(--color-fg);
+}
+.a-btn-ghost:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.a-btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--color-fg-mid);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  transition: color 0.15s, border-color 0.15s;
+}
+.a-btn-quiet:hover {
+  color: var(--color-fg);
+  border-color: var(--color-border-strong);
+}
+
+/* ─────────── chip ─────────── */
+.a-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: 1px solid var(--color-border);
+  color: var(--color-fg-mid);
+  background: transparent;
+}
+
+/* ─────────── status dot ─────────── */
+.a-dot {
+  position: relative;
+  display: inline-block;
+}
+.a-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  animation: a-pulse 1.8s ease-out infinite;
+}
+@keyframes a-pulse {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.55;
+  }
+  80% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* press feedback */
+@media (prefers-reduced-motion: no-preference) {
+  .press {
+    transition: transform 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .press:active {
+    transform: scale(0.985);
+  }
+}
+
+/* scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(250, 247, 242, 0.1);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

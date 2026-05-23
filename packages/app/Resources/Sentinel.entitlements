@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- App Sandbox はオフ。
+       理由:
+       - 子プロセスとして node を spawn する必要がある (sandbox 下では制限)
+       - ~/.sentinel/ への自由な読み書きが必要 (sandbox の bookmark 経由は煩雑)
+       - Unix socket ~/.sentinel/daemon.sock への接続
+       - localhost への WebSocket
+       配布は外部 .dmg (Developer ID + notarization) を想定。App Store は対象外。 -->
+  <key>com.apple.security.app-sandbox</key>
+  <false/>
+</dict>
+</plist>

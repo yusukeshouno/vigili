@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# sentinel-cli — packages/daemon/dist/sentinel-cli.js への薄い launcher。
+# 引数はそのまま透過する。
+
+set -euo pipefail
+
+# symlink 経由でも repo root を正しく解決するため symlink を辿る。
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "${SOURCE}" ]; do
+  DIR="$(cd -P "$(dirname "${SOURCE}")" && pwd)"
+  SOURCE="$(readlink "${SOURCE}")"
+  [[ "${SOURCE}" != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "${SOURCE}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CLI_JS="${REPO_ROOT}/packages/daemon/dist/sentinel-cli.js"
+
+if [[ ! -f "${CLI_JS}" ]]; then
+  echo "sentinel-cli: ${CLI_JS} が見つかりません。先に \`pnpm --filter daemon build\` を実行してください。" >&2
+  exit 1
+fi
+
+exec node "${CLI_JS}" "$@"

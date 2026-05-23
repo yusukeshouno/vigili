@@ -1,0 +1,126 @@
+# Sentinel Policy — Example Template
+#
+# このファイルを ~/.sentinel/policy.yaml にコピーして使ってください。
+# 編集後は `sentinel-daemon policy validate` で検証してから reload してください。
+#
+# 評価順序:
+# 1. ハードコードされた invariants (rm -rf / など) が最優先
+# 2. 下記の rules を上から評価、最初にマッチしたものを採用
+# 3. どれにもマッチしなければ defaults.unknown
+
+defaults:
+  unknown: ask          # ルール未ヒット時は人間に問う
+  timeout_seconds: 300  # 5 分応答なければ deny
+
+rules:
+  # ---------------------------------------------------------------
+  # 危険操作（必ず ask、critical 通知）
+  # ---------------------------------------------------------------
+
+  - name: ".env / secrets への書き込み"
+    when:
+      tool: [Edit, Write]
+      path_matches: '(^|/)\.env(\..+)?$|(^|/)secrets?/|\.pem$|\.key$'
+    action: ask
+    notify: critical
+
+  - name: "課金されうる外部 API 呼び出し"
+    when:
+      tool: Bash
+      command_matches: 'curl.*(api\.openai\.com|api\.anthropic\.com|api\.stripe\.com)'
+    action: ask
+    notify: critical
+
+  - name: "本番 DB への接続"
+    when:
+      tool: Bash
+      command_matches: '(psql|pg_dump|mysql).*(prod|production|live)'
+    action: ask
+    notify: critical
+
+  - name: "git push --force（保護ブランチ以外）"
+    when:
+      tool: Bash
+      command_matches: 'git\s+push.*--force'
+    action: ask
+    notify: critical
+
+  # ---------------------------------------------------------------
+  # 自動許可（安全な日常作業）
+  # ---------------------------------------------------------------
+
+  - name: "読み取り専用 bash"
+    when:
+      tool: Bash
+      command_matches: '^(ls|cat|head|tail|rg|grep|fd|find|tree|wc|du|df|ps|top|which|whoami|pwd|date|echo|env|history)\b'
+    action: allow
+
+  - name: "git の読み取り系"
+    when:
+      tool: Bash
+      command_matches: '^git\s+(status|diff|log|branch|show|blame|reflog|stash list|remote -v)\b'
+    action: allow
+
+  - name: "既知プロジェクトでの編集"
+    when:
+      tool: [Edit, Write]
+      repo_in: [neort-wiki, diptych, pluris, passage, eizo100, neort-archive]
+    action: allow
+
+  - name: "既知プロジェクトでの pnpm/npm install"
+    when:
+      tool: Bash
+      command_matches: '^(pnpm|npm|yarn)\s+(install|i|add|remove|rm|update)\b'
+      repo_in: [neort-wiki, diptych, pluris, passage, eizo100, neort-archive]
+    action: allow
+
+  - name: "テスト実行"
+    when:
+      tool: Bash
+      command_matches: '^(pnpm|npm|yarn)\s+(test|vitest|jest)\b|^npx\s+(vitest|jest|playwright)\b'
+    action: allow
+
+  - name: "型チェック・lint・format"
+    when:
+      tool: Bash
+      command_matches: '^(pnpm|npm|yarn)\s+(typecheck|tsc|lint|format|biome)\b|^npx\s+(tsc|biome|eslint|prettier)\b'
+    action: allow
+
+  - name: "Next.js / Vite の dev サーバ"
+    when:
+      tool: Bash
+      command_matches: '^(pnpm|npm|yarn)\s+(dev|start)\b|^next\s+dev\b|^vite\b'
+    action: allow
+
+  - name: "git の commit / branch 操作（push 以外）"
+    when:
+      tool: Bash
+      command_matches: '^git\s+(add|commit|checkout|switch|merge|rebase|stash|tag|cherry-pick|reset(\s+--soft|\s+HEAD)?)\b'
+    action: allow
+
+  - name: "信頼ドメインへの WebFetch"
+    when:
+      tool: WebFetch
+      url_matches: '^https?://(github\.com|raw\.githubusercontent\.com|docs\.anthropic\.com|nextjs\.org|vercel\.com|tailwindcss\.com)/'
+    action: allow
+
+  # ---------------------------------------------------------------
+  # 時間帯ルール
+  # ---------------------------------------------------------------
+
+  - name: "深夜の外部通信は翌朝レビュー"
+    when:
+      tool: WebFetch
+      time_between: ["02:00", "07:00"]
+    action: deny
+    reason: "深夜帯は外部通信を停止しています"
+
+  # ---------------------------------------------------------------
+  # その他の bash はとりあえず聞く
+  # ---------------------------------------------------------------
+
+  - name: "未分類の Bash"
+    when:
+      tool: Bash
+    action: ask
+    notify: normal

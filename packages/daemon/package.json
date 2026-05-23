@@ -1,0 +1,37 @@
+{
+  "name": "@sentinel/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "sentinel-daemon": "./dist/cli.js",
+    "sentinel-cli": "./dist/sentinel-cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^11.0.1",
+    "@sentinel/shared": "workspace:*",
+    "better-sqlite3": "^11.5.0",
+    "bonjour-service": "^1.2.1",
+    "fastify": "^5.1.0",
+    "qrcode-terminal": "^0.12.0",
+    "web-push": "^3.6.7",
+    "yaml": "^2.6.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.9.0",
+    "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5",
+    "ws": "^8.18.0"
+  }
+}

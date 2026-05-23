@@ -1,0 +1,94 @@
+import { readFile } from "node:fs/promises";
+import { parse as parseYaml } from "yaml";
+import { z } from "zod";
+
+/**
+ * ~/.sentinel/config.yaml の構造 (SPEC.md §5.2)。
+ * policy.yaml と違って起動時に必須ではない — ファイルがなければ全てデフォルト。
+ */
+export const ConfigSchema = z
+  .object({
+    daemon: z
+      .object({
+        ws_port: z.number().int().positive().default(7878),
+        // LAN 上の他デバイス (iPhone 等) からも繋げるよう 0.0.0.0 default。
+        // 認証は Bearer token (Unix socket は別ルートで gate 専用なので保護される)。
+        ws_host: z.string().default("0.0.0.0"),
+      })
+      .default({}),
+    ntfy: z
+      .object({
+        server: z.string().url().default("https://ntfy.sh"),
+        topic: z.string().min(1),
+        priority_map: z
+          .object({
+            normal: z.number().int().min(1).max(5).default(3),
+            critical: z.number().int().min(1).max(5).default(5),
+          })
+          .default({}),
+      })
+      .optional(),
+    /**
+     * Web Push (W3C Push API) の設定。デフォルトで有効。
+     * 無効化したいときだけ `push: { enabled: false }` と書く。
+     */
+    push: z
+      .object({
+        enabled: z.boolean().default(true),
+        /** VAPID 鍵を生成するときの subject (mailto: または https://)。 */
+        subject: z.string().default("mailto:sentinel@localhost"),
+      })
+      .default({}),
+    session_tags: z.record(z.string().min(1)).default({}),
+    pwa: z
+      .object({
+        /** PWA の公開 URL。push 通知 / ntfy のタップ後遷移に使う (タップで /r/[id] へ)。
+         *  例: https://my-machine.tail-XXXX.ts.net  ( Tailscale Funnel 経由 ) */
+        base_url: z.string().url().optional(),
+      })
+      .default({}),
+  })
+  .default({});
+
+export type SentinelConfig = z.infer<typeof ConfigSchema>;
+
+export class ConfigLoadError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause !== undefined ? { cause } : undefined);
+    this.name = "ConfigLoadError";
+  }
+}
+
+/**
+ * config.yaml をロードする。ファイル不在は ConfigLoadError ではなく
+ * 「デフォルトのみ」を返す (config はオプショナル)。
+ * 文法エラー / スキーマ違反は ConfigLoadError として throw。
+ */
+export async function loadConfigFile(path: string): Promise<SentinelConfig> {
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return ConfigSchema.parse({});
+    }
+    throw new ConfigLoadError(`config.yaml を読めません: ${path}`, err);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(raw);
+  } catch (err) {
+    throw new ConfigLoadError(`config.yaml の YAML パースに失敗: ${path}`, err);
+  }
+
+  const result = ConfigSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new ConfigLoadError(
+      `config.yaml のスキーマ違反: ${result.error.issues
+        .map((i) => `${i.path.join(".")}: ${i.message}`)
+        .join("; ")}`,
+    );
+  }
+  return result.data;
+}
