@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+#if canImport(WidgetKit)
+  import WidgetKit
+#endif
 
 // appLog は Sources/Shared/AppLog.swift で共通定義。
 
@@ -29,6 +32,9 @@ final class AppCoordinator: ObservableObject {
 
   private var pollTimer: Timer?
   private var tickCount = 0
+
+  /// 直前に widget へ書き出した state。同じ内容で reloadTimelines を spam しないため。
+  private var lastWidgetState: WidgetState?
 
   /// daemon socket のパス。SENTINEL_HOME 環境変数で override 可能。
   private static func defaultSocketPath() -> String {
@@ -62,12 +68,17 @@ final class AppCoordinator: ObservableObject {
         guard let self = self else { return }
         self.pending = list
         self.pendingCount = list.count
+        self.refreshWidget()
       }
       .store(in: &cancellables)
 
     wsClient.$state
       .receive(on: DispatchQueue.main)
-      .assign(to: &$wsState)
+      .sink { [weak self] state in
+        self?.wsState = state
+        self?.refreshWidget()
+      }
+      .store(in: &cancellables)
 
     // 起動
     daemonController.start()
@@ -144,11 +155,55 @@ final class AppCoordinator: ObservableObject {
     do {
       let s = try await adminClient.fetchStats()
       todayStats = s
+      refreshWidget()
     } catch {
       let msg = (error as? DaemonAdminClient.ClientError)?.errorDescription ?? error.localizedDescription
       // stats 失敗時は前回値を残しつつ警告だけ
       appLog("tickStats failed: \(msg)")
       lastError = "stats: \(msg)"
     }
+  }
+
+  /// WidgetState を file に書き、WidgetCenter に「再描画してくれ」と知らせる。
+  /// pending/stats/wsState が更新された時に呼ぶ。
+  /// reload は OS が rate-limit するので spam を恐れる必要は無い (1 秒以内の連続呼び出しは合算)。
+  private func refreshWidget() {
+    let connected: Bool
+    switch wsState {
+    case .connected: connected = true
+    default: connected = false
+    }
+    let now = Date()
+    let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+    let recent: [WidgetState.PendingItem] = pending.prefix(5).map { req in
+      let ageSec = max(0, Int(now.timeIntervalSince(req.createdAt)))
+      var preview = req.primaryPreview
+      if preview.count > 60 { preview = String(preview.prefix(57)) + "…" }
+      let title = "\(req.toolName) · \(preview)"
+      return WidgetState.PendingItem(id: req.id, title: title, ageSeconds: ageSec)
+    }
+    let state = WidgetState(
+      pendingCount: pendingCount,
+      todayAllowCount: todayStats?.byDecision.allow ?? 0,
+      todayDenyCount: todayStats?.byDecision.deny ?? 0,
+      connected: connected,
+      updatedAtMs: nowMs,
+      recentPending: recent
+    )
+    // 同じ内容なら書き直さない (count + connected + recent ids で判定)
+    if let last = lastWidgetState,
+      last.pendingCount == state.pendingCount,
+      last.todayAllowCount == state.todayAllowCount,
+      last.todayDenyCount == state.todayDenyCount,
+      last.connected == state.connected,
+      last.recentPending.map(\.id) == state.recentPending.map(\.id)
+    {
+      return
+    }
+    lastWidgetState = state
+    state.writeAtomically()
+    #if canImport(WidgetKit)
+      WidgetCenter.shared.reloadTimelines(ofKind: "VigiliPendingWidget")
+    #endif
   }
 }

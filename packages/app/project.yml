@@ -42,6 +42,13 @@ targets:
         buildPhase: resources
       - path: Resources/Fonts/JetBrainsMono.ttf
         buildPhase: resources
+    dependencies:
+      - target: VigiliWidget
+        embed: true
+        copy:
+          # Mac の widget extension は `Contents/PlugIns/` に置く必要がある。
+          # (iOS の Extensions は `PlugIns/`、Mac は `Contents/PlugIns/`)
+          destination: plugins
     info:
       path: Resources/Info.plist
       properties:
@@ -168,3 +175,35 @@ targets:
         CODE_SIGNING_REQUIRED: "YES"
         CODE_SIGNING_ALLOWED: "YES"
         SKIP_INSTALL: "YES"  # Extension は app に embed する
+
+  # ============================================================
+  # macOS: Widget Extension (Notification Center / Desktop widget)
+  # ============================================================
+  VigiliWidget:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "14.0"  # WidgetKit on macOS Sonoma (Desktop widgets) を含めるため
+    sources:
+      - path: Sources/VigiliWidget
+      # WidgetState の Codable 定義は main app と共有する
+      - path: Sources/Shared/WidgetState.swift
+    info:
+      path: Resources/InfoWidget.plist
+      properties:
+        CFBundleDisplayName: Vigili
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_NAME: VigiliWidget
+        # main app `io.sentinel.app` の子 ID として `.widget` を付ける。
+        # (R-4 で io.vigili.* に揃える)
+        PRODUCT_BUNDLE_IDENTIFIER: io.sentinel.app.widget
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        SKIP_INSTALL: "YES"
+        ENABLE_HARDENED_RUNTIME: "NO"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
