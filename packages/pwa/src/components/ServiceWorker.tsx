@@ -13,7 +13,7 @@ export function ServiceWorker() {
     if (process.env.NODE_ENV !== "production") return;
 
     navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((err) => {
-      console.warn("[sentinel-sw] register failed:", err);
+      console.warn("[vigili-sw] register failed:", err);
     });
   }, []);
   return null;

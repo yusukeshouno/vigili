@@ -17,20 +17,22 @@ interface Props {
 export function Brand({ size = 30 }: Props) {
   return (
     <div className="flex items-center gap-2.5">
-      <HandDrawnShield size={size} color="var(--color-accent)" />
-      <SentinelWordmark size={Math.round(size * 0.66)} />
+      <PetalMark size={size} color="var(--color-accent)" />
+      <VigiliWordmark size={Math.round(size * 0.66)} />
     </div>
   );
 }
 
 export function AuroraLogo({ size = 32 }: { size?: number }) {
-  return <HandDrawnShield size={size} color="var(--color-accent)" />;
+  return <PetalMark size={size} color="var(--color-accent)" />;
 }
 
 /**
- * 4 花弁マーク。互換のため名前は HandDrawnShield のまま。
+ * 4 花弁 + 中心ドットの brand mark。
+ * sentire (感じ取る) のメタファとして中央にひとつの「目」を置き、
+ * 周囲を花弁で囲って Vigili (見張り人たち) を示す。
  */
-export function HandDrawnShield({
+export function PetalMark({
   size = 32,
   color = "var(--color-accent)",
   scale = 0.9,
@@ -42,8 +44,6 @@ export function HandDrawnShield({
 }) {
   const rawId = useId();
   const id = rawId.replace(/[^a-zA-Z0-9]/gu, "");
-  // 上方向 (N) の花弁。両端で細く中央で広がる leaf 形状。
-  // 中心 (16,16) を軸に 90° ずつ回転すれば N/E/S/W の 4 花弁ができる。
   const petal = "M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z";
   return (
     <svg
@@ -71,7 +71,10 @@ export function HandDrawnShield({
   );
 }
 
-export function SentinelWordmark({ size = 20 }: { size?: number }) {
+/** 後方互換のための alias。新しいコードからは `PetalMark` を使う。 */
+export const HandDrawnShield = PetalMark;
+
+export function VigiliWordmark({ size = 20 }: { size?: number }) {
   return (
     <span
       className="font-display"

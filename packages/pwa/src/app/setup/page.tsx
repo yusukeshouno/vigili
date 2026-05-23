@@ -95,7 +95,7 @@ export default function SetupPage() {
                     fontSize: 11,
                   }}
                 >
-                  cat ~/.sentinel/token
+                  cat ~/.vigili/token
                 </code>
               </>
             }

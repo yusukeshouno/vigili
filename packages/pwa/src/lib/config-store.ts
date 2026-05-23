@@ -7,6 +7,9 @@ import { type IDBPDatabase, openDB } from "idb";
  * SPEC §4.4: token は IndexedDB に保存。
  */
 
+// 既存ユーザの token / URL を保持するため "sentinel" のまま残している。
+// "vigili" への rename は migration コード (旧 DB から読んで新 DB へ書き戻す) と
+// セットでないと初回起動時に setup を要求してしまう。次の breaking change と一緒に。
 const DB_NAME = "sentinel";
 const STORE = "config";
 const VERSION = 1;

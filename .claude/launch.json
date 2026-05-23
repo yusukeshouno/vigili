@@ -4,8 +4,8 @@
     {
       "name": "pwa",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@vigili/pwa", "dev"],
-      "port": 3737
+      "runtimeArgs": ["--filter", "@vigili/pwa", "exec", "next", "dev", "-p", "3738"],
+      "port": 3738
     }
   ]
 }

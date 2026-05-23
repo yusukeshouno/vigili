@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
  * - 一度閉じた → 30 日表示しない (localStorage)
  * - iOS Safari でない → 出さない
  */
-const DISMISS_KEY = "sentinel-install-hint-dismissed-at";
+const DISMISS_KEY = "vigili-install-hint-dismissed-at";
 const HIDE_DAYS = 30;
 
 export function InstallHint() {
