@@ -86,28 +86,52 @@ final class MobileAppCoordinator: ObservableObject {
     wsClient.sendMessage(sessionId: sessionId, body: body)
   }
 
-  /// `sentinel://setup?u=<host>&t=<token>` を受け取り、設定 + 接続まで一気に進める。
-  /// Mac 側の `sentinel-cli setup-link` で出力した URL がここに来る想定。
+  /// `sentinel://setup?u=<host>&t=<token>` または
+  /// `vigili://pair?p=<pid>&u=<user_token>&r=<relay_url>` を受け取り、
+  /// 設定 + 接続まで一気に進める。
+  /// Mac 側の `vigili-cli setup-link` / `vigili-cli pair` で出力した URL を想定。
   func handleSetupURL(_ url: URL) {
     appLog("MobileAppCoordinator.handleSetupURL: \(url.absoluteString.prefix(80))")
-    guard url.scheme?.lowercased() == "sentinel" else { return }
-    guard url.host == "setup" || url.path.contains("setup") || url.host == nil else {
-      // setup 以外のホスト (今後の deeplink: /r/<id> 等) はここでは無視
-      // ただし sentinel://setup と sentinel:/setup の両形式を許容
-      return
-    }
+    let scheme = url.scheme?.lowercased() ?? ""
+    guard scheme == "sentinel" || scheme == "vigili" else { return }
     let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
     let items = comps?.queryItems ?? []
-    let u = items.first(where: { $0.name == "u" })?.value ?? ""
-    let t = items.first(where: { $0.name == "t" })?.value ?? ""
-    let trimmedU = u.trimmingCharacters(in: .whitespacesAndNewlines)
-    let trimmedT = t.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedU.isEmpty, !trimmedT.isEmpty else {
-      appLog("MobileAppCoordinator.handleSetupURL: u or t empty")
+    let host = url.host ?? ""
+
+    if host == "pair" || url.path.contains("pair") {
+      // vigili://pair?p=<pid>&u=<user_token>&r=<relay_url>
+      let p = items.first(where: { $0.name == "p" })?.value ?? ""
+      let u = items.first(where: { $0.name == "u" })?.value ?? ""
+      let r = items.first(where: { $0.name == "r" })?.value ?? ""
+      let pid = p.trimmingCharacters(in: .whitespacesAndNewlines)
+      let userToken = u.trimmingCharacters(in: .whitespacesAndNewlines)
+      let relay = r.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !pid.isEmpty, !userToken.isEmpty, !relay.isEmpty else {
+        appLog("MobileAppCoordinator.handleSetupURL: pair fields empty")
+        return
+      }
+      // relay URL は base (例: https://relay.vigili.io)。/v1/clients/<pid> を後ろに付けて
+      // daemon と同じ DaemonWsClient で繋ぐ (path 終端なので /ws は足されない仕様)。
+      let base = relay.hasSuffix("/") ? String(relay.dropLast()) : relay
+      MobileSettings.daemonUrl = "\(base)/v1/clients/\(pid)"
+      MobileSettings.token = userToken
+      reconfigureAndConnect()
       return
     }
-    MobileSettings.daemonUrl = trimmedU
-    MobileSettings.token = trimmedT
-    reconfigureAndConnect()
+
+    // sentinel://setup?u=<host>&t=<token> (LAN/Tailscale 直結)
+    if host == "setup" || url.path.contains("setup") || host.isEmpty {
+      let u = items.first(where: { $0.name == "u" })?.value ?? ""
+      let t = items.first(where: { $0.name == "t" })?.value ?? ""
+      let trimmedU = u.trimmingCharacters(in: .whitespacesAndNewlines)
+      let trimmedT = t.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmedU.isEmpty, !trimmedT.isEmpty else {
+        appLog("MobileAppCoordinator.handleSetupURL: u or t empty")
+        return
+      }
+      MobileSettings.daemonUrl = trimmedU
+      MobileSettings.token = trimmedT
+      reconfigureAndConnect()
+    }
   }
 }

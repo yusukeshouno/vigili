@@ -347,18 +347,36 @@ struct MobileSetupView: View {
       return
     }
     if !applyAnyPayload(raw) {
-      error = "クリップボードの形式が読めません (期待: sentinel://… / {\"u\":…,\"t\":…} / 2 行テキスト)"
+      error = "クリップボードの形式が読めません (期待: vigili://pair…/sentinel://… / {\"u\":…,\"t\":…} / 2 行テキスト)"
     }
   }
 
   /// QR スキャン と クリップボード貼り付け の両方が使う共通パーサ。
   /// 入力が以下のどれかなら設定 → 接続まで進めて true、それ以外は false。
-  ///   ① `sentinel://setup?u=...&t=...`
-  ///   ② `{"u": "...", "t": "..."}` (互換: "url"/"token" キーも可)
-  ///   ③ 1 行目 = URL、2 行目 = token の生テキスト
+  ///   ① `vigili://pair?p=<pid>&u=<user_token>&r=<relay_url>` (Vigili Cloud)
+  ///   ② `sentinel://setup?u=...&t=...` (LAN/Tailscale 直結)
+  ///   ③ `{"u": "...", "t": "..."}` (互換: "url"/"token" キーも可)
+  ///   ④ 1 行目 = URL、2 行目 = token の生テキスト
   @discardableResult
   private func applyAnyPayload(_ raw: String) -> Bool {
-    // ① sentinel:// URL
+    // ① vigili://pair → relay 経由
+    if raw.hasPrefix("vigili://pair") {
+      if let url = URL(string: raw),
+         let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+        let items = comps.queryItems ?? []
+        let p = items.first(where: { $0.name == "p" })?.value ?? ""
+        let u = items.first(where: { $0.name == "u" })?.value ?? ""
+        let r = items.first(where: { $0.name == "r" })?.value ?? ""
+        let trimmedP = p.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedU = u.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedR = r.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedP.isEmpty, !trimmedU.isEmpty, !trimmedR.isEmpty {
+          let base = trimmedR.hasSuffix("/") ? String(trimmedR.dropLast()) : trimmedR
+          if applyValues(u: "\(base)/v1/clients/\(trimmedP)", t: trimmedU) { return true }
+        }
+      }
+    }
+    // ② sentinel:// URL
     if raw.hasPrefix("sentinel://") {
       if let url = URL(string: raw),
          let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {

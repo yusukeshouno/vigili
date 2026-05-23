@@ -4,6 +4,7 @@ import type { ApprovalRequest, FinalDecision } from "@vigili/shared";
 import { computeStats, type StatsBuckets } from "./db/stats.js";
 import { openStore } from "./db/store.js";
 import { paths } from "./paths.js";
+import { pair as pairCommand } from "./pair.js";
 import { type AdminResponse, AdminResponseSchema } from "./server/admin.js";
 
 async function main(): Promise<number> {
@@ -25,6 +26,8 @@ async function main(): Promise<number> {
       return setupQr(rest);
     case "setup-link":
       return setupLink(rest);
+    case "pair":
+      return pairCommand(rest);
     case undefined:
     case "help":
     case "--help":
@@ -59,6 +62,15 @@ Commands:
       --url <url>          Override daemon URL (default: detect via Tailscale)
       --copy               Copy URL to clipboard (pbcopy)
       --open               Open the URL via macOS open(1) (for testing on this Mac)
+  pair                     Pair with Vigili Cloud Relay for outbound mode.
+                           Signs in (or signs up) to relay, creates a pairing,
+                           writes relay: into ~/.vigili/config.yaml, prints QR.
+      --relay <url>        Relay base URL (default: https://relay.vigili.io)
+      --name <name>        Pairing label (e.g. "macbook-air")
+      --email <email>      Email (otherwise prompted interactively)
+      --signup             Create a new account instead of signing in
+      --plain              Print only the vigili:// URL (no QR)
+      --no-config          Don't write to ~/.vigili/config.yaml (dry-run)
 `);
 }
 
