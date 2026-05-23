@@ -197,6 +197,8 @@ targets:
       - path: Sources/VigiliWidget
       # WidgetState の Codable 定義は main app と共有する
       - path: Sources/Shared/WidgetState.swift
+      # 星型 path も main app と共有 (Brand.swift と同じ図形)
+      - path: Sources/Shared/StarPath.swift
       # widget 自身にも Asset Catalog を埋め込む (chronod が picker で icon を解決するため)
       - path: Assets.xcassets
         buildPhase: resources

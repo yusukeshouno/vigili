@@ -66,48 +66,18 @@ struct VigiliWidgetEntryView: View {
 
 // MARK: - Sub views
 
-private let accent = Color(red: 0xc9 / 255.0, green: 0x64 / 255.0, blue: 0x42 / 255.0)
+private let accent = Color(red: 0xc1 / 255.0, green: 0x61 / 255.0, blue: 0x41 / 255.0)
 private let dim = Color.secondary
 
-/// 8 突点星 (Vigili brand mark)。
-/// build-icons.mjs の polygon points を SwiftUI Path に移植。
-/// 原典 viewBox 0 0 105 118.52、bbox 中心 (52.5, 59.26)。
+/// 8 突点星 (Vigili brand mark)。Sources/Shared/StarPath.swift と同じ path。
 private struct PetalMark: View {
   let size: CGFloat
   let color: Color
 
-  /// 16 頂点 (8 突点 + 8 凹点)。原典 SVG の polygon points と同じ順序。
-  private static let starPoints: [CGPoint] = [
-    CGPoint(x: 59.94, y: 45.86), CGPoint(x: 89.54, y: 23.53),
-    CGPoint(x: 67.84, y: 53.59), CGPoint(x: 105, y: 58.73),
-    CGPoint(x: 67.95, y: 64.65), CGPoint(x: 85.38, y: 89.44),
-    CGPoint(x: 60.22, y: 72.54), CGPoint(x: 55.18, y: 118.52),
-    CGPoint(x: 49.17, y: 72.66), CGPoint(x: 19.57, y: 94.98),
-    CGPoint(x: 41.27, y: 64.93), CGPoint(x: 0, y: 59.79),
-    CGPoint(x: 41.15, y: 53.87), CGPoint(x: 23.73, y: 29.08),
-    CGPoint(x: 48.89, y: 45.98), CGPoint(x: 53.93, y: 0),
-  ]
-  private static let starCenter = CGPoint(x: 52.5, y: 59.26)
-  private static let starExtent: CGFloat = 59.26 // 半分の高さ (最大 extent)
-
   var body: some View {
     Canvas { context, _ in
-      let canvasCenter = CGPoint(x: size / 2, y: size / 2)
-      // 余白を少しだけ取って 84% で fit
-      let s = (size / 2) / Self.starExtent * 0.84
-      var path = Path()
-      for (i, p) in Self.starPoints.enumerated() {
-        let pt = CGPoint(
-          x: canvasCenter.x + (p.x - Self.starCenter.x) * s,
-          y: canvasCenter.y + (p.y - Self.starCenter.y) * s
-        )
-        if i == 0 {
-          path.move(to: pt)
-        } else {
-          path.addLine(to: pt)
-        }
-      }
-      path.closeSubpath()
+      let rect = CGRect(x: 0, y: 0, width: size, height: size)
+      let path = StarPath.path(in: rect, marginRatio: 0.84)
       context.fill(path, with: .color(color))
     }
     .frame(width: size, height: size)

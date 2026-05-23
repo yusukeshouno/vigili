@@ -24,11 +24,11 @@ enum Theme {
   static let border = Color(white: 0.967, opacity: 0.08)
   static let borderStrong = Color(white: 0.967, opacity: 0.14)
 
-  // MARK: - アクセント (Claude coral — 8 突点星と同じ赤橙)
+  // MARK: - アクセント (Claude coral, smoothed — 8 突点星と同じ赤橙)
 
-  static let accent = Color(hex: "#c96442")
-  static let accentSoft = Color(hex: "#d97757")
-  static let accentDim = Color(hex: "#8a4329")
+  static let accent = Color(hex: "#c16141")
+  static let accentSoft = Color(hex: "#d2785a")
+  static let accentDim = Color(hex: "#84402c")
 
   // MARK: - セマンティック (desaturated)
 

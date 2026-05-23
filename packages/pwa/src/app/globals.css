@@ -3,7 +3,7 @@
 /* ─────────────────────────────────────────────────────────────────────────────
  * Vigili — Claude design language (handoff bundle v3).
  * - Anthropic warm dark base (#262624) + cream text
- * - Claude coral accent (#C96442)
+ * - Claude coral accent (#C16141, smoothed)
  * - flat surfaces, thin warm borders, minimal shadows
  * - no glass, no animated bg, no glow, no shimmer
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -24,10 +24,10 @@
   --color-fg-dim: rgba(250, 247, 242, 0.4);
   --color-fg-faint: rgba(250, 247, 242, 0.18);
 
-  /* Claude coral (8-point star color) */
-  --color-accent: #c96442;
-  --color-accent-soft: #d97757;
-  --color-accent-dim: #8a4329;
+  /* Claude coral (8-point star color, smoothed) */
+  --color-accent: #c16141;
+  --color-accent-soft: #d2785a;
+  --color-accent-dim: #84402c;
 
   /* semantic — desaturated */
   --color-green: #7bae89;

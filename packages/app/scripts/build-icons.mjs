@@ -37,16 +37,17 @@ const sharp = require("sharp");
 // 共通定数
 // ---------------------------------------------------------------------
 
-/** brand accent (星の色)。PWA Brand component と揃える。Claude coral。 */
-const ACCENT = "#c96442";
+/** brand accent (星の色)。PWA Brand component と揃える。Claude coral (smoothed)。 */
+const ACCENT = "#c16141";
 /** brand background (角丸の中の色)。 */
 const BG = "#262624";
-/** 8 突点星 (16 頂点) の polygon points。
+/** 8 突点星 の SVG path (`d` 属性)。
  * 原典の viewBox は 0 0 105 118.52、bbox 中心 (52.5, 59.26)。
+ * Adobe Illustrator 出力で各突点に滑らかな curve が入ったバージョン (v2)。
  * 各 SVG 関数で `translate(32 32) scale(STAR_SCALE) translate(-52.5 -59.26)` を適用して
  * 64x64 canvas の中央に配置する。 */
-const STAR_POINTS =
-  "59.94 45.86 89.54 23.53 67.84 53.59 105 58.73 67.95 64.65 85.38 89.44 60.22 72.54 55.18 118.52 49.17 72.66 19.57 94.98 41.27 64.93 0 59.79 41.15 53.87 23.73 29.08 48.89 45.98 53.93 0";
+const STAR_PATH_D =
+  "M60.75,45.25l25.6-19.31c.55-.42,1.26.27.85.83l-18.77,26c-.27.37-.04.89.41.95l32.16,4.45c.69.09.7,1.08.01,1.19l-32.1,5.12c-.44.07-.65.58-.4.94l15,21.35c.38.55-.27,1.22-.83.85l-21.65-14.55c-.37-.25-.87-.02-.93.42l-4.37,32.28c-.09.69-1.08.7-1.19.02l-5.2-32.16c-.07-.45-.6-.66-.96-.39l-25.6,19.31c-.55.42-1.26-.27-.85-.83l18.76-25.99c.27-.37.04-.89-.41-.95l-35.8-4.46c-.7-.09-.71-1.1-.01-1.2l35.73-5.13c.45-.06.67-.58.41-.94l-14.99-21.33c-.38-.55.27-1.22.83-.85l21.65,14.54c.37.25.88.02.93-.42l4.37-33.99c.09-.69,1.09-.7,1.19-.01l5.21,33.86c.07.45.59.66.96.39Z";
 /** 星のスケール。`scale * 118.52 ≈ 50` で 64x64 canvas に余白付きで収める。
  * 0.5 だと iOS Home / Mac Dock で詰まって見えたので 0.42 に。 */
 const STAR_SCALE = 0.42;
@@ -61,7 +62,7 @@ const STAR_CENTER_Y = 59.26;
 function menuBarSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">
   <g fill="black" transform="translate(32 32) scale(${STAR_SCALE}) translate(${-STAR_CENTER_X} ${-STAR_CENTER_Y})">
-    <polygon points="${STAR_POINTS}"/>
+    <path d="${STAR_PATH_D}"/>
   </g>
 </svg>`;
 }
@@ -71,7 +72,7 @@ function appIconSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">
   <rect width="64" height="64" rx="14" fill="${BG}"/>
   <g fill="${ACCENT}" transform="translate(32 32) scale(${STAR_SCALE}) translate(${-STAR_CENTER_X} ${-STAR_CENTER_Y})">
-    <polygon points="${STAR_POINTS}"/>
+    <path d="${STAR_PATH_D}"/>
   </g>
 </svg>`;
 }
