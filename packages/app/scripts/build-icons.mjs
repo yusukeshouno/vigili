@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Vigili.app の Asset Catalog 用に 4 弁花ロゴから:
+ * Vigili.app の Asset Catalog 用に 8 突星ロゴから:
  *   - MenuBarIcon (template image, 黒+透明、template flag を立てる前提)
- *   - AppIcon (角丸背景 + 花、macOS 10 サイズ + iOS 9 サイズ)
+ *   - AppIcon (角丸背景 + 星、macOS 10 サイズ + iOS 9 サイズ)
  *   - MacAppIcon (Mac-only icon set)
  *   - PWA の icon.svg + icon-192.png + icon-512.png + apple-touch-icon.png
  * を SVG → PNG 焼き出しで生成する。
@@ -10,9 +10,8 @@
  * 実行: node packages/app/scripts/build-icons.mjs
  * 依存: pnpm hoisted の sharp (PWA 経由で入る)
  *
- * 花弁スケール: 1.75 (PWA Brand component の見た目に近づける)。
- * 1.55 だと 64x64 canvas に対して余白が広く、Dock / Home screen で
- * 沈んで見えたので少し大きくした。色は brand accent #c96442 を継承。
+ * 星型: 16 頂点 (8 突点 + 内側 8 頂点) の polygon。原典は Adobe Illustrator 出力で
+ * viewBox 105×118.52、bbox 中心 (52.5, 59.26)。色は brand accent #ea5226。
  */
 
 import { fileURLToPath } from "node:url";
@@ -38,42 +37,40 @@ const sharp = require("sharp");
 // 共通定数
 // ---------------------------------------------------------------------
 
-/** brand accent (花の色)。PWA Brand component と揃える。 */
-const ACCENT = "#c96442";
+/** brand accent (星の色)。PWA Brand component と揃える。 */
+const ACCENT = "#ea5226";
 /** brand background (角丸の中の色)。 */
 const BG = "#262624";
-/** 花弁スケール。1.55 → 1.75 に拡大 (icon polish)。 */
-const PETAL_SCALE = 1.75;
-/** 4 弁花の path (上向き 1 枚、N/E/S/W に rotate して 4 弁に)。 */
-const PETAL_PATH = "M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z";
+/** 8 突点星 (16 頂点) の polygon points。
+ * 原典の viewBox は 0 0 105 118.52、bbox 中心 (52.5, 59.26)。
+ * 各 SVG 関数で `translate(32 32) scale(STAR_SCALE) translate(-52.5 -59.26)` を適用して
+ * 64x64 canvas の中央に配置する。 */
+const STAR_POINTS =
+  "59.94 45.86 89.54 23.53 67.84 53.59 105 58.73 67.95 64.65 85.38 89.44 60.22 72.54 55.18 118.52 49.17 72.66 19.57 94.98 41.27 64.93 0 59.79 41.15 53.87 23.73 29.08 48.89 45.98 53.93 0";
+/** 星のスケール。`scale * 118.52 ≈ 60` が 64x64 canvas に収まる目安。 */
+const STAR_SCALE = 0.5;
+const STAR_CENTER_X = 52.5;
+const STAR_CENTER_Y = 59.26;
 
 // ---------------------------------------------------------------------
 // SVG ソース
 // ---------------------------------------------------------------------
 
-/** メニューバー用: 単色テンプレ。背景なし、花だけ黒。 */
+/** メニューバー用: 単色テンプレ。背景なし、星だけ黒。 */
 function menuBarSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">
-  <g fill="black" transform="translate(32 32) scale(${PETAL_SCALE}) translate(-16 -16)">
-    <path d="${PETAL_PATH}"/>
-    <path d="${PETAL_PATH}" transform="rotate(90 16 16)"/>
-    <path d="${PETAL_PATH}" transform="rotate(180 16 16)"/>
-    <path d="${PETAL_PATH}" transform="rotate(270 16 16)"/>
-    <circle cx="16" cy="16" r="1.6"/>
+  <g fill="black" transform="translate(32 32) scale(${STAR_SCALE}) translate(${-STAR_CENTER_X} ${-STAR_CENTER_Y})">
+    <polygon points="${STAR_POINTS}"/>
   </g>
 </svg>`;
 }
 
-/** Dock / Finder / iOS Home / PWA Home screen 用: 角丸ダーク背景 + 花。 */
+/** Dock / Finder / iOS Home / PWA Home screen 用: 角丸ダーク背景 + 星。 */
 function appIconSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">
   <rect width="64" height="64" rx="14" fill="${BG}"/>
-  <g fill="${ACCENT}" transform="translate(32 32) scale(${PETAL_SCALE}) translate(-16 -16)">
-    <path d="${PETAL_PATH}"/>
-    <path d="${PETAL_PATH}" transform="rotate(90 16 16)"/>
-    <path d="${PETAL_PATH}" transform="rotate(180 16 16)"/>
-    <path d="${PETAL_PATH}" transform="rotate(270 16 16)"/>
-    <circle cx="16" cy="16" r="1.6"/>
+  <g fill="${ACCENT}" transform="translate(32 32) scale(${STAR_SCALE}) translate(${-STAR_CENTER_X} ${-STAR_CENTER_Y})">
+    <polygon points="${STAR_POINTS}"/>
   </g>
 </svg>`;
 }

@@ -66,73 +66,52 @@ struct VigiliWidgetEntryView: View {
 
 // MARK: - Sub views
 
-private let accent = Color(red: 0xc9 / 255.0, green: 0x64 / 255.0, blue: 0x42 / 255.0)
+private let accent = Color(red: 0xea / 255.0, green: 0x52 / 255.0, blue: 0x26 / 255.0)
 private let dim = Color.secondary
 
-/// 4 花弁マーク (PWA Brand と同じパス、scale 1.75 を再現)。
+/// 8 突点星 (Vigili brand mark)。
+/// build-icons.mjs の polygon points を SwiftUI Path に移植。
+/// 原典 viewBox 0 0 105 118.52、bbox 中心 (52.5, 59.26)。
 private struct PetalMark: View {
   let size: CGFloat
   let color: Color
 
+  /// 16 頂点 (8 突点 + 8 凹点)。原典 SVG の polygon points と同じ順序。
+  private static let starPoints: [CGPoint] = [
+    CGPoint(x: 59.94, y: 45.86), CGPoint(x: 89.54, y: 23.53),
+    CGPoint(x: 67.84, y: 53.59), CGPoint(x: 105, y: 58.73),
+    CGPoint(x: 67.95, y: 64.65), CGPoint(x: 85.38, y: 89.44),
+    CGPoint(x: 60.22, y: 72.54), CGPoint(x: 55.18, y: 118.52),
+    CGPoint(x: 49.17, y: 72.66), CGPoint(x: 19.57, y: 94.98),
+    CGPoint(x: 41.27, y: 64.93), CGPoint(x: 0, y: 59.79),
+    CGPoint(x: 41.15, y: 53.87), CGPoint(x: 23.73, y: 29.08),
+    CGPoint(x: 48.89, y: 45.98), CGPoint(x: 53.93, y: 0),
+  ]
+  private static let starCenter = CGPoint(x: 52.5, y: 59.26)
+  private static let starExtent: CGFloat = 59.26 // 半分の高さ (最大 extent)
+
   var body: some View {
     Canvas { context, _ in
-      let center = CGPoint(x: size / 2, y: size / 2)
-      let path = Self.petalPath(scale: 1.75, center: center)
+      let canvasCenter = CGPoint(x: size / 2, y: size / 2)
+      // 余白を少しだけ取って 84% で fit
+      let s = (size / 2) / Self.starExtent * 0.84
+      var path = Path()
+      for (i, p) in Self.starPoints.enumerated() {
+        let pt = CGPoint(
+          x: canvasCenter.x + (p.x - Self.starCenter.x) * s,
+          y: canvasCenter.y + (p.y - Self.starCenter.y) * s
+        )
+        if i == 0 {
+          path.move(to: pt)
+        } else {
+          path.addLine(to: pt)
+        }
+      }
+      path.closeSubpath()
       context.fill(path, with: .color(color))
     }
     .frame(width: size, height: size)
     .accessibilityHidden(true)
-  }
-
-  /// SwiftUI Path で 4 弁 + 中心ドットを構築。
-  /// build-icons.mjs の SVG path "M 16 14 C 13 11 13 7 16 4 C 19 7 19 11 16 14 Z" を移植。
-  /// inner 32×32 coord に対し、center を canvas 中心に合わせて scale で拡大する。
-  static func petalPath(scale: CGFloat, center: CGPoint) -> Path {
-    var path = Path()
-    let inner = CGPoint(x: 16, y: 16) // SVG 内の rotate 中心
-    let toScreen = { (p: CGPoint) -> CGPoint in
-      CGPoint(
-        x: center.x + (p.x - inner.x) * scale,
-        y: center.y + (p.y - inner.y) * scale
-      )
-    }
-
-    // 上向き花弁の path
-    func petal(at angle: Angle) -> Path {
-      var p = Path()
-      // SVG: M 16 14 → C 13 11, 13 7, 16 4 → C 19 7, 19 11, 16 14
-      let a = CGAffineTransform(translationX: inner.x, y: inner.y)
-        .rotated(by: angle.radians)
-        .translatedBy(x: -inner.x, y: -inner.y)
-      let m = CGPoint(x: 16, y: 14).applying(a)
-      let c1a = CGPoint(x: 13, y: 11).applying(a)
-      let c1b = CGPoint(x: 13, y: 7).applying(a)
-      let to1 = CGPoint(x: 16, y: 4).applying(a)
-      let c2a = CGPoint(x: 19, y: 7).applying(a)
-      let c2b = CGPoint(x: 19, y: 11).applying(a)
-      let to2 = CGPoint(x: 16, y: 14).applying(a)
-      p.move(to: toScreen(m))
-      p.addCurve(to: toScreen(to1), control1: toScreen(c1a), control2: toScreen(c1b))
-      p.addCurve(to: toScreen(to2), control1: toScreen(c2a), control2: toScreen(c2b))
-      p.closeSubpath()
-      return p
-    }
-
-    path.addPath(petal(at: .degrees(0)))
-    path.addPath(petal(at: .degrees(90)))
-    path.addPath(petal(at: .degrees(180)))
-    path.addPath(petal(at: .degrees(270)))
-    // 中心ドット
-    let dotCenter = toScreen(inner)
-    path.addEllipse(
-      in: CGRect(
-        x: dotCenter.x - 1.5 * scale,
-        y: dotCenter.y - 1.5 * scale,
-        width: 3 * scale,
-        height: 3 * scale
-      )
-    )
-    return path
   }
 }
 

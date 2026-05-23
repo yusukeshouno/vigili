@@ -19,7 +19,7 @@ settings:
     SWIFT_VERSION: "5.9"
     # ターゲットごとの個別 deploymentTarget は targets 側で指定。
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: "" # Xcode で Signing & Capabilities から自動設定される
+    DEVELOPMENT_TEAM: "2DG598WNT9" # Personal Team (YUSUKE SHONO)
     CODE_SIGNING_REQUIRED: "NO"
     CODE_SIGNING_ALLOWED: "NO"
 
@@ -71,6 +71,13 @@ targets:
         SKIP_INSTALL: "NO"
         # Mac は iOS と別の Asset Catalog icon set を使う
         ASSETCATALOG_COMPILER_APPICON_NAME: MacAppIcon
+        # Personal Team で signing して widget が macOS 26 chronod に
+        # 認識されるようにする
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_REQUIRED: "YES"
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: "2DG598WNT9"
     entitlements:
       path: Resources/Vigili.entitlements
       properties:
@@ -190,12 +197,18 @@ targets:
       - path: Sources/VigiliWidget
       # WidgetState の Codable 定義は main app と共有する
       - path: Sources/Shared/WidgetState.swift
+      # widget 自身にも Asset Catalog を埋め込む (chronod が picker で icon を解決するため)
+      - path: Assets.xcassets
+        buildPhase: resources
     info:
       path: Resources/InfoWidget.plist
       properties:
         CFBundleDisplayName: Vigili
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleIconFile: AppIcon
+        CFBundleIconName: AppIcon
+        NSHumanReadableCopyright: "© 2026 Vigili"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
@@ -206,5 +219,7 @@ targets:
         SKIP_INSTALL: "YES"
         ENABLE_HARDENED_RUNTIME: "NO"
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGNING_REQUIRED: "NO"
-        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "YES"
+        CODE_SIGNING_ALLOWED: "YES"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: "2DG598WNT9"
