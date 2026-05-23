@@ -29,6 +29,7 @@ import { loadPolicyFile } from "./policy/loader.js";
 import { appendGeneratedRule, promoteToRule } from "./policy/promote.js";
 import { type PendingQueue, type Resolution, createPendingQueue } from "./queue.js";
 import { AdminRequestSchema, type AdminResponse } from "./server/admin.js";
+import { type RelayClient, createRelayClient } from "./server/relay-client.js";
 import { type ConnContext, type SocketServer, startSocketServer } from "./server/socket.js";
 import { type RunningWsServer, startWsServer } from "./server/ws.js";
 import { loadOrCreateToken } from "./token.js";
@@ -120,6 +121,25 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const socket = startSocketServer(p.socket, (line, conn) => handleLine(line, conn, ctx));
   log(`[vigili-daemon] listening on ${p.socket}`);
 
+  // PWA/iOS から飛んでくる client メッセージ (decide / send-message) を捌くロジックは
+  // LAN WS と Relay の両方から呼ぶので関数化しておく。
+  const handleClientMessage = (msg: import("@vigili/shared").WsClientMessage): void => {
+    if (msg.type === "decide") {
+      if (msg.promote) void handlePromote(msg.promote, ctx);
+      const ok = queue.resolve(msg.id, msg.decision, "human:relay", null);
+      if (!ok) log(`[vigili-relay] decide: id ${msg.id} は既に決着済み / 未知`);
+    } else if (msg.type === "send-message") {
+      const id = randomUUID();
+      const stored = ctx.messageStore.insert({
+        id,
+        session_id: msg.session_id,
+        body: msg.body,
+        created_at: Date.now(),
+      });
+      ctx.onMessageAdded(stored);
+    }
+  };
+
   let ws: RunningWsServer | null = null;
   if (options.enableWs !== false) {
     ws = await startWsServer({
@@ -144,14 +164,45 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       recentMessages: () => ctx.messageStore.listRecent(50),
       ...(pushVapid && pushStore ? { push: { vapid: pushVapid, store: pushStore } } : {}),
     });
-    // ctx の broadcast コールバックを実体に差し替える
-    ctx.onMessageAdded = (m) => {
-      ws?.broadcast({ type: "message-added", message: m });
-    };
-    ctx.onMessageDelivered = (id, delivered_at) => {
-      ws?.broadcast({ type: "message-delivered", id, delivered_at });
-    };
   }
+
+  // --- Vigili Cloud Relay への outbound WSS (Phase 14-B) ---
+  let relay: RelayClient | null = null;
+  if (config.relay) {
+    relay = createRelayClient({
+      url: config.relay.url,
+      pairingId: config.relay.pairing_id,
+      agentKey: config.relay.agent_key,
+      reconnectMaxSeconds: config.relay.reconnect_max_seconds,
+      onClientMessage: handleClientMessage,
+      log,
+    });
+    relay.start();
+    // 接続後 snapshot を送る (relay → 全 client に転送) — start() は async に
+    // 進むので接続完了を待たずに最初の snapshot をキューイング。relay client は
+    // 未接続中の send は捨てる仕様なので、最初の "pending" イベント等で再び broadcast される。
+    relay.send({ type: "snapshot", pending: queue.list(), messages: messageStore.listRecent(50) });
+    log(`[vigili-daemon] relay outbound enabled (pairing=${config.relay.pairing_id})`);
+  }
+
+  // pending / resolved / messages は LAN WS と Relay の両方に同時 broadcast する。
+  const broadcastAll = (msg: import("@vigili/shared").WsServerMessage): void => {
+    ws?.broadcast(msg);
+    relay?.send(msg);
+  };
+
+  // queue のイベントを LAN WS は内部 listener で捕まえてるが、relay の方には別途流す必要がある。
+  // 二重送信を避けるため LAN WS の onPending/onResolved 経路を残しつつ、relay には
+  // 独自に subscribe する。
+  if (relay) {
+    queue.onPending((req) => relay?.send({ type: "pending", request: req }));
+    queue.onResolved((id, decision) => relay?.send({ type: "resolved", id, decision }));
+  }
+
+  // ctx の broadcast コールバックを実体に差し替える (LAN + Relay 同時)
+  ctx.onMessageAdded = (m) => broadcastAll({ type: "message-added", message: m });
+  ctx.onMessageDelivered = (id, delivered_at) =>
+    broadcastAll({ type: "message-delivered", id, delivered_at });
 
   // SIGHUP で policy をホットリロード (CLI / launchd 経由で利用可)
   const sigHandler = (): void => {
@@ -197,6 +248,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       queue.cancelAll("daemon shutdown");
       await socket.close();
       if (ws) await ws.close();
+      if (relay) await relay.stop();
       store.close();
     },
   };

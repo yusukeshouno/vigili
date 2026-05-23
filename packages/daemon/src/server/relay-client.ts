@@ -1,0 +1,166 @@
+/**
+ * Vigili Cloud Relay (Phase 14-B) への outbound WebSocket クライアント。
+ *
+ * Mac daemon が `relay.vigili.io` 等に WSS を張り、以下を伝送する:
+ *
+ *   daemon → relay  : 既存 `WsServerMessage` (snapshot / pending / resolved /
+ *                     message-added / message-delivered)
+ *   relay → daemon  : 既存 `WsClientMessage` (decide / send-message)
+ *
+ * relay 側は `/v1/agents/:pid` で agent_key を query token として受ける。
+ * relay は中身を解釈せず pairing-id ごとに fan-out するだけなので、
+ * 既存の LAN WS と「同じ言語」を喋れば iOS app からは透過に見える。
+ *
+ * 再接続: 指数バックオフ + max cap (デフォルト 30s)。
+ */
+
+import {
+  type WsClientMessage,
+  WsClientMessageSchema,
+  type WsServerMessage,
+} from "@vigili/shared";
+import WebSocket, { type RawData } from "ws";
+
+export interface RelayClientOptions {
+  /** "wss://relay.vigili.io" など。末尾スラなし。 */
+  url: string;
+  /** pairing-id (UUID)。 */
+  pairingId: string;
+  /** Agent key (発行時の平文)。 */
+  agentKey: string;
+  /** 再接続の最大 backoff 秒。 */
+  reconnectMaxSeconds: number;
+  /** client (PWA/iOS) からの decide / send-message を受けたときに呼ばれる。 */
+  onClientMessage: (msg: WsClientMessage) => void;
+  log: (msg: string) => void;
+}
+
+export interface RelayClient {
+  /** WS を貼り、再接続を開始する。 */
+  start(): void;
+  /** 切断 + 以後の再接続を止める。 */
+  stop(): Promise<void>;
+  /** PWA に対する WS と同じ「broadcast」関数。relay 経由で client 全員に届く。 */
+  send(msg: WsServerMessage): void;
+  /** 現在 relay と接続できているか (テスト / 観測用)。 */
+  isConnected(): boolean;
+}
+
+export function createRelayClient(options: RelayClientOptions): RelayClient {
+  const { url, pairingId, agentKey, reconnectMaxSeconds, onClientMessage, log } = options;
+  let ws: WebSocket | null = null;
+  let closed = false;
+  let retry = 0;
+  let reconnectTimer: NodeJS.Timeout | null = null;
+  /** WS 接続できていない間、相手に届かない send を捨てるか溜めるか — まず捨てる方針。 */
+  let connected = false;
+
+  const endpoint = `${url.replace(/\/$/, "")}/v1/agents/${encodeURIComponent(
+    pairingId,
+  )}?token=${encodeURIComponent(agentKey)}`;
+
+  function connect(): void {
+    if (closed) return;
+    log(`[vigili-relay] connecting → ${url.replace(/\/$/, "")}/v1/agents/${pairingId}`);
+    try {
+      ws = new WebSocket(endpoint, { handshakeTimeout: 10_000 });
+    } catch (err) {
+      log(`[vigili-relay] new WebSocket() throw: ${(err as Error).message}`);
+      scheduleReconnect();
+      return;
+    }
+
+    ws.on("open", () => {
+      connected = true;
+      retry = 0;
+      log("[vigili-relay] connected");
+    });
+
+    ws.on("message", (raw: RawData) => {
+      // relay は agent-status を独自に inject する。それは無視し、
+      // 既存 WsClientMessageSchema に乗るもの (decide / send-message) だけ
+      // daemon のハンドラに流す。
+      const text = typeof raw === "string" ? raw : raw.toString("utf-8");
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return;
+      }
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        (parsed as { type?: unknown }).type === "agent-status"
+      ) {
+        // relay 内部メッセージ。今は無視。将来 status UI に出す。
+        return;
+      }
+      const r = WsClientMessageSchema.safeParse(parsed);
+      if (!r.success) {
+        log(`[vigili-relay] 不正な inbound: ${r.error.issues.map((i) => i.message).join(", ")}`);
+        return;
+      }
+      onClientMessage(r.data);
+    });
+
+    ws.on("close", (code, reason) => {
+      connected = false;
+      const detail = `code=${code}${reason.length > 0 ? ` reason=${reason.toString("utf-8")}` : ""}`;
+      log(`[vigili-relay] closed (${detail})`);
+      // 401 (auth) / 404 (no pairing) は再接続しても直らない。短期だけ retry してから諦める。
+      if ((code === 4401 || code === 4404 || code === 1008) && retry > 3) {
+        log("[vigili-relay] 認証/不在エラー継続のため再接続停止");
+        closed = true;
+        return;
+      }
+      scheduleReconnect();
+    });
+
+    ws.on("error", (err) => {
+      log(`[vigili-relay] error: ${err.message}`);
+      // 'close' が後続するので scheduleReconnect はそこで行う
+    });
+  }
+
+  function scheduleReconnect(): void {
+    if (closed) return;
+    if (reconnectTimer) return;
+    const delay = Math.min(reconnectMaxSeconds * 1000, 500 * 2 ** retry);
+    retry += 1;
+    log(`[vigili-relay] reconnect in ${Math.round(delay / 100) / 10}s`);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  }
+
+  return {
+    start() {
+      if (closed) return;
+      connect();
+    },
+    async stop() {
+      closed = true;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      try {
+        ws?.close(1000, "shutdown");
+      } catch {
+        /* ignore */
+      }
+    },
+    send(msg: WsServerMessage) {
+      if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(JSON.stringify(msg));
+      } catch (err) {
+        log(`[vigili-relay] send failed: ${(err as Error).message}`);
+      }
+    },
+    isConnected() {
+      return connected;
+    },
+  };
+}

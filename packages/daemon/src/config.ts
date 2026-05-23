@@ -47,6 +47,23 @@ export const ConfigSchema = z
         base_url: z.string().url().optional(),
       })
       .default({}),
+    /**
+     * Vigili Cloud Relay への outbound 接続設定 (Phase 14-B)。
+     * 設定時、daemon は LAN WS と並行で relay.vigili.io 等に WSS を張り、
+     * pending/decide を双方ルーティングする (外出先からの iOS 接続用)。
+     */
+    relay: z
+      .object({
+        /** 例: "wss://relay.vigili.io" (末尾スラなし、/v1/agents/<pid> を後ろに付ける) */
+        url: z.string().url(),
+        /** Pairing ID (UUID)。relay の /v1/pairings 発行時に取得。 */
+        pairing_id: z.string().min(1),
+        /** Agent key (relay が `pairings.agent_key_hash` で照合)。発行時に一度だけ平文。 */
+        agent_key: z.string().min(1),
+        /** 再接続の最大 backoff 秒 (デフォルト 30 秒)。 */
+        reconnect_max_seconds: z.number().int().positive().default(30),
+      })
+      .optional(),
   })
   .default({});
 
