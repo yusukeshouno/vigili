@@ -65,7 +65,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Vigili
-        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.app
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.app.shono
         MACOSX_DEPLOYMENT_TARGET: "13.0"
         ENABLE_HARDENED_RUNTIME: "NO"
         SKIP_INSTALL: "NO"
@@ -132,14 +132,14 @@ targets:
         # カスタム URL スキーム: vigili://setup?u=...&t=... と
         # 旧 sentinel://setup?u=...&t=... の両方をサポート (移行期)。
         CFBundleURLTypes:
-          - CFBundleURLName: io.vigili.mobile
+          - CFBundleURLName: io.vigili.mobile.shono
             CFBundleURLSchemes:
               - vigili
               - sentinel
     settings:
       base:
         PRODUCT_NAME: Vigili
-        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile.shono
         IPHONEOS_DEPLOYMENT_TARGET: "16.2"
         TARGETED_DEVICE_FAMILY: "1"
         # iOS 実機にインストールするには有効な signing が必須。
@@ -171,7 +171,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: VigiliActivity
-        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile.activity
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile.shono.activity
         IPHONEOS_DEPLOYMENT_TARGET: "16.2"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
@@ -201,7 +201,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: VigiliWidget
-        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.app.widget
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.app.shono.widget
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SKIP_INSTALL: "YES"
         ENABLE_HARDENED_RUNTIME: "NO"
