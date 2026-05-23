@@ -1,0 +1,19 @@
+[Unit]
+Description=Vigili Relay SQLite backup (hot snapshot via sqlite3 .backup)
+After=vigili-relay.service
+Wants=vigili-relay.service
+
+[Service]
+Type=oneshot
+User=vigili
+Group=vigili
+ExecStart=/opt/vigili/packages/relay/deploy/backup.sh
+# DB / 出力先は backup.sh の env 変数で上書き可。default は /var/lib/vigili/{relay.db,backups}
+# ハング対策: 5 分以上かかる backup は異常なので強制終了。
+TimeoutStartSec=5min
+
+# 守備範囲を最小限に: 書く必要があるのは backups dir だけ。
+ProtectSystem=strict
+ReadWritePaths=/var/lib/vigili
+PrivateTmp=true
+NoNewPrivileges=true

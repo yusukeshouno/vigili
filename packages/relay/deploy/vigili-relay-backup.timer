@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Vigili Relay SQLite backup daily at 03:30 UTC
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+# 起動が落ちていた間に滞留した backup を 1 回まとめて回す。
+Persistent=true
+Unit=vigili-relay-backup.service
+
+[Install]
+WantedBy=timers.target

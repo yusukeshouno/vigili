@@ -147,9 +147,51 @@ websocat "wss://relay.vigili.io/v1/agents/<PID>?token=<AGENT_KEY>"
 
 - ログ: `sudo journalctl -u vigili-relay -f`
 - DB の場所: `/var/lib/vigili/relay.db`
-  - バックアップは `sqlite3 relay.db ".backup /tmp/relay-$(date +%F).db"` 推奨
 - nginx access log: `/var/log/nginx/access.log`
-- 死活: `https://relay.vigili.io/healthz` を uptime monitoring に登録
+
+### 3-1. SQLite 日次バックアップ (systemd timer)
+
+`backup.sh` が `sqlite3 .backup` でホットスナップショットを取って
+`/var/lib/vigili/backups/relay-YYYYMMDDTHHMMSSZ.db.gz` に置く。30 日以上経過
+した古いものは自動削除。
+
+初回セットアップ:
+
+```bash
+sudo cp /opt/vigili/packages/relay/deploy/vigili-relay-backup.service \
+        /etc/systemd/system/vigili-relay-backup.service
+sudo cp /opt/vigili/packages/relay/deploy/vigili-relay-backup.timer \
+        /etc/systemd/system/vigili-relay-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now vigili-relay-backup.timer
+
+# 動作確認 (timer を待たずに今すぐ走らせる)
+sudo systemctl start vigili-relay-backup.service
+sudo ls -la /var/lib/vigili/backups/
+```
+
+タイマーの状態確認:
+
+```bash
+sudo systemctl list-timers vigili-relay-backup.timer
+sudo journalctl -u vigili-relay-backup.service -n 20
+```
+
+### 3-2. 死活監視 (cron + ntfy)
+
+外部 uptime monitoring (UptimeRobot / Better Stack 等) に
+`https://relay.vigili.io/healthz` を 5 分間隔で登録するのが基本。
+
+VPS 内でも回したい場合は `healthcheck.sh` を cron に入れる:
+
+```bash
+# crontab -e (任意のユーザ)
+*/5 * * * * VIGILI_RELAY_NTFY_URL=https://ntfy.sh/<自分のトピック> \
+  /opt/vigili/packages/relay/deploy/healthcheck.sh
+```
+
+`VIGILI_RELAY_NTFY_URL` を設定しておけば落ちた瞬間に push が飛ぶ。
+URL を省略すれば標準エラーに出すだけ。
 
 ---
 
