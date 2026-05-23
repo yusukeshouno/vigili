@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createConnection } from "node:net";
 import type { ApprovalRequest, FinalDecision } from "@vigili/shared";
+import { computeDigest, type DigestReport } from "./db/digest.js";
 import { computeStats, type StatsBuckets } from "./db/stats.js";
 import { openStore } from "./db/store.js";
 import { paths } from "./paths.js";
@@ -22,6 +23,8 @@ async function main(): Promise<number> {
       return reload();
     case "stats":
       return stats(rest);
+    case "digest":
+      return digest(rest);
     case "setup-qr":
       return setupQr(rest);
     case "setup-link":
@@ -54,6 +57,10 @@ Commands:
       --today              Since 00:00 of the local day (default)
       --since <duration>   Since now - duration (e.g. 1h, 6h, 7d)
       --json               Emit raw JSON (for scripts)
+  digest [options]         Surface promotable rule candidates from manual decisions.
+      --today              Since 00:00 of the local day (default)
+      --since <duration>   Since now - duration (e.g. 24h, 7d)
+      --json               Emit raw JSON (groups + rule_yaml)
   setup-qr                 Print QR. iPhone Camera.app or Sentinel.app scans → connect.
       --url <url>          Override daemon URL (default: detect via Tailscale)
       --json               Encode {"u":...,"t":...} JSON instead of sentinel:// URL
@@ -166,6 +173,86 @@ function stats(args: string[]): number {
     return 0;
   } finally {
     store.close();
+  }
+}
+
+function digest(args: string[]): number {
+  const json = args.includes("--json");
+  const sinceIdx = args.indexOf("--since");
+  const sinceArg = sinceIdx >= 0 ? args[sinceIdx + 1] : undefined;
+  const now = Date.now();
+  let from: number;
+  let label: string;
+  if (sinceArg) {
+    const ms = parseDuration(sinceArg);
+    if (ms === null) {
+      console.error(`invalid --since: ${sinceArg} (try 24h, 7d)`);
+      return 1;
+    }
+    from = now - ms;
+    label = `past ${sinceArg}`;
+  } else {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    from = d.getTime();
+    label = `today (since ${d.toLocaleString()})`;
+  }
+
+  const p = paths();
+  const store = openStore(p.db);
+  try {
+    const { db } = store.raw();
+    const r = computeDigest(db, from, now);
+    if (json) {
+      console.log(JSON.stringify(r, null, 2));
+      return 0;
+    }
+    printDigest(r, label);
+    return 0;
+  } finally {
+    store.close();
+  }
+}
+
+function printDigest(r: DigestReport, label: string): void {
+  const pad = (n: number | string, w = 5): string => String(n).padStart(w, " ");
+  console.log(`\nvigili digest — ${label}`);
+  console.log("─".repeat(60));
+  console.log(
+    `Decisions:  ${r.totals.total_rows} total, ${r.totals.manual_rows} manual (the rest auto)`,
+  );
+
+  if (r.groups.length === 0) {
+    console.log("\n(no repeated patterns to summarize)\n");
+    return;
+  }
+
+  console.log("\nTop repeated patterns (★ = unanimous human decisions, rule candidate):");
+  for (const g of r.groups.slice(0, 10)) {
+    const mark = g.all_human && g.unanimous !== null ? "★" : " ";
+    const verdict =
+      g.unanimous === "allow"
+        ? "all allow"
+        : g.unanimous === "deny"
+          ? "all deny"
+          : `${g.by_decision.allow}a/${g.by_decision.deny}d`;
+    console.log(
+      `  ${mark} ${pad(g.count)}  ${g.tool.padEnd(8)} ${g.label.padEnd(28)}  ${verdict}`,
+    );
+  }
+
+  if (r.candidates.length === 0) {
+    console.log("\n(no rule candidates — patterns are not unanimous-human yet)\n");
+    return;
+  }
+
+  console.log(`\nPromotable rule candidates (${r.candidates.length}):`);
+  console.log("Paste any of these into ~/.vigili/policy.yaml under `rules:`,");
+  console.log("then `vigili-cli reload`.\n");
+  for (const c of r.candidates) {
+    console.log(`# ${c.group.count}× ${c.group.tool} ${c.group.label} → all ${c.rule.action}`);
+    console.log(c.rule_yaml);
+    console.log("");
   }
 }
 
