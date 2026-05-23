@@ -66,7 +66,7 @@ struct VigiliWidgetEntryView: View {
 
 // MARK: - Sub views
 
-private let accent = Color(red: 0xea / 255.0, green: 0x52 / 255.0, blue: 0x26 / 255.0)
+private let accent = Color(red: 0xc9 / 255.0, green: 0x64 / 255.0, blue: 0x42 / 255.0)
 private let dim = Color.secondary
 
 /// 8 突点星 (Vigili brand mark)。

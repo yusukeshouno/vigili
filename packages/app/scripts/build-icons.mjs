@@ -37,8 +37,8 @@ const sharp = require("sharp");
 // 共通定数
 // ---------------------------------------------------------------------
 
-/** brand accent (星の色)。PWA Brand component と揃える。 */
-const ACCENT = "#ea5226";
+/** brand accent (星の色)。PWA Brand component と揃える。Claude coral。 */
+const ACCENT = "#c96442";
 /** brand background (角丸の中の色)。 */
 const BG = "#262624";
 /** 8 突点星 (16 頂点) の polygon points。
