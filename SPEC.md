@@ -1,6 +1,6 @@
-# Sentinel — Functional Specification
+# Vigili — Functional Specification
 
-このドキュメントは Sentinel の機能仕様を定義します。実装と仕様が乖離した場合、こちらを真とします。
+このドキュメントは Vigili の機能仕様を定義します。実装と仕様が乖離した場合、こちらを真とします。
 
 ---
 

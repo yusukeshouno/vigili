@@ -1,11 +1,20 @@
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const ROOT_ENV = process.env.SENTINEL_HOME;
+const ROOT_ENV = process.env.VIGILI_HOME ?? process.env.SENTINEL_HOME;
 
-/** ~/.sentinel または $SENTINEL_HOME (テストや一時環境向けのオーバーライド)。 */
+/**
+ * ~/.vigili または $VIGILI_HOME (テストや一時環境向けのオーバーライド)。
+ * リブランド過渡期: ~/.vigili が無く ~/.sentinel が在る場合は後者を返す
+ * (旧設定で起動できるための fallback。初回起動時にコピー or 自分で mv 推奨)。
+ */
 export function sentinelHome(): string {
-  return ROOT_ENV ?? join(homedir(), ".sentinel");
+  if (ROOT_ENV) return ROOT_ENV;
+  const newHome = join(homedir(), ".vigili");
+  const oldHome = join(homedir(), ".sentinel");
+  if (!existsSync(newHome) && existsSync(oldHome)) return oldHome;
+  return newHome;
 }
 
 export interface SentinelPaths {

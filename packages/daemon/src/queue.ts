@@ -1,4 +1,4 @@
-import type { ApprovalRequest, FinalDecision } from "@sentinel/shared";
+import type { ApprovalRequest, FinalDecision } from "@vigili/shared";
 
 export interface Resolution {
   decision: FinalDecision;

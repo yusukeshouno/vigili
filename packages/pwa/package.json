@@ -1,5 +1,5 @@
 {
-  "name": "@sentinel/pwa",
+  "name": "@vigili/pwa",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "test": "echo 'pwa has no tests (per CLAUDE.md)'"
   },
   "dependencies": {
-    "@sentinel/shared": "workspace:*",
+    "@vigili/shared": "workspace:*",
     "idb": "^8.0.0",
     "next": "^15.0.3",
     "react": "^19.0.0",

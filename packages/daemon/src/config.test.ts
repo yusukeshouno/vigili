@@ -15,7 +15,7 @@ describe("loadConfigFile", () => {
   it("returns defaults when file is missing", async () => {
     const cfg = await loadConfigFile("/nonexistent/sentinel/config.yaml");
     expect(cfg.daemon.ws_port).toBe(7878);
-    expect(cfg.daemon.ws_host).toBe("127.0.0.1");
+    expect(cfg.daemon.ws_host).toBe("0.0.0.0");
     expect(cfg.ntfy).toBeUndefined();
     expect(cfg.session_tags).toEqual({});
   });

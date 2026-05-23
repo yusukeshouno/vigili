@@ -3,7 +3,7 @@
 import { useId } from "react";
 
 /**
- * Sentinel brand mark — handoff bundle v3.
+ * Vigili brand mark — handoff bundle v3.
  *
  * 4 花弁 (N/E/S/W) + 中心ドット の sparkle/flower 型。
  * (16,16) 中心の 4 回回転で構成 → 上下左右対称。
@@ -53,7 +53,7 @@ export function HandDrawnShield({
       style={{ display: "block", overflow: "visible" }}
       aria-hidden
     >
-      <title>Sentinel</title>
+      <title>Vigili</title>
       <defs>
         <filter id={`sk-${id}`} x="-20%" y="-20%" width="140%" height="140%">
           <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves={2} seed={3} />
@@ -83,7 +83,7 @@ export function SentinelWordmark({ size = 20 }: { size?: number }) {
         fontVariationSettings: '"wdth" 95',
       }}
     >
-      Sentinel
+      Vigili
     </span>
   );
 }

@@ -3,7 +3,7 @@ import {
   type WsClientMessage,
   WsClientMessageSchema,
   type WsServerMessage,
-} from "@sentinel/shared";
+} from "@vigili/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { SubscriptionStore, VapidKeys } from "../notify/web-push.js";
 import type { PendingQueue } from "../queue.js";
@@ -63,7 +63,7 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
       preValidation: async (req, reply) => {
         const token = extractToken(req.url ?? "", req.headers.authorization);
         if (!constantTimeEquals(token ?? "", options.token)) {
-          log("[sentinel-ws] 認証失敗 → 401");
+          log("[vigili-ws] 認証失敗 → 401");
           return reply.code(401).send({ error: "unauthorized" });
         }
       },
@@ -100,7 +100,7 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
         const result = WsClientMessageSchema.safeParse(parsed);
         if (!result.success) {
           log(
-            `[sentinel-ws] 不正な client message: ${result.error.issues
+            `[vigili-ws] 不正な client message: ${result.error.issues
               .map((i) => i.message)
               .join(", ")}`,
           );
@@ -127,7 +127,7 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
 
   const host = options.host ?? "127.0.0.1";
   await app.listen({ port: options.port, host });
-  log(`[sentinel-ws] listening on ws://${host}:${options.port}/ws`);
+  log(`[vigili-ws] listening on ws://${host}:${options.port}/ws`);
 
   // Bonjour で同 LAN にブロードキャスト (iPhone 等が NWBrowser で見つける)。
   // 公開するのは「Sentinel が居る」「ポート」「path /ws」「token 必要」だけ。
@@ -165,9 +165,9 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
           }
         },
       };
-      log(`[sentinel-ws] Bonjour: _sentinel._tcp on port ${options.port}`);
+      log(`[vigili-ws] Bonjour: _sentinel._tcp on port ${options.port}`);
     } catch (err) {
-      log(`[sentinel-ws] Bonjour publish failed: ${(err as Error).message}`);
+      log(`[vigili-ws] Bonjour publish failed: ${(err as Error).message}`);
     }
   }
 
@@ -191,13 +191,13 @@ function handleClientMessage(msg: WsClientMessage, options: WsServerOptions): vo
         options.onPromote(msg);
       } catch (err) {
         (options.log ?? console.error)(
-          `[sentinel-ws] promote handler error: ${(err as Error).message}`,
+          `[vigili-ws] promote handler error: ${(err as Error).message}`,
         );
       }
     }
     const ok = options.queue.resolve(msg.id, msg.decision, "human:ws", null);
     if (!ok) {
-      (options.log ?? console.error)(`[sentinel-ws] decide: id ${msg.id} は既に決着済み / 未知`);
+      (options.log ?? console.error)(`[vigili-ws] decide: id ${msg.id} は既に決着済み / 未知`);
     }
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import type { WsClientMessage, WsServerMessage } from "@sentinel/shared";
+import type { WsClientMessage, WsServerMessage } from "@vigili/shared";
 
 export type ConnectionState = "connecting" | "open" | "closed" | "error";
 

@@ -1,4 +1,4 @@
-import type { ApprovalRequest, NotifyLevel } from "@sentinel/shared";
+import type { ApprovalRequest, NotifyLevel } from "@vigili/shared";
 
 /**
  * notify 経路の共通インタフェース。

@@ -84,7 +84,7 @@ export function NotificationsCard() {
         className="mb-4"
         style={{ fontSize: 12, color: "var(--color-fg-dim)", lineHeight: 1.55 }}
       >
-        Sentinel から直接スマホに push 通知を飛ばします (ntfy などの中継不要)。 タップで該当
+        Vigili から直接スマホに push 通知を飛ばします (ntfy などの中継不要)。 タップで該当
         request の Detail 画面に飛びます。
       </p>
 

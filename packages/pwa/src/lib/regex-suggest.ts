@@ -1,4 +1,4 @@
-import type { ApprovalRequest, PromoteRule } from "@sentinel/shared";
+import type { ApprovalRequest, PromoteRule } from "@vigili/shared";
 
 /**
  * 承認待ちリクエストから初期 PromoteRule (正規表現の提案) を生成する。

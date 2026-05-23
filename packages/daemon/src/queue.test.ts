@@ -1,4 +1,4 @@
-import type { ApprovalRequest } from "@sentinel/shared";
+import type { ApprovalRequest } from "@vigili/shared";
 import { describe, expect, it } from "vitest";
 import { createPendingQueue } from "./queue.js";
 

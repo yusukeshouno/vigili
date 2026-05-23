@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { type Socket, connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PolicyConfig } from "@sentinel/shared";
+import type { PolicyConfig } from "@vigili/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type RunningDaemon, startDaemon } from "./daemon.js";
 import type { Notifier, NotifyInput } from "./notify/ntfy.js";

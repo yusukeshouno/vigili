@@ -56,7 +56,7 @@ async function start(_args: string[]): Promise<number> {
     const daemon = await startDaemon();
 
     const shutdown = async (sig: string): Promise<void> => {
-      console.error(`[sentinel-daemon] received ${sig}, shutting down`);
+      console.error(`[vigili-daemon] received ${sig}, shutting down`);
       await daemon.close();
       const p = paths();
       if (existsSync(p.pid)) {
@@ -78,10 +78,10 @@ async function start(_args: string[]): Promise<number> {
     });
   } catch (err) {
     if (err instanceof PolicyLoadError) {
-      console.error(`[sentinel-daemon] ポリシーロード失敗: ${err.message}`);
+      console.error(`[vigili-daemon] ポリシーロード失敗: ${err.message}`);
       return 2;
     }
-    console.error("[sentinel-daemon] 起動失敗:", err);
+    console.error("[vigili-daemon] 起動失敗:", err);
     return 1;
   }
 }

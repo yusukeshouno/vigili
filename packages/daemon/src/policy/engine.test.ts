@@ -1,4 +1,4 @@
-import type { PolicyConfig, ToolRequest } from "@sentinel/shared";
+import type { PolicyConfig, ToolRequest } from "@vigili/shared";
 import { describe, expect, it } from "vitest";
 import { decide, isWithinJstWindow } from "./engine.js";
 

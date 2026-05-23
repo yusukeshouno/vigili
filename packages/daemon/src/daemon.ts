@@ -9,7 +9,7 @@ import {
   type PromoteRule,
   type ToolRequest,
   ToolRequestSchema,
-} from "@sentinel/shared";
+} from "@vigili/shared";
 import { type SentinelConfig, loadConfigFile } from "./config.js";
 import { type RequestStore, openStore } from "./db/store.js";
 import { computeStats, pruneOldRequests } from "./db/stats.js";
@@ -89,7 +89,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     pushVapid = loadOrCreateVapidKeys(p.vapid, config.push.subject);
     pushStore = openSubscriptionStore(p.pushSubs);
     log(
-      `[sentinel-daemon] web-push ready (subs=${pushStore.size()}, vapid=${p.vapid})`,
+      `[vigili-daemon] web-push ready (subs=${pushStore.size()}, vapid=${p.vapid})`,
     );
   }
 
@@ -112,7 +112,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   };
 
   const socket = startSocketServer(p.socket, (line, conn) => handleLine(line, conn, ctx));
-  log(`[sentinel-daemon] listening on ${p.socket}`);
+  log(`[vigili-daemon] listening on ${p.socket}`);
 
   let ws: RunningWsServer | null = null;
   if (options.enableWs !== false) {
@@ -151,12 +151,12 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       });
       if (result.pruned > 0) {
         log(
-          `[sentinel-daemon] archive: pruned ${result.pruned} rows ` +
+          `[vigili-daemon] archive: pruned ${result.pruned} rows ` +
             `(${(result.sizeBefore / 1024 / 1024).toFixed(1)} → ${(result.sizeAfter / 1024 / 1024).toFixed(1)} MB)`,
         );
       }
     } catch (err) {
-      log(`[sentinel-daemon] archive 失敗: ${(err as Error).message}`);
+      log(`[vigili-daemon] archive 失敗: ${(err as Error).message}`);
     }
   };
   runArchive();
@@ -183,9 +183,9 @@ async function reloadPolicy(ctx: DaemonContext): Promise<void> {
   try {
     const fresh = await loadPolicyFile(ctx.policyPath);
     ctx.policy = fresh;
-    ctx.log(`[sentinel-daemon] policy reloaded (${fresh.rules.length} rules including generated)`);
+    ctx.log(`[vigili-daemon] policy reloaded (${fresh.rules.length} rules including generated)`);
   } catch (err) {
-    ctx.log(`[sentinel-daemon] policy reload 失敗: ${(err as Error).message}`);
+    ctx.log(`[vigili-daemon] policy reload 失敗: ${(err as Error).message}`);
   }
 }
 
@@ -193,10 +193,10 @@ async function handlePromote(promote: PromoteRule, ctx: DaemonContext): Promise<
   try {
     const rule = promoteToRule(promote, "human:ws");
     await appendGeneratedRule(ctx.generatedPolicyPath, rule);
-    ctx.log(`[sentinel-daemon] promoted rule "${rule.name}" → ${ctx.generatedPolicyPath}`);
+    ctx.log(`[vigili-daemon] promoted rule "${rule.name}" → ${ctx.generatedPolicyPath}`);
     await reloadPolicy(ctx);
   } catch (err) {
-    ctx.log(`[sentinel-daemon] promote 失敗: ${(err as Error).message}`);
+    ctx.log(`[vigili-daemon] promote 失敗: ${(err as Error).message}`);
   }
 }
 

@@ -1,4 +1,4 @@
-// Sentinel Service Worker.
+// Vigili Service Worker.
 // 目的:
 //  - インストール時に app shell をプリキャッシュ (オフラインで開ける)
 //  - HTML/CSS/JS リクエストには「Network-first, fallback to cache」
@@ -78,7 +78,7 @@ async function cacheFirst(req) {
 //   { title, body, tag, url, level }
 // payload が無い (= keepalive) 場合はジェネリックなタイトルで表示する。
 self.addEventListener("push", (event) => {
-  let payload = { title: "Sentinel", body: "新しい承認", level: "normal", url: "/" };
+  let payload = { title: "Vigili", body: "新しい承認", level: "normal", url: "/" };
   if (event.data) {
     try {
       const parsed = event.data.json();

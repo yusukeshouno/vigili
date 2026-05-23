@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ApprovalRequest } from "@sentinel/shared";
+import type { ApprovalRequest } from "@vigili/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type StoredSubscription,
@@ -121,7 +121,7 @@ describe("buildPayload", () => {
       { request: req(), level: "normal", ruleSource: "rule:long bash" },
       "https://my.tail.ts.net",
     );
-    expect(p.title).toBe("[neort] Sentinel — rule:long bash");
+    expect(p.title).toBe("[neort] Vigili — rule:long bash");
     expect(p.body).toBe("$ ls -la /tmp");
     expect(p.url).toBe("https://my.tail.ts.net/r/req-123");
     expect(p.tag).toBe("req-123");
@@ -145,7 +145,7 @@ describe("buildPayload", () => {
       { request: r, level: "normal", ruleSource: "rule:any" },
       "https://x.example/",
     );
-    expect(p.title).toBe("[?] Sentinel — rule:any");
+    expect(p.title).toBe("[?] Vigili — rule:any");
   });
 });
 

@@ -79,7 +79,7 @@ struct PopoverContentView: View {
         size: 22
       )
       HStack(spacing: 8) {
-        Text("Sentinel")
+        Text("Vigili")
           .font(.display(16, weight: .semibold))
           .foregroundStyle(Theme.fg)
         if coordinator.pendingCount > 0 {

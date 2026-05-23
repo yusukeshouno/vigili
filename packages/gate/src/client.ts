@@ -5,7 +5,7 @@ import {
   type Decision,
   DecisionSchema,
   type ToolRequest,
-} from "@sentinel/shared";
+} from "@vigili/shared";
 
 export interface GateClientOptions {
   socketPath: string;

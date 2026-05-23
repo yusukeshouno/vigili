@@ -1,4 +1,4 @@
-import type { ToolRequest } from "@sentinel/shared";
+import type { ToolRequest } from "@vigili/shared";
 import { extractCommand } from "./extractors.js";
 
 /**

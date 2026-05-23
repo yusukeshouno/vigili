@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createConnection } from "node:net";
-import type { ApprovalRequest, FinalDecision } from "@sentinel/shared";
+import type { ApprovalRequest, FinalDecision } from "@vigili/shared";
 import { computeStats, type StatsBuckets } from "./db/stats.js";
 import { openStore } from "./db/store.js";
 import { paths } from "./paths.js";
@@ -98,11 +98,11 @@ async function pending(): Promise<number> {
   try {
     resp = await sendAdmin(p.socket, { kind: "admin", action: "pending" });
   } catch (err) {
-    console.error(`[sentinel-cli] daemon に接続できません: ${(err as Error).message}`);
+    console.error(`[vigili-cli] daemon に接続できません: ${(err as Error).message}`);
     return 1;
   }
   if (resp.action !== "pending" || !resp.ok) {
-    console.error(`[sentinel-cli] daemon が pending を返しませんでした: ${JSON.stringify(resp)}`);
+    console.error(`[vigili-cli] daemon が pending を返しませんでした: ${JSON.stringify(resp)}`);
     return 1;
   }
   if (resp.pending.length === 0) {
@@ -254,7 +254,7 @@ async function resolve(decision: FinalDecision, args: string[]): Promise<number>
       ...(reason !== undefined ? { reason } : {}),
     });
   } catch (err) {
-    console.error(`[sentinel-cli] daemon に接続できません: ${(err as Error).message}`);
+    console.error(`[vigili-cli] daemon に接続できません: ${(err as Error).message}`);
     return 1;
   }
   if (resp.action === "resolve" && resp.ok) {
@@ -262,10 +262,10 @@ async function resolve(decision: FinalDecision, args: string[]): Promise<number>
     return 0;
   }
   if (resp.action === "resolve") {
-    console.error(`[sentinel-cli] daemon が拒否: ${resp.error ?? "(no error message)"}`);
+    console.error(`[vigili-cli] daemon が拒否: ${resp.error ?? "(no error message)"}`);
     return 1;
   }
-  console.error(`[sentinel-cli] 想定外の response: ${JSON.stringify(resp)}`);
+  console.error(`[vigili-cli] 想定外の response: ${JSON.stringify(resp)}`);
   return 1;
 }
 
@@ -294,7 +294,7 @@ async function setupQr(args: string[]): Promise<number> {
     const { readFileSync } = await import("node:fs");
     token = readFileSync(p.token, "utf-8").trim();
   } catch (err) {
-    console.error(`[sentinel-cli] token を読めません: ${(err as Error).message}`);
+    console.error(`[vigili-cli] token を読めません: ${(err as Error).message}`);
     console.error(`(daemon を一度起動すると ${p.token} が生成されます)`);
     return 1;
   }
@@ -307,7 +307,7 @@ async function setupQr(args: string[]): Promise<number> {
     const detected = await detectPublicHost();
     if (!detected) {
       console.error(
-        "[sentinel-cli] LAN IP / Tailscale FQDN を自動検出できません。--url で明示してください。",
+        "[vigili-cli] LAN IP / Tailscale FQDN を自動検出できません。--url で明示してください。",
       );
       return 1;
     }
@@ -360,7 +360,7 @@ async function setupLink(args: string[]): Promise<number> {
     const { readFileSync } = await import("node:fs");
     token = readFileSync(p.token, "utf-8").trim();
   } catch (err) {
-    console.error(`[sentinel-cli] token を読めません: ${(err as Error).message}`);
+    console.error(`[vigili-cli] token を読めません: ${(err as Error).message}`);
     return 1;
   }
 
@@ -371,7 +371,7 @@ async function setupLink(args: string[]): Promise<number> {
     const detected = await detectPublicHost();
     if (!detected) {
       console.error(
-        "[sentinel-cli] LAN IP / Tailscale FQDN を自動検出できません。--url で明示してください。",
+        "[vigili-cli] LAN IP / Tailscale FQDN を自動検出できません。--url で明示してください。",
       );
       return 1;
     }
@@ -491,14 +491,14 @@ async function reload(): Promise<number> {
   try {
     resp = await sendAdmin(p.socket, { kind: "admin", action: "reload" });
   } catch (err) {
-    console.error(`[sentinel-cli] daemon に接続できません: ${(err as Error).message}`);
+    console.error(`[vigili-cli] daemon に接続できません: ${(err as Error).message}`);
     return 1;
   }
   if (resp.action === "reload" && resp.ok) {
     console.log(`policy reloaded (${resp.rules ?? "?"} rules)`);
     return 0;
   }
-  console.error(`[sentinel-cli] reload 失敗: ${JSON.stringify(resp)}`);
+  console.error(`[vigili-cli] reload 失敗: ${JSON.stringify(resp)}`);
   return 1;
 }
 

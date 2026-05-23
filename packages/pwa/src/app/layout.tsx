@@ -21,13 +21,13 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sentinel — approval mesh",
+  title: "Vigili — approval mesh",
   description: "Claude Code の承認プロンプトを手元のスマホで処理する",
-  applicationName: "Sentinel",
+  applicationName: "Vigili",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Sentinel",
+    title: "Vigili",
     statusBarStyle: "black-translucent",
   },
   icons: {

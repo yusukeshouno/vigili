@@ -1,6 +1,6 @@
 {
-  "name": "Sentinel",
-  "short_name": "Sentinel",
+  "name": "Vigili",
+  "short_name": "Vigili",
   "description": "Claude Code の承認プロンプトを手元のスマホで処理",
   "start_url": "/",
   "scope": "/",

@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { type ApprovalRequest, ApprovalRequestSchema, type FinalDecision } from "@sentinel/shared";
+import { type ApprovalRequest, ApprovalRequestSchema, type FinalDecision } from "@vigili/shared";
 import Database from "better-sqlite3";
 
 const MIGRATIONS = [

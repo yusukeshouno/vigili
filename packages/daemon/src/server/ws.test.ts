@@ -1,5 +1,5 @@
 import { createServer } from "node:net";
-import type { WsClientMessage, WsServerMessage } from "@sentinel/shared";
+import type { WsClientMessage, WsServerMessage } from "@vigili/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
 import { type PendingQueue, createPendingQueue } from "../queue.js";

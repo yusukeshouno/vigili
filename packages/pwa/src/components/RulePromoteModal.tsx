@@ -2,7 +2,7 @@
 
 import { CheckIcon, XIcon } from "@/components/Icon";
 import { regexIsValid, ruleMatchesRequest, suggestRule } from "@/lib/regex-suggest";
-import type { ApprovalRequest, PromoteRule } from "@sentinel/shared";
+import type { ApprovalRequest, PromoteRule } from "@vigili/shared";
 import { useEffect, useMemo, useState } from "react";
 
 interface Props {

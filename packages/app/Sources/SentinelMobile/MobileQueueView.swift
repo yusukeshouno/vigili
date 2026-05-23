@@ -36,7 +36,7 @@ struct MobileQueueView: View {
         size: 26
       )
       VStack(alignment: .leading, spacing: 2) {
-        Text("Sentinel")
+        Text("Vigili")
           .font(.display(18, weight: .semibold))
           .foregroundStyle(Theme.fg)
         Text(stateLabel)

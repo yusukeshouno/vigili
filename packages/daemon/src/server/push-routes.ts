@@ -1,4 +1,4 @@
-import { PushSubscriptionJsonSchema } from "@sentinel/shared";
+import { PushSubscriptionJsonSchema } from "@vigili/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { SubscriptionStore, VapidKeys } from "../notify/web-push.js";
@@ -69,7 +69,7 @@ export async function registerPushRoutes(
       ...(ua ? { user_agent: ua } : {}),
     });
     log(
-      `[sentinel-push] subscription 登録: ${truncEnd(parsed.data.endpoint)} (total ${opts.store.size()})`,
+      `[vigili-push] subscription 登録: ${truncEnd(parsed.data.endpoint)} (total ${opts.store.size()})`,
     );
     return reply.code(201).send({ ok: true, total: opts.store.size() });
   });
@@ -84,7 +84,7 @@ export async function registerPushRoutes(
     }
     const removed = opts.store.remove(parsed.data.endpoint);
     log(
-      `[sentinel-push] subscription 削除 ${removed ? "ok" : "miss"}: ${truncEnd(parsed.data.endpoint)}`,
+      `[vigili-push] subscription 削除 ${removed ? "ok" : "miss"}: ${truncEnd(parsed.data.endpoint)}`,
     );
     return reply.send({ ok: true, removed });
   });

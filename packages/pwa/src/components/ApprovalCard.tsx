@@ -2,7 +2,7 @@
 
 import { ToolIcon } from "@/components/Icon";
 import { agentColor, tagHue } from "@/lib/tag-color";
-import type { ApprovalRequest } from "@sentinel/shared";
+import type { ApprovalRequest } from "@vigili/shared";
 import { useEffect, useState } from "react";
 
 interface Props {

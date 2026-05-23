@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { ToolRequest } from "@sentinel/shared";
+import type { ToolRequest } from "@vigili/shared";
 
 /**
  * Claude Code の tool_input は ToolRequest 内では Record<string, unknown> として保持される。

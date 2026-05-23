@@ -1,5 +1,5 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { type PolicyRule, PolicyRuleSchema, type PromoteRule } from "@sentinel/shared";
+import { type PolicyRule, PolicyRuleSchema, type PromoteRule } from "@vigili/shared";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 /**

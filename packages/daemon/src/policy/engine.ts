@@ -1,4 +1,4 @@
-import type { PolicyAction, PolicyConfig, PolicyRule, ToolRequest } from "@sentinel/shared";
+import type { PolicyAction, PolicyConfig, PolicyRule, ToolRequest } from "@vigili/shared";
 import { extractCommand, extractPath, extractUrl, inferRepoTag } from "./extractors.js";
 import { matchInvariant } from "./invariants.js";
 

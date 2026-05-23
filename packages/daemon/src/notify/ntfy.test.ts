@@ -1,4 +1,4 @@
-import type { ApprovalRequest } from "@sentinel/shared";
+import type { ApprovalRequest } from "@vigili/shared";
 import { describe, expect, it } from "vitest";
 import { createNtfyNotifier, formatBody } from "./ntfy.js";
 
@@ -87,7 +87,7 @@ describe("createNtfyNotifier", () => {
     await n.notify({ request: baseReq, level: "normal", ruleSource: "rule:未分類の Bash" });
     const headers = calls[0]?.init.headers as Record<string, string>;
     // ASCII はそのまま、非 ASCII (日本語) は UTF-8 percent-encoded で出る。
-    expect(headers["X-Title"]).toBe(`Sentinel: rule:${encodeURIComponent("未分類の")} Bash`);
+    expect(headers["X-Title"]).toBe(`Vigili: rule:${encodeURIComponent("未分類の")} Bash`);
     // 全 byte が ASCII (fetch の ByteString 制約を満たす) か検査
     for (let i = 0; i < headers["X-Title"]?.length; i++) {
       expect(headers["X-Title"]?.charCodeAt(i)).toBeLessThan(0x80);

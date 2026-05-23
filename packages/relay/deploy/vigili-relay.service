@@ -1,0 +1,46 @@
+[Unit]
+Description=Vigili Relay (WS fan-out + REST API)
+Documentation=https://github.com/yusukeshono/sentinel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vigili
+Group=vigili
+WorkingDirectory=/opt/vigili
+ExecStart=/usr/bin/node /opt/vigili/packages/relay/dist/cli.js
+Restart=always
+RestartSec=3
+
+# loopback only — フロントの nginx が TLS 終端して reverse_proxy する
+Environment=HOST=127.0.0.1
+Environment=PORT=3030
+Environment=RELAY_DB=/var/lib/vigili/relay.db
+Environment=NODE_ENV=production
+
+# ハードニング
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vigili
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false   # better-sqlite3 が native add-on を mmap するため false
+SystemCallArchitectures=native
+RestrictNamespaces=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# ログは journald に
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

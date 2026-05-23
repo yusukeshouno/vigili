@@ -1,4 +1,4 @@
-import type { ApprovalRequest } from "@sentinel/shared";
+import type { ApprovalRequest } from "@vigili/shared";
 import type { Notifier } from "./types.js";
 export type { Notifier, NotifyInput } from "./types.js";
 export { NULL_NOTIFIER } from "./types.js";
@@ -33,7 +33,7 @@ export function createNtfyNotifier(
       // ルール名に非 ASCII (例: 日本語) が含まれるため UTF-8 を URL エンコードする。
       // ntfy は X-Title の percent-encoded UTF-8 をデコードして表示する (docs.ntfy.sh)。
       const headers: Record<string, string> = {
-        "X-Title": encodeHeaderValue(`Sentinel: ${input.ruleSource}`),
+        "X-Title": encodeHeaderValue(`Vigili: ${input.ruleSource}`),
         "X-Priority": String(priority),
         "X-Tags": input.level === "critical" ? "warning,sentinel" : "sentinel",
         "Content-Type": "text/plain; charset=utf-8",
@@ -47,10 +47,10 @@ export function createNtfyNotifier(
       try {
         const res = await fetcher(url, { method: "POST", headers, body });
         if (!res.ok) {
-          log(`[sentinel-ntfy] ntfy が ${res.status} を返しました`);
+          log(`[vigili-ntfy] ntfy が ${res.status} を返しました`);
         }
       } catch (err) {
-        log(`[sentinel-ntfy] POST 失敗: ${(err as Error).message}`);
+        log(`[vigili-ntfy] POST 失敗: ${(err as Error).message}`);
       }
     },
   };

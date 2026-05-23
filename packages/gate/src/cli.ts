@@ -2,14 +2,21 @@
 import { appendFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { ToolRequestSchema } from "@sentinel/shared";
+import { ToolRequestSchema } from "@vigili/shared";
 import { loadClaudePermissions, matchClaudePermissions } from "./claude-perms.js";
 import { GateConnectionError, sendToDaemon } from "./client.js";
 
-// SENTINEL_GATE_DEBUG=1 で ~/.sentinel/gate.log に時系列ログを残す。
+// VIGILI_GATE_DEBUG=1 で ~/.vigili/gate.log に時系列ログを残す。
 // Claude Code との実時間挙動を追跡するための裏ログ。
-const DEBUG_LOG = process.env.SENTINEL_GATE_DEBUG === "1";
-const DEBUG_LOG_PATH = join(homedir(), ".sentinel", "gate.log");
+const DEBUG_LOG =
+  process.env.VIGILI_GATE_DEBUG === "1" || process.env.SENTINEL_GATE_DEBUG === "1";
+const VIGILI_HOME =
+  process.env.VIGILI_HOME ?? process.env.SENTINEL_HOME ?? join(homedir(), ".vigili");
+// ~/.vigili が無く ~/.sentinel が在る場合は後者を使う (リブランド過渡期 fallback)
+const LEGACY_HOME = join(homedir(), ".sentinel");
+const RESOLVED_HOME =
+  existsSync(VIGILI_HOME) || !existsSync(LEGACY_HOME) ? VIGILI_HOME : LEGACY_HOME;
+const DEBUG_LOG_PATH = join(RESOLVED_HOME, "gate.log");
 function dbg(...parts: unknown[]): void {
   if (!DEBUG_LOG) return;
   try {
@@ -33,9 +40,11 @@ interface ParsedArgs {
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const home = process.env.SENTINEL_HOME ?? join(homedir(), ".sentinel");
   const result: ParsedArgs = {
-    socketPath: process.env.SENTINEL_SOCKET ?? join(home, "daemon.sock"),
+    socketPath:
+      process.env.VIGILI_SOCKET ??
+      process.env.SENTINEL_SOCKET ??
+      join(RESOLVED_HOME, "daemon.sock"),
     help: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -58,7 +67,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function printHelp(): void {
-  console.error(`Usage: sentinel-gate [--session ID] [--tag TAG]
+  console.error(`Usage: vigili-gate [--session ID] [--tag TAG]
 
 stdin から Claude Code の PreToolUse hook JSON を読み、daemon 経由で
 allow / deny を決定して exit code を返す短命 CLI。
@@ -66,7 +75,7 @@ allow / deny を決定して exit code を返す短命 CLI。
 Flags:
   --session ID      Claude Code セッション ID (CLAUDE_SESSION_ID から取る)
   --tag TAG         セッションタグ (省略時は cwd basename を使う)
-  --socket PATH     daemon socket のパス (default: ~/.sentinel/daemon.sock)
+  --socket PATH     daemon socket のパス (default: ~/.vigili/daemon.sock)
   -h, --help        この help を表示
 
 Exit codes:
@@ -75,8 +84,8 @@ Exit codes:
   1  内部エラー (Claude Code は標準フォールバックプロンプトを出す)
 
 Env:
-  SENTINEL_HOME     ~/.sentinel の代わりに使うディレクトリ
-  SENTINEL_SOCKET   daemon socket のパス (--socket より優先度低い)
+  VIGILI_HOME       ~/.vigili の代わりに使うディレクトリ (legacy: SENTINEL_HOME)
+  VIGILI_SOCKET     daemon socket のパス (legacy: SENTINEL_SOCKET)
 `);
 }
 
@@ -102,7 +111,7 @@ async function main(): Promise<number> {
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    console.error(`[sentinel-gate] stdin が JSON ではありません: ${(err as Error).message}`);
+    console.error(`[vigili-gate] stdin が JSON ではありません: ${(err as Error).message}`);
     return 2;
   }
 
@@ -132,7 +141,7 @@ async function main(): Promise<number> {
   const reqResult = ToolRequestSchema.safeParse(parsed);
   if (!reqResult.success) {
     console.error(
-      `[sentinel-gate] hook ペイロードが ToolRequest として不正: ${reqResult.error.issues
+      `[vigili-gate] hook ペイロードが ToolRequest として不正: ${reqResult.error.issues
         .map((i) => `${i.path.join(".")}: ${i.message}`)
         .join("; ")}`,
     );
@@ -148,7 +157,7 @@ async function main(): Promise<number> {
   if (permMatch.matched) {
     if (permMatch.reason === "deny") {
       emitHookDecision("deny", `claude permissions.deny "${permMatch.pattern}"`, hookEvent);
-      console.error(`[sentinel-gate] deny: claude permissions.deny "${permMatch.pattern}"`);
+      console.error(`[vigili-gate] deny: claude permissions.deny "${permMatch.pattern}"`);
       dbg("claude-perms deny pattern:", permMatch.pattern, "→ exit 2");
       return 2;
     }
@@ -167,23 +176,23 @@ async function main(): Promise<number> {
     dbg("daemon result:", result);
     if (result.decision === "allow") {
       emitHookDecision("allow", result.reason ?? "approved via Sentinel", hookEvent);
-      if (result.reason) console.error(`[sentinel-gate] allow: ${result.reason}`);
+      if (result.reason) console.error(`[vigili-gate] allow: ${result.reason}`);
       dbg("→ exit 0 (allow JSON emitted to stdout)");
       return 0;
     }
     emitHookDecision("deny", result.reason ?? "denied via Sentinel", hookEvent);
-    console.error(`[sentinel-gate] deny${result.reason ? `: ${result.reason}` : ""}`);
+    console.error(`[vigili-gate] deny${result.reason ? `: ${result.reason}` : ""}`);
     dbg("→ exit 2 (deny)");
     return 2;
   } catch (err) {
     dbg("error:", (err as Error).message);
     if (err instanceof GateConnectionError) {
-      console.error(`[sentinel-gate] daemon 通信エラー: ${err.message}`);
+      console.error(`[vigili-gate] daemon 通信エラー: ${err.message}`);
       // フェイルセーフ deny (CLAUDE.md セキュリティ規約)
       emitHookDecision("deny", `daemon unreachable: ${err.message}`, hookEvent);
       return 2;
     }
-    console.error(`[sentinel-gate] 想定外エラー: ${(err as Error).message}`);
+    console.error(`[vigili-gate] 想定外エラー: ${(err as Error).message}`);
     emitHookDecision("deny", `internal error: ${(err as Error).message}`, hookEvent);
     return 2;
   }

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ToolRequest } from "@sentinel/shared";
+import type { ToolRequest } from "@vigili/shared";
 
 /**
  * Claude Code の "permissions.allow" / "permissions.deny" に登録された

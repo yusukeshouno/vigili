@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ApprovalRequest, PushPayload, PushSubscriptionJson } from "@sentinel/shared";
+import type { ApprovalRequest, PushPayload, PushSubscriptionJson } from "@vigili/shared";
 import webpush from "web-push";
 import type { Notifier, NotifyInput } from "./types.js";
 
@@ -170,7 +170,7 @@ export function createWebPushNotifier(opts: WebPushNotifierOptions): Notifier {
     async notify(input) {
       const subs = opts.store.list();
       if (subs.length === 0) {
-        log("[sentinel-push] subscription 無し → スキップ");
+        log("[vigili-push] subscription 無し → スキップ");
         return;
       }
       const payload = buildPayload(input, opts.pwaBaseUrl);
@@ -210,7 +210,7 @@ export function createWebPushNotifier(opts: WebPushNotifierOptions): Notifier {
 
       for (const r of results) {
         if (r.status === "rejected") {
-          log(`[sentinel-push] 予期せぬ rejection: ${String(r.reason)}`);
+          log(`[vigili-push] 予期せぬ rejection: ${String(r.reason)}`);
           continue;
         }
         const v = r.value as {
@@ -222,12 +222,12 @@ export function createWebPushNotifier(opts: WebPushNotifierOptions): Notifier {
         if (v.statusCode === 410 || v.statusCode === 404) {
           // Gone / Not Found → 端末が unsubscribe 済み。store から除去。
           opts.store.remove(v.endpoint);
-          log(`[sentinel-push] subscription gone (${v.statusCode}) → 削除: ${truncEnd(v.endpoint)}`);
+          log(`[vigili-push] subscription gone (${v.statusCode}) → 削除: ${truncEnd(v.endpoint)}`);
         } else if (v.statusCode >= 200 && v.statusCode < 300) {
-          log(`[sentinel-push] ok ${v.statusCode} → ${truncEnd(v.endpoint)}`);
+          log(`[vigili-push] ok ${v.statusCode} → ${truncEnd(v.endpoint)}`);
         } else {
           log(
-            `[sentinel-push] 失敗 ${v.statusCode} ${v.error ?? ""} body=${v.body ?? ""} → ${truncEnd(v.endpoint)}`,
+            `[vigili-push] 失敗 ${v.statusCode} ${v.error ?? ""} body=${v.body ?? ""} → ${truncEnd(v.endpoint)}`,
           );
         }
       }
@@ -249,7 +249,7 @@ const defaultSender: WebPushSender = (subscription, payload, options) =>
 export function buildPayload(input: NotifyInput, pwaBaseUrl?: string): PushPayload {
   const r = input.request;
   const tag = r.session_tag ?? "?";
-  const title = `Sentinel — ${input.ruleSource}`;
+  const title = `Vigili — ${input.ruleSource}`;
   const body = describeRequest(r);
   const base = (pwaBaseUrl ?? "").replace(/\/$/u, "");
   const url = base !== "" ? `${base}/r/${r.id}` : `/r/${r.id}`;

@@ -1,4 +1,4 @@
-import { ApprovalRequestSchema, FinalDecisionSchema } from "@sentinel/shared";
+import { ApprovalRequestSchema, FinalDecisionSchema } from "@vigili/shared";
 import { z } from "zod";
 
 /**

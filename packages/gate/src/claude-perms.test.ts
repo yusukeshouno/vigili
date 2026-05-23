@@ -1,4 +1,4 @@
-import type { ToolRequest } from "@sentinel/shared";
+import type { ToolRequest } from "@vigili/shared";
 import { describe, expect, it } from "vitest";
 import { globToRegex, matchClaudePermissions } from "./claude-perms.js";
 

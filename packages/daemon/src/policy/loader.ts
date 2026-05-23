@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { type PolicyConfig, PolicyConfigSchema, type ToolRequest } from "@sentinel/shared";
+import { type PolicyConfig, PolicyConfigSchema, type ToolRequest } from "@vigili/shared";
 import { parse as parseYaml } from "yaml";
 import { matchInvariant } from "./invariants.js";
 import { loadGeneratedRules } from "./promote.js";

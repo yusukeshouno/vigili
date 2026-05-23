@@ -1,4 +1,6 @@
-# Sentinel — Project Constitution for Claude Code
+# Vigili — Project Constitution for Claude Code
+
+(コードネーム / 旧名: Sentinel。リブランド進行中、ファイルパス・binary 名にはまだ `sentinel` が残る箇所あり。)
 
 このファイルは Claude Code がこのプロジェクトで作業するときに最初に読むべき規約です。`SPEC.md` の前にここを読んでください。
 

@@ -19,7 +19,7 @@ struct MobileSetupView: View {
           // ヘッダー
           VStack(spacing: 12) {
             FlowerLogo(color: Theme.accent, size: 56)
-            Text("Sentinel")
+            Text("Vigili")
               .font(.display(28, weight: .semibold))
               .foregroundStyle(Theme.fg)
             Text("Connect to your Mac daemon")

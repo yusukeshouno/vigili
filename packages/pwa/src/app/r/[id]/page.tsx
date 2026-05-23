@@ -6,7 +6,7 @@ import { CheckIcon, ToolIcon, XIcon } from "@/components/Icon";
 import { RulePromoteModal } from "@/components/RulePromoteModal";
 import { useQueue } from "@/lib/queue-context";
 import { agentColor, tagHue } from "@/lib/tag-color";
-import type { ApprovalRequest, PromoteRule } from "@sentinel/shared";
+import type { ApprovalRequest, PromoteRule } from "@vigili/shared";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 

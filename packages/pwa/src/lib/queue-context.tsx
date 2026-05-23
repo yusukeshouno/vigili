@@ -5,7 +5,7 @@ import type {
   PromoteRule,
   WsClientMessage,
   WsServerMessage,
-} from "@sentinel/shared";
+} from "@vigili/shared";
 import {
   type ReactNode,
   createContext,
