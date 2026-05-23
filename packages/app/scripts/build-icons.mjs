@@ -37,10 +37,16 @@ const sharp = require("sharp");
 // 共通定数
 // ---------------------------------------------------------------------
 
-/** brand accent (星の色)。PWA Brand component と揃える。Claude coral (smoothed)。 */
+/** brand accent (in-app UI: ボタン、リング、tag 等の色)。 */
 const ACCENT = "#c16141";
-/** brand background (角丸の中の色)。 */
+/** in-app の背景色 (PWA / popover の dark 基調)。 */
 const BG = "#262624";
+
+// --- アプリアイコンだけ別配色 (角丸 coral + cream 星) ---
+/** アプリアイコンの角丸 rect 色 (coral)。 */
+const ICON_BG = "#c16141";
+/** アプリアイコンの星の塗り色 (薄黄クリーム)。 */
+const ICON_STAR = "#f5edd3";
 /** 8 突点星 の SVG path (`d` 属性)。
  * 原典の viewBox は 0 0 105 118.52、bbox 中心 (52.5, 59.26)。
  * Adobe Illustrator 出力で各突点に滑らかな curve が入ったバージョン (v2)。
@@ -48,9 +54,9 @@ const BG = "#262624";
  * 64x64 canvas の中央に配置する。 */
 const STAR_PATH_D =
   "M60.75,45.25l25.6-19.31c.55-.42,1.26.27.85.83l-18.77,26c-.27.37-.04.89.41.95l32.16,4.45c.69.09.7,1.08.01,1.19l-32.1,5.12c-.44.07-.65.58-.4.94l15,21.35c.38.55-.27,1.22-.83.85l-21.65-14.55c-.37-.25-.87-.02-.93.42l-4.37,32.28c-.09.69-1.08.7-1.19.02l-5.2-32.16c-.07-.45-.6-.66-.96-.39l-25.6,19.31c-.55.42-1.26-.27-.85-.83l18.76-25.99c.27-.37.04-.89-.41-.95l-35.8-4.46c-.7-.09-.71-1.1-.01-1.2l35.73-5.13c.45-.06.67-.58.41-.94l-14.99-21.33c-.38-.55.27-1.22.83-.85l21.65,14.54c.37.25.88.02.93-.42l4.37-33.99c.09-.69,1.09-.7,1.19-.01l5.21,33.86c.07.45.59.66.96.39Z";
-/** 星のスケール。`scale * 118.52 ≈ 50` で 64x64 canvas に余白付きで収める。
- * 0.5 だと iOS Home / Mac Dock で詰まって見えたので 0.42 に。 */
-const STAR_SCALE = 0.42;
+/** 星のスケール。`scale * 118.52 ≈ 57` で 64x64 canvas にちょうど良い余白で収める。
+ * 元 0.5 → 0.42 → 0.48 (少し大きめに調整)。 */
+const STAR_SCALE = 0.48;
 const STAR_CENTER_X = 52.5;
 const STAR_CENTER_Y = 59.26;
 
@@ -67,11 +73,11 @@ function menuBarSvg(size) {
 </svg>`;
 }
 
-/** Dock / Finder / iOS Home / PWA Home screen 用: 角丸ダーク背景 + 星。 */
+/** Dock / Finder / iOS Home / PWA Home screen 用: 角丸 coral 背景 + cream 星。 */
 function appIconSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">
-  <rect width="64" height="64" rx="14" fill="${BG}"/>
-  <g fill="${ACCENT}" transform="translate(32 32) scale(${STAR_SCALE}) translate(${-STAR_CENTER_X} ${-STAR_CENTER_Y})">
+  <rect width="64" height="64" rx="14" fill="${ICON_BG}"/>
+  <g fill="${ICON_STAR}" transform="translate(32 32) scale(${STAR_SCALE}) translate(${-STAR_CENTER_X} ${-STAR_CENTER_Y})">
     <path d="${STAR_PATH_D}"/>
   </g>
 </svg>`;

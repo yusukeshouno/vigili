@@ -209,7 +209,10 @@ private struct ElapsedText: View {
   }
 }
 
-// MARK: - 4 弁花ロゴ (Activity 専用、Brand.swift と同形)
+// MARK: - 8 突点星ロゴ (Activity 専用、Sources/Shared/StarPath と同形)
+//
+// VigiliActivity target は Sources/SharedMobile + Sources/VigiliActivity しか
+// 含まないため、Sources/Shared/StarPath.swift と同じ path 構築をここに inline する。
 
 private struct ActivityFlower: View {
   var color: Color = .white
@@ -217,37 +220,58 @@ private struct ActivityFlower: View {
 
   var body: some View {
     Canvas { ctx, _ in
-      let petalScale: CGFloat = 1.1
-      let baseScale = size / 32.0 * petalScale
-      let cx = size / 2
-      let cy = size / 2
-      for rotation in stride(from: 0, to: 360, by: 90) {
-        var t = CGAffineTransform.identity
-        t = t.translatedBy(x: cx, y: cy)
-        t = t.rotated(by: CGFloat(rotation) * .pi / 180)
-        t = t.scaledBy(x: baseScale, y: baseScale)
-        t = t.translatedBy(x: -16, y: -16)
-        var path = Path()
-        path.move(to: CGPoint(x: 16, y: 14))
-        path.addCurve(
-          to: CGPoint(x: 16, y: 4),
-          control1: CGPoint(x: 13, y: 11),
-          control2: CGPoint(x: 13, y: 7)
-        )
-        path.addCurve(
-          to: CGPoint(x: 16, y: 14),
-          control1: CGPoint(x: 19, y: 7),
-          control2: CGPoint(x: 19, y: 11)
-        )
-        path.closeSubpath()
-        ctx.fill(path.applying(t), with: .color(color))
-      }
-      let dotR: CGFloat = 1.6 * baseScale
-      ctx.fill(
-        Path(ellipseIn: CGRect(x: cx - dotR, y: cy - dotR, width: dotR * 2, height: dotR * 2)),
-        with: .color(color)
-      )
+      let rect = CGRect(x: 0, y: 0, width: size, height: size)
+      ctx.fill(Self.starPath(in: rect), with: .color(color))
     }
     .frame(width: size, height: size)
+  }
+
+  /// `Sources/Shared/StarPath.swift` の path と同じ。
+  /// 原典 viewBox 0 0 105 118.52、bbox 中心 (52.5, 59.26)。
+  static func starPath(in rect: CGRect) -> Path {
+    let canvasRadius = min(rect.width, rect.height) / 2
+    let extent: CGFloat = 59.26
+    let scale = canvasRadius / extent * 0.92
+    let cx = rect.midX
+    let cy = rect.midY
+    @inline(__always) func p(_ x: Double, _ y: Double) -> CGPoint {
+      CGPoint(x: cx + (x - 52.5) * scale, y: cy + (y - 59.26) * scale)
+    }
+    var path = Path()
+    path.move(to: p(60.75, 45.25))
+    path.addLine(to: p(86.35, 25.94))
+    path.addCurve(to: p(87.2, 26.77), control1: p(86.9, 25.52), control2: p(87.61, 26.21))
+    path.addLine(to: p(68.43, 52.77))
+    path.addCurve(to: p(68.84, 53.72), control1: p(68.16, 53.14), control2: p(68.39, 53.66))
+    path.addLine(to: p(101, 58.17))
+    path.addCurve(to: p(101.01, 59.36), control1: p(101.69, 58.26), control2: p(101.7, 59.25))
+    path.addLine(to: p(68.91, 64.48))
+    path.addCurve(to: p(68.51, 65.42), control1: p(68.47, 64.55), control2: p(68.26, 65.06))
+    path.addLine(to: p(83.51, 86.77))
+    path.addCurve(to: p(82.68, 87.62), control1: p(83.89, 87.32), control2: p(83.24, 87.99))
+    path.addLine(to: p(61.03, 73.07))
+    path.addCurve(to: p(60.1, 73.49), control1: p(60.66, 72.82), control2: p(60.16, 73.05))
+    path.addLine(to: p(55.73, 105.77))
+    path.addCurve(to: p(54.54, 105.79), control1: p(55.64, 106.46), control2: p(54.65, 106.47))
+    path.addLine(to: p(49.34, 73.63))
+    path.addCurve(to: p(48.38, 73.24), control1: p(49.27, 73.18), control2: p(48.74, 72.97))
+    path.addLine(to: p(22.78, 92.55))
+    path.addCurve(to: p(21.93, 91.72), control1: p(22.23, 92.97), control2: p(21.52, 92.28))
+    path.addLine(to: p(40.69, 65.73))
+    path.addCurve(to: p(40.28, 64.78), control1: p(40.96, 65.36), control2: p(40.73, 64.84))
+    path.addLine(to: p(4.48, 60.32))
+    path.addCurve(to: p(4.47, 59.12), control1: p(3.78, 60.23), control2: p(3.77, 59.22))
+    path.addLine(to: p(40.2, 53.99))
+    path.addCurve(to: p(40.61, 53.05), control1: p(40.65, 53.93), control2: p(40.87, 53.41))
+    path.addLine(to: p(25.62, 31.72))
+    path.addCurve(to: p(26.45, 30.87), control1: p(25.24, 31.17), control2: p(25.89, 30.5))
+    path.addLine(to: p(48.1, 45.41))
+    path.addCurve(to: p(49.03, 44.99), control1: p(48.47, 45.66), control2: p(48.98, 45.43))
+    path.addLine(to: p(53.4, 11))
+    path.addCurve(to: p(54.59, 10.99), control1: p(53.49, 10.31), control2: p(54.49, 10.3))
+    path.addLine(to: p(59.8, 44.85))
+    path.addCurve(to: p(60.76, 45.24), control1: p(59.87, 45.3), control2: p(60.39, 45.51))
+    path.closeSubpath()
+    return path
   }
 }
