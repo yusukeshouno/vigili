@@ -1,13 +1,13 @@
 import AppKit
 
-/// MenuBarExtra の label に渡す用の 8 突点星アイコン (NSImage)。
+/// MenuBarExtra の label に渡す用の 10 突点星アイコン (NSImage)。
 ///
 /// SwiftUI の `Canvas` / `Path` を MenuBarExtra label に直接入れると
 /// AppKit 側で正しくサイズ・描画されず黒丸になることがある。
 /// `NSImage(size:flipped:drawingHandler:)` で AppKit ネイティブに描き、
 /// `isTemplate = true` でメニューバーの明暗に追従させる。
 ///
-/// 形状は `Sources/Shared/StarPath.swift` と同じ Adobe Illustrator v2 path。
+/// 形状は `Sources/Shared/StarPath.swift` と同じ Adobe Illustrator v3 path (10 突点)。
 /// AppKit (NSBezierPath) で独立に再現する (StarPath は SwiftUI Path 専用なので
 /// 共有できない)。
 enum MenuBarIconImage {
@@ -29,7 +29,7 @@ enum MenuBarIconImage {
   }
 
   /// `Sources/Shared/StarPath.swift` と同じ Bezier 構造を AppKit で描画。
-  /// 原典 viewBox 0 0 105 118.52、bbox 中心 (52.5, 59.26)。
+  /// 原典 viewBox 0 0 105 118.52、bbox 中心 (52.51, 59.26)。10 突点 v3。
   /// メニューバーで沈まないよう margin 0.85 (= canvas 半径の 85% で fit)。
   private static func drawStar(in rect: NSRect) {
     let canvasRadius = min(rect.width, rect.height) / 2
@@ -39,43 +39,51 @@ enum MenuBarIconImage {
     let cy = rect.midY
 
     @inline(__always) func p(_ x: Double, _ y: Double) -> NSPoint {
-      NSPoint(x: cx + (x - 52.5) * scale, y: cy + (y - 59.26) * scale)
+      NSPoint(x: cx + (x - 52.51) * scale, y: cy + (y - 59.26) * scale)
     }
 
     let path = NSBezierPath()
-    path.move(to: p(60.75, 45.25))
-    path.line(to: p(86.35, 25.94))
-    path.curve(to: p(87.2, 26.77), controlPoint1: p(86.9, 25.52), controlPoint2: p(87.61, 26.21))
-    path.line(to: p(68.43, 52.77))
-    path.curve(to: p(68.84, 53.72), controlPoint1: p(68.16, 53.14), controlPoint2: p(68.39, 53.66))
-    path.line(to: p(101, 58.17))
-    path.curve(to: p(101.01, 59.36), controlPoint1: p(101.69, 58.26), controlPoint2: p(101.7, 59.25))
-    path.line(to: p(68.91, 64.48))
-    path.curve(to: p(68.51, 65.42), controlPoint1: p(68.47, 64.55), controlPoint2: p(68.26, 65.06))
-    path.line(to: p(83.51, 86.77))
-    path.curve(to: p(82.68, 87.62), controlPoint1: p(83.89, 87.32), controlPoint2: p(83.24, 87.99))
-    path.line(to: p(61.03, 73.07))
-    path.curve(to: p(60.1, 73.49), controlPoint1: p(60.66, 72.82), controlPoint2: p(60.16, 73.05))
-    path.line(to: p(55.73, 105.77))
-    path.curve(to: p(54.54, 105.79), controlPoint1: p(55.64, 106.46), controlPoint2: p(54.65, 106.47))
-    path.line(to: p(49.34, 73.63))
-    path.curve(to: p(48.38, 73.24), controlPoint1: p(49.27, 73.18), controlPoint2: p(48.74, 72.97))
-    path.line(to: p(22.78, 92.55))
-    path.curve(to: p(21.93, 91.72), controlPoint1: p(22.23, 92.97), controlPoint2: p(21.52, 92.28))
-    path.line(to: p(40.69, 65.73))
-    path.curve(to: p(40.28, 64.78), controlPoint1: p(40.96, 65.36), controlPoint2: p(40.73, 64.84))
-    path.line(to: p(4.48, 60.32))
-    path.curve(to: p(4.47, 59.12), controlPoint1: p(3.78, 60.23), controlPoint2: p(3.77, 59.22))
-    path.line(to: p(40.2, 53.99))
-    path.curve(to: p(40.61, 53.05), controlPoint1: p(40.65, 53.93), controlPoint2: p(40.87, 53.41))
-    path.line(to: p(25.62, 31.72))
-    path.curve(to: p(26.45, 30.87), controlPoint1: p(25.24, 31.17), controlPoint2: p(25.89, 30.5))
-    path.line(to: p(48.1, 45.41))
-    path.curve(to: p(49.03, 44.99), controlPoint1: p(48.47, 45.66), controlPoint2: p(48.98, 45.43))
-    path.line(to: p(53.4, 11))
-    path.curve(to: p(54.59, 10.99), controlPoint1: p(53.49, 10.31), controlPoint2: p(54.49, 10.3))
-    path.line(to: p(59.8, 44.85))
-    path.curve(to: p(60.76, 45.24), controlPoint1: p(59.87, 45.3), controlPoint2: p(60.39, 45.51))
+    path.move(to: p(58.7, 40.35))
+    path.line(to: p(83.34, 12.99))
+    path.curve(to: p(84.47, 13.76), controlPoint1: p(83.88, 12.39), controlPoint2: p(84.83, 13.04))
+    path.line(to: p(67.89, 46.63))
+    path.curve(to: p(68.64, 47.62), controlPoint1: p(67.63, 47.14), controlPoint2: p(68.07, 47.73))
+    path.line(to: p(101.06, 41.3))
+    path.curve(to: p(101.54, 42.57), controlPoint1: p(101.82, 41.15), controlPoint2: p(102.21, 42.19))
+    path.line(to: p(73.83, 58.53))
+    path.curve(to: p(73.88, 59.75), controlPoint1: p(73.35, 58.81), controlPoint2: p(73.38, 59.51))
+    path.line(to: p(101.92, 73.04))
+    path.curve(to: p(101.52, 74.34), controlPoint1: p(102.64, 73.38), controlPoint2: p(102.31, 74.46))
+    path.line(to: p(66.87, 69.26))
+    path.curve(to: p(66.18, 70.3), controlPoint1: p(66.29, 69.18), controlPoint2: p(65.88, 69.8))
+    path.line(to: p(83.77, 98.91))
+    path.curve(to: p(82.71, 99.77), controlPoint1: p(84.19, 99.6), controlPoint2: p(83.29, 100.33))
+    path.line(to: p(59.75, 77.74))
+    path.curve(to: p(58.59, 78.15), controlPoint1: p(59.34, 77.35), controlPoint2: p(58.66, 77.59))
+    path.line(to: p(54.63, 110.53))
+    path.curve(to: p(53.27, 110.57), controlPoint1: p(54.53, 111.31), controlPoint2: p(53.41, 111.35))
+    path.line(to: p(47.51, 78.49))
+    path.curve(to: p(46.32, 78.15), controlPoint1: p(47.41, 77.93), controlPoint2: p(46.7, 77.72))
+    path.line(to: p(21.68, 105.51))
+    path.curve(to: p(20.55, 104.74), controlPoint1: p(21.14, 106.11), controlPoint2: p(20.19, 105.46))
+    path.line(to: p(37.13, 71.87))
+    path.curve(to: p(36.38, 70.88), controlPoint1: p(37.39, 71.36), controlPoint2: p(36.95, 70.77))
+    path.line(to: p(3.96, 77.2))
+    path.curve(to: p(3.48, 75.93), controlPoint1: p(3.2, 77.35), controlPoint2: p(2.81, 76.31))
+    path.line(to: p(31.19, 59.97))
+    path.curve(to: p(31.14, 58.75), controlPoint1: p(31.67, 59.69), controlPoint2: p(31.64, 58.99))
+    path.line(to: p(3.09, 45.47))
+    path.curve(to: p(3.49, 44.17), controlPoint1: p(2.37, 45.13), controlPoint2: p(2.7, 44.05))
+    path.line(to: p(38.14, 49.25))
+    path.curve(to: p(38.83, 48.21), controlPoint1: p(38.72, 49.33), controlPoint2: p(39.13, 48.71))
+    path.line(to: p(21.24, 19.6))
+    path.curve(to: p(22.3, 18.74), controlPoint1: p(20.82, 18.91), controlPoint2: p(21.72, 18.18))
+    path.line(to: p(45.26, 40.77))
+    path.curve(to: p(46.42, 40.36), controlPoint1: p(45.67, 41.16), controlPoint2: p(46.35, 40.92))
+    path.line(to: p(50.38, 7.98))
+    path.curve(to: p(51.74, 7.94), controlPoint1: p(50.48, 7.2), controlPoint2: p(51.6, 7.16))
+    path.line(to: p(57.5, 40.02))
+    path.curve(to: p(58.69, 40.36), controlPoint1: p(57.6, 40.58), controlPoint2: p(58.31, 40.79))
     path.close()
 
     NSColor.black.setFill()  // template image なので fill は無視される (auto invert)

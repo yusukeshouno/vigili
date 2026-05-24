@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// PWA の `Brand.tsx` と同じ 8 突点星ロゴを SwiftUI の Shape で直接描く。
+/// PWA の `Brand.tsx` と同じ 10 突点星ロゴを SwiftUI の Shape で直接描く。
 /// 原典 viewBox 0 0 105 118.52 の SVG path を `StarPath` 経由で再現。
-/// 名前は `FlowerLogo` のままだが、4 弁花から 8 突星に差し替え済み (リブランド)。
+/// 名前は `FlowerLogo` のままだが、4 弁花 → 8 突星 → 10 突星 v3 と差し替え済み。
 struct FlowerLogo: View {
   var color: Color = .primary
   var size: CGFloat = 18
