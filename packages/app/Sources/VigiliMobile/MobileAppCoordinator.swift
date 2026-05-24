@@ -32,6 +32,8 @@ final class MobileAppCoordinator: ObservableObject {
   @Published var isConfigured: Bool = MobileSettings.isConfigured
   /// 現在どの経路で繋がっているか (UI 表示用)。
   @Published var activeRoute: Route = .none
+  /// `~/.vigili/.welcomed` 相当 (iOS は UserDefaults)。初回起動時 Welcome 画面を出す。
+  @Published var showWelcome: Bool = !UserDefaults.standard.bool(forKey: "vigili.welcomed")
 
   enum Route: Equatable {
     case none
@@ -120,6 +122,12 @@ final class MobileAppCoordinator: ObservableObject {
   /// Allow / Deny ボタンから呼ばれる。
   func decide(id: String, decision: String) {
     wsClient.decide(id: id, decision: decision)
+  }
+
+  /// MobileWelcomeView の CTA 押下で呼ばれる。以後 Welcome を出さないフラグを立てる。
+  func dismissWelcome() {
+    UserDefaults.standard.set(true, forKey: "vigili.welcomed")
+    showWelcome = false
   }
 
   /// `sentinel://setup?u=<host>&t=<token>` または

@@ -6,11 +6,15 @@ import UIKit
 struct MobileSetupView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
 
+  /// Welcome 経由で来た場合、自動で scanner を開く。
+  var autoOpenScanner: Bool = false
+
   @State private var daemonUrl: String = MobileSettings.lanUrl ?? ""
   @State private var token: String = MobileSettings.lanToken ?? ""
   @State private var showToken: Bool = false
   @State private var error: String? = nil
   @State private var showScanner: Bool = false
+  @State private var didAutoOpen: Bool = false
   @StateObject private var bonjour = BonjourBrowser()
 
   var body: some View {
@@ -128,7 +132,16 @@ struct MobileSetupView: View {
         onCancel: { showScanner = false }
       )
     }
-    .onAppear { bonjour.start() }
+    .onAppear {
+      bonjour.start()
+      // Welcome 画面から「Scan setup QR」で来たときに scanner を自動 open
+      if autoOpenScanner, !didAutoOpen {
+        didAutoOpen = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+          showScanner = true
+        }
+      }
+    }
     .onDisappear { bonjour.stop() }
   }
 

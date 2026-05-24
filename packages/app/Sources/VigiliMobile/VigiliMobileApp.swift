@@ -30,15 +30,21 @@ struct VigiliMobileApp: App {
   }
 }
 
-/// 設定済みか未設定かで Queue / Setup を出し分ける。
+/// Welcome → Setup → Queue の 3 段。
+/// - 初回起動 (vigili.welcomed が立っていない) → MobileWelcomeView
+/// - 未設定 → MobileSetupView (Welcome の CTA 経由なら scanner 自動 open)
+/// - 設定済 → MobileQueueView
 struct RootView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
+  @State private var setupShouldOpenScanner: Bool = false
 
   var body: some View {
-    if coordinator.isConfigured {
+    if coordinator.showWelcome {
+      MobileWelcomeView(startWithScanner: $setupShouldOpenScanner)
+    } else if coordinator.isConfigured {
       MobileQueueView()
     } else {
-      MobileSetupView()
+      MobileSetupView(autoOpenScanner: setupShouldOpenScanner)
     }
   }
 }
