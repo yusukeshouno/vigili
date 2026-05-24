@@ -3,15 +3,13 @@
 /**
  * Waitlist 投稿の server action。
  *
- * MVP の方針:
- *  - 環境変数 WAITLIST_WEBHOOK_URL が設定されていれば、そこに POST する。
- *    Notion DB、ntfy.sh、Formspree、Slack webhook など何でも良い。
- *  - 設定されていなければサーバ標準出力に log して 200 を返す。
- *    (誰でも Vercel に置いた瞬間 LP は動くが、データは消える状態)
+ * バックエンド優先順位 (env で切り替え):
+ *  1. RESEND_API_KEY + RESEND_AUDIENCE_ID → Resend の Audiences (Contacts) API に登録
+ *  2. WAITLIST_WEBHOOK_URL → 任意の webhook に JSON POST (Slack / Notion / 自前)
+ *  3. どちらも未設定 → サーバ stderr に warn を出して 200 (LP は動くがデータは消える)
  *
- * 本番では Vercel の env に
- *   WAITLIST_WEBHOOK_URL=https://api.notion.com/.../databases/.../query
- *   などを設定して使う想定。
+ * Resend を推奨: 無料枠で 3,000 emails/mo + Audiences 機能、launch 時に
+ * audience 全員に 1 通送るだけで済む。
  */
 
 export interface WaitlistResult {
@@ -35,20 +33,78 @@ export async function submitWaitlist(formData: FormData): Promise<WaitlistResult
     return { ok: false, error: "too long" };
   }
 
-  const payload = {
-    email,
-    lang: typeof lang === "string" ? lang : "en",
-    user_agent: typeof formData.get("ua") === "string" ? formData.get("ua") : null,
-    received_at: new Date().toISOString(),
-  };
+  const langStr = typeof lang === "string" ? lang : "en";
 
-  const url = process.env.WAITLIST_WEBHOOK_URL;
-  if (!url) {
-    // ローカル開発 / 未配線時。捨てないよう stderr に残す。
-    console.warn("[waitlist] WAITLIST_WEBHOOK_URL not set, logging only:", payload);
-    return { ok: true };
+  // 1. Resend を優先
+  const resendKey = process.env.RESEND_API_KEY;
+  const resendAudience = process.env.RESEND_AUDIENCE_ID;
+  if (resendKey && resendAudience) {
+    return await sendToResend(email, langStr, resendKey, resendAudience);
   }
 
+  // 2. 汎用 webhook fallback
+  const url = process.env.WAITLIST_WEBHOOK_URL;
+  if (url) {
+    return await sendToWebhook(url, {
+      email,
+      lang: langStr,
+      user_agent: typeof formData.get("ua") === "string" ? formData.get("ua") : null,
+      received_at: new Date().toISOString(),
+    });
+  }
+
+  // 3. 完全未配線 — warn して捨てる
+  console.warn(
+    "[waitlist] no backend configured (RESEND_API_KEY / WAITLIST_WEBHOOK_URL). Email logged:",
+    email,
+  );
+  return { ok: true };
+}
+
+/**
+ * Resend Audiences API: https://resend.com/docs/api-reference/contacts/create-contact
+ * 既に登録済みなら 409 が返るが、ユーザ視点は「成功」扱いにする (リトライ防止)。
+ */
+async function sendToResend(
+  email: string,
+  lang: string,
+  apiKey: string,
+  audienceId: string,
+): Promise<WaitlistResult> {
+  try {
+    const res = await fetch(
+      `https://api.resend.com/audiences/${encodeURIComponent(audienceId)}/contacts`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          unsubscribed: false,
+          // Resend Contact フィールドに任意の first_name を載せられる。
+          // 言語は first_name で代用 (Resend には custom field 機能がないため)。
+          first_name: `[${lang}]`,
+        }),
+      },
+    );
+    if (res.ok) return { ok: true };
+    // 422 = already exists in audience (Resend は idempotent ではなく 422 を返す)
+    if (res.status === 422) return { ok: true };
+    const text = await res.text();
+    console.error(`[waitlist] resend ${res.status}: ${text.slice(0, 200)}`);
+    return { ok: false, error: "upstream" };
+  } catch (err) {
+    console.error("[waitlist] resend fetch failed:", (err as Error).message);
+    return { ok: false, error: "network" };
+  }
+}
+
+async function sendToWebhook(
+  url: string,
+  payload: Record<string, unknown>,
+): Promise<WaitlistResult> {
   try {
     const res = await fetch(url, {
       method: "POST",

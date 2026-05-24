@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -28,7 +29,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Vercel Analytics: cookieless、Vercel deploy 時のみ collect される。
+           本番でない時 ($VERCEL_ENV !== "production") はクライアントが
+           https://va.vercel-scripts.com/v1/script.js を取得して `mode=development`
+           で local hits を捨てる。 */}
+        <Analytics />
+      </body>
     </html>
   );
 }
