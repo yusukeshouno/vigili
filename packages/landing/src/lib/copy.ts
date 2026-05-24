@@ -24,6 +24,16 @@ export interface Copy {
   heroWaitlistError: string;
   heroFineprint: string;
 
+  // surfaces (3 apps)
+  surfacesEyebrow: string;
+  surfacesTitle: string;
+  surfaceMacAppName: string;
+  surfaceMacAppBody: string;
+  surfaceWidgetName: string;
+  surfaceWidgetBody: string;
+  surfacePhoneName: string;
+  surfacePhoneBody: string;
+
   // showcase (3-step narrative)
   showcaseEyebrow: string;
   showcaseTitle: string;
@@ -72,6 +82,18 @@ const en: Copy = {
   heroWaitlistSuccess: "Thanks. We'll email you the moment it ships.",
   heroWaitlistError: "Something went wrong. Try again?",
   heroFineprint: "No marketing, no sharing. One email when it's ready.",
+
+  surfacesEyebrow: "Three surfaces, one queue",
+  surfacesTitle: "Catch approvals wherever you happen to be.",
+  surfaceMacAppName: "Mac app",
+  surfaceMacAppBody:
+    "Lives in your menu bar. One click reveals the pending card, allow or deny in place. The daemon keeps running even when the popover is closed.",
+  surfaceWidgetName: "Mac widget",
+  surfaceWidgetBody:
+    "A desktop widget that glances at the queue without opening anything. Shows the pending count and today's auto-allowed total.",
+  surfacePhoneName: "iPhone app",
+  surfacePhoneBody:
+    "Native iOS app with Live Activity in the Dynamic Island. Same queue as the Mac, two taps to approve, works on LAN or via relay when you're out.",
 
   showcaseEyebrow: "A 60-second tour",
   showcaseTitle: "From terminal to phone, in three steps.",
@@ -171,6 +193,18 @@ const ja: Copy = {
   heroWaitlistSuccess: "ありがとうございます。リリース時にお知らせします。",
   heroWaitlistError: "うまく送れませんでした。再度お試しください。",
   heroFineprint: "送るのは公開時のメール 1 通だけ。それ以外には使いません。",
+
+  surfacesEyebrow: "3 つの面、1 つのキュー",
+  surfacesTitle: "今いる場所で承認を受け取る。",
+  surfaceMacAppName: "Mac アプリ",
+  surfaceMacAppBody:
+    "メニューバーに常駐。クリックで pending カードが開き、その場で Allow/Deny。popover を閉じても daemon は走り続ける。",
+  surfaceWidgetName: "Mac ウィジェット",
+  surfaceWidgetBody:
+    "アプリを開かずにキューの状況を見るデスクトップウィジェット。pending 件数 + 今日の自動許可数が一目でわかる。",
+  surfacePhoneName: "iPhone アプリ",
+  surfacePhoneBody:
+    "ネイティブ iOS アプリ。Dynamic Island に Live Activity、Mac と同じキューを 2 タップで承認、LAN でも外出時の relay でも動く。",
 
   showcaseEyebrow: "60 秒で見るツアー",
   showcaseTitle: "ターミナルから、スマホまで、3 ステップ。",

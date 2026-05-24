@@ -3,6 +3,7 @@ import { Hero } from "@/components/Hero";
 import { HowSection } from "@/components/HowSection";
 import { SecuritySection } from "@/components/SecuritySection";
 import { Showcase } from "@/components/Showcase";
+import { Surfaces } from "@/components/Surfaces";
 import { TopBar } from "@/components/TopBar";
 import { WhySection } from "@/components/WhySection";
 import { type Lang, getCopy } from "@/lib/copy";
@@ -22,6 +23,7 @@ export default async function Page({ searchParams }: PageProps) {
     <main className="min-h-dvh">
       <TopBar lang={lang} copy={copy} />
       <Hero lang={lang} copy={copy} />
+      <Surfaces copy={copy} />
       <Showcase copy={copy} />
       <WhySection copy={copy} />
       <HowSection copy={copy} />
