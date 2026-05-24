@@ -11,6 +11,14 @@ struct PopoverContentView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
 
   var body: some View {
+    if coordinator.showWelcome {
+      WelcomeView()
+    } else {
+      mainContent
+    }
+  }
+
+  private var mainContent: some View {
     VStack(alignment: .leading, spacing: 0) {
       header
       divider
@@ -193,8 +201,11 @@ struct PopoverContentView: View {
   // MARK: - helpers
 
   private func openLogs() {
-    let url = FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(".sentinel/daemon.log")
+    // ~/.vigili が存在しなければ旧 ~/.sentinel から開く (移行期 fallback)
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let vigili = home.appendingPathComponent(".vigili/daemon.log")
+    let sentinel = home.appendingPathComponent(".sentinel/daemon.log")
+    let url = FileManager.default.fileExists(atPath: vigili.path) ? vigili : sentinel
     NSWorkspace.shared.open(url)
   }
 }

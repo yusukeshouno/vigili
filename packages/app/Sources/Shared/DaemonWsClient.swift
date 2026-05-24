@@ -55,14 +55,18 @@ final class DaemonWsClient: ObservableObject {
     }
   }
 
-  /// Mac 専用: `~/.sentinel/token` を読む補助。
+  /// Mac 専用: `~/.vigili/token` を読む補助 (旧 `~/.sentinel/token` も fallback)。
   /// iOS では使えない (sandbox の外を読めない) のでこの関数を呼ばない。
   static func macHomeToken() -> String {
     #if os(macOS)
-    let url = FileManager.default.homeDirectoryForCurrentUser
-      .appendingPathComponent(".sentinel/token")
-    return (try? String(contentsOf: url, encoding: .utf8))?
-      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    for sub in [".vigili/token", ".sentinel/token"] {
+      let url = home.appendingPathComponent(sub)
+      if let t = try? String(contentsOf: url, encoding: .utf8) {
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+      }
+    }
+    return ""
     #else
     return ""
     #endif

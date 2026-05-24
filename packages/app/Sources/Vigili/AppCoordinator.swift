@@ -31,28 +31,64 @@ final class AppCoordinator: ObservableObject {
   @Published var wsState: DaemonWsClient.State = .disconnected
   @Published var lastError: String?
 
+  /// 初回起動時に Welcome 画面を出すかどうか。`~/.vigili/.welcomed` の有無で判定。
+  @Published var showWelcome: Bool
+
   private var pollTimer: Timer?
   private var tickCount = 0
 
   /// 直前に widget へ書き出した state。同じ内容で reloadTimelines を spam しないため。
   private var lastWidgetState: WidgetState?
 
-  /// daemon socket のパス。SENTINEL_HOME 環境変数で override 可能。
+  /// daemon socket のパス。VIGILI_HOME / SENTINEL_HOME (旧名) で override 可能。
+  /// 新規ユーザは ~/.vigili、旧ユーザは ~/.sentinel をそのまま使い続けられる。
   private static func defaultSocketPath() -> String {
-    let home = ProcessInfo.processInfo.environment["SENTINEL_HOME"]
-      ?? "\(FileManager.default.homeDirectoryForCurrentUser.path)/.sentinel"
-    return "\(home)/daemon.sock"
+    if let env = ProcessInfo.processInfo.environment["VIGILI_HOME"]
+        ?? ProcessInfo.processInfo.environment["SENTINEL_HOME"] {
+      return "\(env)/daemon.sock"
+    }
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let vigili = "\(home)/.vigili"
+    let sentinel = "\(home)/.sentinel"
+    if FileManager.default.fileExists(atPath: vigili) {
+      return "\(vigili)/daemon.sock"
+    }
+    if FileManager.default.fileExists(atPath: sentinel) {
+      return "\(sentinel)/daemon.sock"
+    }
+    return "\(vigili)/daemon.sock"
+  }
+
+  /// Vigili home directory ($VIGILI_HOME or ~/.vigili, fallback ~/.sentinel).
+  static func vigiliHome() -> URL {
+    if let env = ProcessInfo.processInfo.environment["VIGILI_HOME"]
+        ?? ProcessInfo.processInfo.environment["SENTINEL_HOME"] {
+      return URL(fileURLWithPath: env, isDirectory: true)
+    }
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let vigili = home.appendingPathComponent(".vigili", isDirectory: true)
+    if FileManager.default.fileExists(atPath: vigili.path) {
+      return vigili
+    }
+    let sentinel = home.appendingPathComponent(".sentinel", isDirectory: true)
+    if FileManager.default.fileExists(atPath: sentinel.path) {
+      return sentinel
+    }
+    return vigili
   }
 
   init() {
     let socketPath = Self.defaultSocketPath()
     self.daemonController = DaemonController()
     self.adminClient = DaemonAdminClient(socketPath: socketPath)
-    // Mac は localhost: 7878 に直接繋ぐ。token は ~/.sentinel/token から読む。
+    // Mac は localhost: 7878 に直接繋ぐ。token は ~/.vigili/token から読む。
     self.wsClient = DaemonWsClient(
       urlBase: URL(string: "ws://127.0.0.1:7878")!,
       token: DaemonWsClient.macHomeToken()
     )
+    // ~/.vigili/.welcomed (marker file) が無ければ Welcome を出す。
+    let welcomedPath = Self.vigiliHome().appendingPathComponent(".welcomed")
+    self.showWelcome = !FileManager.default.fileExists(atPath: welcomedPath.path)
     AppCoordinator.shared = self
 
     appLog("AppCoordinator.init socket=\(socketPath)")
@@ -134,6 +170,18 @@ final class AppCoordinator: ObservableObject {
   /// PopoverContentView から呼ばれる Allow / Deny。
   func decide(id: String, decision: String) {
     wsClient.decide(id: id, decision: decision)
+  }
+
+  /// WelcomeView の "Got it" で呼ばれる。marker file を書いて以後出さない。
+  func dismissWelcome() {
+    let home = Self.vigiliHome()
+    // home が無ければ作る (daemon が先に作ってるはずだが念のため)
+    if !FileManager.default.fileExists(atPath: home.path) {
+      try? FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+    }
+    let marker = home.appendingPathComponent(".welcomed")
+    try? "ok\n".write(to: marker, atomically: true, encoding: .utf8)
+    showWelcome = false
   }
 
   /// MessageComposerView から呼ばれる: Claude にひとこと送る。
