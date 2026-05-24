@@ -174,19 +174,26 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   // --- Vigili Cloud Relay への outbound WSS (Phase 14-B) ---
   let relay: RelayClient | null = null;
   if (config.relay) {
+    // クロージャ参照のため宣言は前置きしておく (TS の hoisting に頼らず、later assignment)
+    let sendSnapshot: (() => void) | null = null;
     relay = createRelayClient({
       url: config.relay.url,
       pairingId: config.relay.pairing_id,
       agentKey: config.relay.agent_key,
       reconnectMaxSeconds: config.relay.reconnect_max_seconds,
       onClientMessage: handleClientMessage,
+      onOpen: () => sendSnapshot?.(),
       log,
     });
+    const relayRef = relay; // satisfy strict-null-checks within closure
+    sendSnapshot = () => {
+      relayRef.send({
+        type: "snapshot",
+        pending: queue.list(),
+        messages: messageStore.listRecent(50),
+      });
+    };
     relay.start();
-    // 接続後 snapshot を送る (relay → 全 client に転送) — start() は async に
-    // 進むので接続完了を待たずに最初の snapshot をキューイング。relay client は
-    // 未接続中の send は捨てる仕様なので、最初の "pending" イベント等で再び broadcast される。
-    relay.send({ type: "snapshot", pending: queue.list(), messages: messageStore.listRecent(50) });
     log(`[vigili-daemon] relay outbound enabled (pairing=${config.relay.pairing_id})`);
   }
 

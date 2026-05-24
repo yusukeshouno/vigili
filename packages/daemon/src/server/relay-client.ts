@@ -32,6 +32,9 @@ export interface RelayClientOptions {
   reconnectMaxSeconds: number;
   /** client (PWA/iOS) からの decide / send-message を受けたときに呼ばれる。 */
   onClientMessage: (msg: WsClientMessage) => void;
+  /** WS open のたびに呼ばれる。daemon は接続直後に snapshot を送り直すなど。
+   *  再接続後も毎回呼ばれるので、最新の queue 状態をその都度 flush できる。 */
+  onOpen?: () => void;
   log: (msg: string) => void;
 }
 
@@ -47,7 +50,7 @@ export interface RelayClient {
 }
 
 export function createRelayClient(options: RelayClientOptions): RelayClient {
-  const { url, pairingId, agentKey, reconnectMaxSeconds, onClientMessage, log } = options;
+  const { url, pairingId, agentKey, reconnectMaxSeconds, onClientMessage, onOpen, log } = options;
   let ws: WebSocket | null = null;
   let closed = false;
   let retry = 0;
@@ -74,6 +77,12 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
       connected = true;
       retry = 0;
       log("[vigili-relay] connected");
+      // 呼び出し側が snapshot 等を flush できるよう通知
+      try {
+        onOpen?.();
+      } catch (err) {
+        log(`[vigili-relay] onOpen handler threw: ${(err as Error).message}`);
+      }
     });
 
     ws.on("message", (raw: RawData) => {

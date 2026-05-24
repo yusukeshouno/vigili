@@ -6,8 +6,8 @@ import UIKit
 struct MobileSetupView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
 
-  @State private var daemonUrl: String = MobileSettings.daemonUrl
-  @State private var token: String = MobileSettings.token
+  @State private var daemonUrl: String = MobileSettings.lanUrl ?? ""
+  @State private var token: String = MobileSettings.lanToken ?? ""
   @State private var showToken: Bool = false
   @State private var error: String? = nil
   @State private var showScanner: Bool = false
@@ -371,8 +371,13 @@ struct MobileSetupView: View {
         let trimmedU = u.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedR = r.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedP.isEmpty, !trimmedU.isEmpty, !trimmedR.isEmpty {
-          let base = trimmedR.hasSuffix("/") ? String(trimmedR.dropLast()) : trimmedR
-          if applyValues(u: "\(base)/v1/clients/\(trimmedP)", t: trimmedU) { return true }
+          // relay 経路は別チャンネルに保存 (LAN credentials は消さない)
+          MobileSettings.relayUrl = trimmedR
+          MobileSettings.relayPid = trimmedP
+          MobileSettings.relayUserToken = trimmedU
+          error = nil
+          coordinator.reconfigureAndConnect()
+          return true
         }
       }
     }
@@ -411,8 +416,8 @@ struct MobileSetupView: View {
     daemonUrl = trimmedU
     token = trimmedT
     error = nil
-    MobileSettings.daemonUrl = trimmedU
-    MobileSettings.token = trimmedT
+    MobileSettings.lanUrl = trimmedU
+    MobileSettings.lanToken = trimmedT
     coordinator.reconfigureAndConnect()
     return true
   }
@@ -429,8 +434,8 @@ struct MobileSetupView: View {
       return
     }
     error = nil
-    MobileSettings.daemonUrl = trimmedUrl
-    MobileSettings.token = trimmedToken
+    MobileSettings.lanUrl = trimmedUrl
+    MobileSettings.lanToken = trimmedToken
     coordinator.reconfigureAndConnect()
   }
 }

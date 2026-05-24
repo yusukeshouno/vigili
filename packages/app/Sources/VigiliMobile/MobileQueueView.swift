@@ -131,11 +131,15 @@ struct MobileSettingsSheet: View {
         .padding(.top, 24)
 
         VStack(alignment: .leading, spacing: 12) {
-          row(label: "Daemon URL", value: MobileSettings.daemonUrl)
-          row(
-            label: "Token",
-            value: String(MobileSettings.token.prefix(6)) + "… (" + String(MobileSettings.token.count) + " chars)"
-          )
+          row(label: "Active route", value: routeString)
+          if let lan = MobileSettings.lanUrl, !lan.isEmpty {
+            row(label: "LAN", value: lan)
+          }
+          if let relay = MobileSettings.relayUrl, !relay.isEmpty,
+            let pid = MobileSettings.relayPid
+          {
+            row(label: "Relay", value: "\(relay) (pid: \(pid.prefix(8))…)")
+          }
           row(label: "WS state", value: stateString)
         }
         .padding(16)
@@ -181,6 +185,14 @@ struct MobileSettingsSheet: View {
     case .connecting: return "connecting…"
     case .connected: return "connected"
     case .failed(let m): return "failed: \(m)"
+    }
+  }
+
+  private var routeString: String {
+    switch coordinator.activeRoute {
+    case .none: return "—"
+    case .lan(let h): return "LAN · \(h)"
+    case .relay(let h): return "relay · \(h)"
     }
   }
 }

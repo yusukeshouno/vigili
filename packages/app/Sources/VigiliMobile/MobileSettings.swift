@@ -1,60 +1,205 @@
 import Foundation
 
-/// iOS 側の永続設定 (daemon URL + token)。
+/// iOS 側の永続設定。
 ///
-/// 単一デバイス想定なので UserDefaults で十分。Keychain 化は将来の課題。
-/// (UserDefaults はアプリ専用なので他アプリから直接見えないが iCloud Sync は無効化。)
+/// 2 経路を独立に保持:
+///   - LAN 経路:   `lanUrl` + `lanToken` ("sentinel://setup" QR で書き込まれる)
+///   - Relay 経路: `relayUrl` + `relayPid` + `relayUserToken` ("vigili://pair" QR)
+///
+/// MobileAppCoordinator が Bonjour 発見状況と組み合わせて「いま LAN を使うか
+/// relay を使うか」を毎回選ぶ。両方とも有効でも問題ない (LAN を優先する戦略)。
+///
+/// 旧 `sentinel.daemonUrl` / `sentinel.token` のキーは migration して `lan*` に
+/// 流し込む (初回読み出し時)。
 enum MobileSettings {
   private enum Key {
-    static let daemonUrl = "sentinel.daemonUrl"
-    static let token = "sentinel.token"
+    // LAN 経路
+    static let lanUrl = "vigili.lan.url"      // "192.168.1.5:7878" or "mac.tail.ts.net" (scheme/port 自由)
+    static let lanToken = "vigili.lan.token"
+
+    // Relay 経路
+    static let relayUrl = "vigili.relay.url"               // "https://relay.vigili.io"
+    static let relayPid = "vigili.relay.pairing_id"        // UUID
+    static let relayUserToken = "vigili.relay.user_token"
+
+    // 旧設定 (migration source)
+    static let legacyDaemonUrl = "sentinel.daemonUrl"
+    static let legacyToken = "sentinel.token"
+    static let migrated = "vigili.migrated.v1"
   }
 
-  static var daemonUrl: String {
-    get { UserDefaults.standard.string(forKey: Key.daemonUrl) ?? "" }
-    set { UserDefaults.standard.set(newValue, forKey: Key.daemonUrl) }
+  // MARK: - LAN
+
+  static var lanUrl: String? {
+    get {
+      migrateLegacyIfNeeded()
+      return UserDefaults.standard.string(forKey: Key.lanUrl)
+    }
+    set {
+      if let v = newValue, !v.isEmpty {
+        UserDefaults.standard.set(v, forKey: Key.lanUrl)
+      } else {
+        UserDefaults.standard.removeObject(forKey: Key.lanUrl)
+      }
+    }
   }
 
-  static var token: String {
-    get { UserDefaults.standard.string(forKey: Key.token) ?? "" }
-    set { UserDefaults.standard.set(newValue, forKey: Key.token) }
+  static var lanToken: String? {
+    get {
+      migrateLegacyIfNeeded()
+      return UserDefaults.standard.string(forKey: Key.lanToken)
+    }
+    set {
+      if let v = newValue, !v.isEmpty {
+        UserDefaults.standard.set(v, forKey: Key.lanToken)
+      } else {
+        UserDefaults.standard.removeObject(forKey: Key.lanToken)
+      }
+    }
   }
 
-  /// `daemonUrl` を WebSocket 用 URL に変換する。
+  /// LAN 用の WS URL base を組み立てる (`ws://192.168.x.x:7878` 等)。
   ///
-  /// - スキーム未指定 → 数字始まりなら `ws://` (LAN IP)、ホスト名なら `wss://` (Tailscale 等 HTTPS)
-  /// - ポート未指定 + http/ws → `:7878` (daemon の標準ポート) を補う
-  /// - ポート未指定 + https/wss → :443 のまま (Tailscale Serve / Cloud Edition 経由想定)
-  /// - http → ws、https → wss にスキーム書き換え
-  static var wsUrlBase: URL? {
-    var s = daemonUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-    if s.isEmpty { return nil }
+  /// - スキーム未指定 → 数字始まりなら `ws://`、ホスト名なら `wss://` (Tailscale 等 HTTPS)
+  /// - ポート未指定 + ws → `:7878`、wss → :443 のまま
+  /// - http → ws、https → wss
+  /// - DaemonWsClient 側で末尾に `/ws` が自動付与される
+  static var lanWsUrlBase: URL? {
+    guard var s = lanUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else {
+      return nil
+    }
     if !s.contains("://") {
       let isLikelyIp = s.first.map { $0.isNumber } ?? false
       s = (isLikelyIp ? "http://" : "https://") + s
     }
-    guard let comp = URLComponents(string: s) else { return nil }
-    var c = comp
+    guard var c = URLComponents(string: s) else { return nil }
     switch c.scheme {
     case "http": c.scheme = "ws"
     case "https": c.scheme = "wss"
     case "ws", "wss": break
     default: return nil
     }
-    // ポート未指定で ws (LAN) なら daemon 標準の :7878 を補う。
-    // wss (https) 経路は Tailscale Serve / 商用 Relay が :443 終端する前提なので触らない。
     if c.port == nil, c.scheme == "ws" {
       c.port = 7878
     }
     return c.url
   }
 
-  static var isConfigured: Bool {
-    wsUrlBase != nil && !token.isEmpty
+  static var hasLan: Bool { lanUrl != nil && lanToken != nil && !lanToken!.isEmpty }
+
+  // MARK: - Relay
+
+  static var relayUrl: String? {
+    get {
+      migrateLegacyIfNeeded()
+      return UserDefaults.standard.string(forKey: Key.relayUrl)
+    }
+    set {
+      if let v = newValue, !v.isEmpty {
+        UserDefaults.standard.set(v, forKey: Key.relayUrl)
+      } else {
+        UserDefaults.standard.removeObject(forKey: Key.relayUrl)
+      }
+    }
+  }
+
+  static var relayPid: String? {
+    get {
+      migrateLegacyIfNeeded()
+      return UserDefaults.standard.string(forKey: Key.relayPid)
+    }
+    set {
+      if let v = newValue, !v.isEmpty {
+        UserDefaults.standard.set(v, forKey: Key.relayPid)
+      } else {
+        UserDefaults.standard.removeObject(forKey: Key.relayPid)
+      }
+    }
+  }
+
+  static var relayUserToken: String? {
+    get {
+      migrateLegacyIfNeeded()
+      return UserDefaults.standard.string(forKey: Key.relayUserToken)
+    }
+    set {
+      if let v = newValue, !v.isEmpty {
+        UserDefaults.standard.set(v, forKey: Key.relayUserToken)
+      } else {
+        UserDefaults.standard.removeObject(forKey: Key.relayUserToken)
+      }
+    }
+  }
+
+  /// Relay 用の WS URL を組み立てる。
+  /// 形式: `wss://<relay>/v1/clients/<pid>` (DaemonWsClient が `/ws` を足さず使う)
+  static var relayWsUrl: URL? {
+    guard let base = relayUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !base.isEmpty,
+      let pid = relayPid?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !pid.isEmpty
+    else { return nil }
+    let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
+    let wsBase: String
+    if trimmed.hasPrefix("https://") {
+      wsBase = "wss://" + trimmed.dropFirst("https://".count)
+    } else if trimmed.hasPrefix("http://") {
+      wsBase = "ws://" + trimmed.dropFirst("http://".count)
+    } else {
+      wsBase = trimmed  // assume already ws:// / wss://
+    }
+    return URL(string: "\(wsBase)/v1/clients/\(pid)")
+  }
+
+  static var hasRelay: Bool {
+    relayUrl != nil && relayPid != nil && relayUserToken != nil
+      && !(relayUserToken ?? "").isEmpty
+  }
+
+  // MARK: - Aggregate / migration
+
+  /// 何かしら 1 経路でも設定されていれば configured とみなす。
+  static var isConfigured: Bool { hasLan || hasRelay }
+
+  /// 旧 `sentinel.daemonUrl` / `sentinel.token` を `lan*` にコピーする (1 回だけ)。
+  /// 移行後は migrated フラグを立てて再実行しない。
+  private static func migrateLegacyIfNeeded() {
+    let ud = UserDefaults.standard
+    if ud.bool(forKey: Key.migrated) { return }
+    if let oldUrl = ud.string(forKey: Key.legacyDaemonUrl),
+      let oldToken = ud.string(forKey: Key.legacyToken),
+      !oldUrl.isEmpty, !oldToken.isEmpty
+    {
+      // 既に新キーに何か入ってたら上書きしない (人間が再 setup した可能性)
+      if ud.string(forKey: Key.lanUrl) == nil {
+        ud.set(oldUrl, forKey: Key.lanUrl)
+        ud.set(oldToken, forKey: Key.lanToken)
+      }
+    }
+    ud.set(true, forKey: Key.migrated)
   }
 
   static func clear() {
-    UserDefaults.standard.removeObject(forKey: Key.daemonUrl)
-    UserDefaults.standard.removeObject(forKey: Key.token)
+    let ud = UserDefaults.standard
+    for k in [
+      Key.lanUrl, Key.lanToken, Key.relayUrl, Key.relayPid, Key.relayUserToken,
+      Key.legacyDaemonUrl, Key.legacyToken,
+    ] {
+      ud.removeObject(forKey: k)
+    }
+    // migrated フラグは残す (再 migration 不要)
+  }
+
+  static func clearLan() {
+    let ud = UserDefaults.standard
+    ud.removeObject(forKey: Key.lanUrl)
+    ud.removeObject(forKey: Key.lanToken)
+  }
+
+  static func clearRelay() {
+    let ud = UserDefaults.standard
+    ud.removeObject(forKey: Key.relayUrl)
+    ud.removeObject(forKey: Key.relayPid)
+    ud.removeObject(forKey: Key.relayUserToken)
   }
 }
