@@ -5,7 +5,6 @@ import { AuroraBackground } from "@/components/AuroraBackground";
 import { Brand, HandDrawnShield } from "@/components/Brand";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { SettingsIcon } from "@/components/Icon";
-import { MessageComposer } from "@/components/MessageComposer";
 import { SwipeStack } from "@/components/SwipeStack";
 import { useQueue } from "@/lib/queue-context";
 import type { ConnectionState } from "@/lib/ws-client";
@@ -74,7 +73,6 @@ export default function QueuePage() {
               renderCard={(item, ctx) => <ApprovalCard request={item} progress={ctx.progress} />}
             />
           )}
-          <MessageComposer />
         </div>
       </section>
     </main>

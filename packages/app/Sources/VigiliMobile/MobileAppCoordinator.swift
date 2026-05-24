@@ -80,12 +80,6 @@ final class MobileAppCoordinator: ObservableObject {
     wsClient.decide(id: id, decision: decision)
   }
 
-  /// iOS composer から呼ばれる: 指定 session 宛にメッセージを送る。
-  /// 配送は daemon が次に gate fire したタイミング。
-  func sendMessage(sessionId: String, body: String) {
-    wsClient.sendMessage(sessionId: sessionId, body: body)
-  }
-
   /// `sentinel://setup?u=<host>&t=<token>` または
   /// `vigili://pair?p=<pid>&u=<user_token>&r=<relay_url>` を受け取り、
   /// 設定 + 接続まで一気に進める。

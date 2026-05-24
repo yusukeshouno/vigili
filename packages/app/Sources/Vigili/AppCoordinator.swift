@@ -184,11 +184,6 @@ final class AppCoordinator: ObservableObject {
     showWelcome = false
   }
 
-  /// MessageComposerView から呼ばれる: Claude にひとこと送る。
-  func sendMessage(sessionId: String, body: String) {
-    wsClient.sendMessage(sessionId: sessionId, body: body)
-  }
-
   private func tickPending() async {
     do {
       let list = try await adminClient.fetchPending()
