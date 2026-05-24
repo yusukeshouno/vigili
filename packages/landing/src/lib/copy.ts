@@ -27,6 +27,7 @@ export interface Copy {
   // showcase
   showcaseEyebrow: string;
   showcaseTitle: string;
+  showcaseMacWelcomeCaption: string;
   showcaseIosQueueCaption: string;
   showcaseIosLiveCaption: string;
 
@@ -70,10 +71,12 @@ const en: Copy = {
 
   showcaseEyebrow: "What it looks like",
   showcaseTitle: "Approvals in your pocket, not your face.",
+  showcaseMacWelcomeCaption:
+    "First-run setup. Open Vigili, scan the QR with your iPhone — connected in seconds.",
   showcaseIosQueueCaption:
-    "The iOS queue. Each card shows the session, tool, and the actual command — swipe Allow or Deny.",
+    "iOS queue. Each card shows session, tool, and the command — swipe to decide.",
   showcaseIosLiveCaption:
-    "Live Activity in the Dynamic Island. Pending count is always visible, no notification spam.",
+    "Live Activity in the Dynamic Island. Pending count always visible, no notification spam.",
 
   whyEyebrow: "The problem",
   whyTitle: "Five Claude sessions, five places to babysit.",
@@ -162,8 +165,10 @@ const ja: Copy = {
 
   showcaseEyebrow: "実際の画面",
   showcaseTitle: "承認はポケットの中、視界の外。",
+  showcaseMacWelcomeCaption:
+    "初回セットアップ。Vigili を開いて QR を iPhone で読むだけ、数秒で接続完了。",
   showcaseIosQueueCaption:
-    "iOS の Queue。session / tool / 実際のコマンドが見えて、Allow/Deny を 2 タップ。",
+    "iOS の Queue。session / tool / 実際のコマンドを見て Allow/Deny を 2 タップ。",
   showcaseIosLiveCaption:
     "Dynamic Island に Live Activity。pending 数が常時見える、通知の連打なし。",
 

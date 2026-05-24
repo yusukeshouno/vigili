@@ -2,15 +2,18 @@ import Image from "next/image";
 import type { Copy } from "@/lib/copy";
 
 /**
- * Hero 下の Showcase section。
+ * Hero 下の Showcase section。3 枚並べる。
  *
- * 2 枚並べ (md+): iOS Queue (左、縦長スマホ) + Dynamic Island/Home (右、縦長スマホ)。
- * モバイル幅では縦に積む。
+ *   [Mac Welcome panel (wide)]
+ *   [iOS Queue] [iOS Dynamic Island]
  *
- * 画像は packages/landing/public/screenshots/ に置いてある:
- *   - ios-queue.png         (iPhone 17 Pro simctl screenshot — 3 PENDING の Queue)
- *   - ios-dynamic-island.png (Home screen + Dynamic Island のオレンジ)
- *   - mac-popover.png       (Mac menu bar popover、screencapture -w で抜く)
+ * 画像:
+ *   - mac-welcome.png         Welcome panel + LAN QR
+ *   - ios-queue.png           iOS in-app queue (3 PENDING)
+ *   - ios-dynamic-island.png  Home + Dynamic Island の Live Activity
+ *
+ * Popover-with-pending shot は後で追加できるよう、コンポーネントの構造は
+ * 簡単に増減できるようにしてある。
  */
 export function Showcase({ copy }: { copy: Copy }) {
   return (
@@ -18,64 +21,78 @@ export function Showcase({ copy }: { copy: Copy }) {
       id="showcase"
       className="mx-auto w-full max-w-6xl border-t border-(--color-border) px-6 py-20 sm:px-10 sm:py-24"
     >
-      <header className="mb-12">
+      <header className="mb-14">
         <span className="label block">{copy.showcaseEyebrow}</span>
         <h2 className="mt-3 font-display text-[28px] leading-[1.1] tracking-tight sm:text-[36px]">
           {copy.showcaseTitle}
         </h2>
       </header>
 
-      <div className="grid grid-cols-1 gap-10 md:grid-cols-2 md:gap-14">
-        <ShotCard
-          src="/screenshots/ios-queue.png"
-          alt="Vigili iOS app showing 3 pending approval cards"
-          width={300}
-          height={650}
-          caption={copy.showcaseIosQueueCaption}
-        />
-        <ShotCard
-          src="/screenshots/ios-dynamic-island.png"
-          alt="iPhone Home screen with the Vigili Live Activity in the Dynamic Island"
-          width={300}
-          height={650}
-          caption={copy.showcaseIosLiveCaption}
+      {/* Mac Welcome — 単独で大きく見せる */}
+      <div className="mb-14 flex justify-center">
+        <MacShot
+          src="/screenshots/mac-welcome.png"
+          alt="Vigili Welcome panel with LAN-direct QR code"
+          caption={copy.showcaseMacWelcomeCaption}
         />
       </div>
 
-      {/* Mac は後で追加 (screencapture -w 待ち)。あったら一段下に出す。 */}
+      {/* iOS row */}
+      <div className="grid grid-cols-1 gap-10 md:grid-cols-2 md:gap-10">
+        <PhoneShot
+          src="/screenshots/ios-queue.png"
+          alt="Vigili iOS app showing 3 pending approval cards"
+          caption={copy.showcaseIosQueueCaption}
+        />
+        <PhoneShot
+          src="/screenshots/ios-dynamic-island.png"
+          alt="iPhone Home screen with the Vigili Live Activity in the Dynamic Island"
+          caption={copy.showcaseIosLiveCaption}
+        />
+      </div>
     </section>
   );
 }
 
-function ShotCard({
-  src,
-  alt,
-  width,
-  height,
-  caption,
-}: {
-  src: string;
-  alt: string;
-  width: number;
-  height: number;
-  caption: string;
-}) {
+function MacShot({ src, alt, caption }: { src: string; alt: string; caption: string }) {
   return (
-    <figure className="flex flex-col items-center gap-5">
+    <figure className="flex flex-col items-center gap-4">
       <div
-        className="relative overflow-hidden rounded-[42px] border border-(--color-border-strong) bg-(--color-bg-rise)"
-        style={{ aspectRatio: `${width} / ${height}`, width: "100%", maxWidth: 360 }}
+        className="relative w-full overflow-hidden rounded-2xl border border-(--color-border-strong) bg-(--color-bg-rise)"
+        style={{ aspectRatio: "866 / 914", maxWidth: 520 }}
       >
         <Image
           src={src}
           alt={alt}
           fill
-          sizes="(min-width: 768px) 360px, 90vw"
-          style={{ objectFit: "cover" }}
+          sizes="(min-width: 768px) 520px, 90vw"
+          style={{ objectFit: "contain" }}
           priority
         />
       </div>
-      <figcaption className="max-w-xs text-center text-[13px] text-(--color-fg-mid)">
+      <figcaption className="max-w-md text-center text-[13px] text-(--color-fg-mid)">
+        {caption}
+      </figcaption>
+    </figure>
+  );
+}
+
+function PhoneShot({ src, alt, caption }: { src: string; alt: string; caption: string }) {
+  return (
+    <figure className="flex flex-col items-center gap-4">
+      <div
+        className="relative w-full overflow-hidden rounded-[42px] border border-(--color-border-strong) bg-(--color-bg-rise)"
+        style={{ aspectRatio: "300 / 650", maxWidth: 320 }}
+      >
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          sizes="(min-width: 768px) 320px, 90vw"
+          style={{ objectFit: "cover" }}
+        />
+      </div>
+      <figcaption className="max-w-md text-center text-[13px] text-(--color-fg-mid)">
         {caption}
       </figcaption>
     </figure>
