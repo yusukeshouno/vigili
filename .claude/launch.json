@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@vigili/pwa", "exec", "next", "dev", "-p", "3738"],
       "port": 3738
+    },
+    {
+      "name": "landing",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@vigili/landing", "exec", "next", "dev", "-p", "3739"],
+      "port": 3739
     }
   ]
 }

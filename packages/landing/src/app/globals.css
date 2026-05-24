@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Vigili LP — same design language as the PWA.
+ * - warm dark base #262624 + cream text
+ * - Claude coral accent #C16141
+ * - flat surfaces, thin warm borders, no glass / no glow
+ * ──────────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-bg: #262624;
+  --color-bg-rise: #2d2b29;
+  --color-bg-rise2: #34322f;
+  --color-bg-code: #1f1e1d;
+
+  --color-border: rgba(250, 247, 242, 0.08);
+  --color-border-strong: rgba(250, 247, 242, 0.14);
+
+  --color-fg: rgba(250, 247, 242, 0.95);
+  --color-fg-mid: rgba(250, 247, 242, 0.62);
+  --color-fg-dim: rgba(250, 247, 242, 0.4);
+  --color-fg-faint: rgba(250, 247, 242, 0.18);
+
+  --color-accent: #c16141;
+  --color-accent-soft: #d2785a;
+  --color-accent-dim: #84402c;
+
+  --color-green: #7bae89;
+  --color-red: #d6766c;
+
+  --font-display: -apple-system, "SF Pro Display", system-ui, sans-serif;
+  --font-ui: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-ui);
+  font-feature-settings: "ss01", "cv11";
+  line-height: 1.55;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-fg-dim);
+}
+
+/* button helper used in the waitlist form */
+.press {
+  transition: transform 100ms ease, opacity 100ms ease;
+}
+.press:active {
+  transform: translateY(1px);
+  opacity: 0.85;
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm --filter @vigili/landing build",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "outputDirectory": "packages/landing/.next",
+  "framework": "nextjs",
+  "regions": ["nrt1"],
+  "github": {
+    "silent": true
+  }
+}
