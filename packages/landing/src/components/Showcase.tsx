@@ -2,18 +2,18 @@ import Image from "next/image";
 import type { Copy } from "@/lib/copy";
 
 /**
- * Hero 下の Showcase section。3 枚並べる。
+ * Hero 下の Showcase section。
  *
- *   [Mac Welcome panel (wide)]
- *   [iOS Queue] [iOS Dynamic Island]
+ * 思想: 3 枚並べるが「UI 一覧」ではなく「1 件の承認が解決するまでの 3 ステップ」
+ * という narrative に紐付ける。番号付き、左から右、矢印で接続。
  *
- * 画像:
- *   - mac-welcome.png         Welcome panel + LAN QR
- *   - ios-queue.png           iOS in-app queue (3 PENDING)
- *   - ios-dynamic-island.png  Home + Dynamic Island の Live Activity
+ *   01 → 02 → 03
+ *   Setup    Notify    Approve
  *
- * Popover-with-pending shot は後で追加できるよう、コンポーネントの構造は
- * 簡単に増減できるようにしてある。
+ * 画像は public/screenshots/:
+ *   - mac-welcome.png         (step 01: 接続セットアップ)
+ *   - ios-dynamic-island.png  (step 02: pending が iOS に届く)
+ *   - ios-queue.png           (step 03: タップで承認)
  */
 export function Showcase({ copy }: { copy: Copy }) {
   return (
@@ -26,75 +26,144 @@ export function Showcase({ copy }: { copy: Copy }) {
         <h2 className="mt-3 font-display text-[28px] leading-[1.1] tracking-tight sm:text-[36px]">
           {copy.showcaseTitle}
         </h2>
+        <p className="mt-4 max-w-xl text-[14px] text-(--color-fg-mid)">
+          {copy.showcaseLead}
+        </p>
       </header>
 
-      {/* Mac Welcome — 単独で大きく見せる */}
-      <div className="mb-14 flex justify-center">
-        <MacShot
+      <ol className="grid grid-cols-1 gap-12 md:grid-cols-3 md:gap-8">
+        <Step
+          n="01"
+          headline={copy.showcaseStep1Title}
+          body={copy.showcaseStep1Body}
+          variant="mac"
           src="/screenshots/mac-welcome.png"
-          alt="Vigili Welcome panel with LAN-direct QR code"
-          caption={copy.showcaseMacWelcomeCaption}
+          alt="Vigili Welcome panel with QR code"
         />
-      </div>
-
-      {/* iOS row */}
-      <div className="grid grid-cols-1 gap-10 md:grid-cols-2 md:gap-10">
-        <PhoneShot
-          src="/screenshots/ios-queue.png"
-          alt="Vigili iOS app showing 3 pending approval cards"
-          caption={copy.showcaseIosQueueCaption}
-        />
-        <PhoneShot
+        <Step
+          n="02"
+          headline={copy.showcaseStep2Title}
+          body={copy.showcaseStep2Body}
+          variant="phone"
           src="/screenshots/ios-dynamic-island.png"
-          alt="iPhone Home screen with the Vigili Live Activity in the Dynamic Island"
-          caption={copy.showcaseIosLiveCaption}
+          alt="iPhone Home screen with Vigili Live Activity in the Dynamic Island"
         />
-      </div>
+        <Step
+          n="03"
+          headline={copy.showcaseStep3Title}
+          body={copy.showcaseStep3Body}
+          variant="phone"
+          src="/screenshots/ios-queue.png"
+          alt="Vigili iOS app showing pending approval cards"
+        />
+      </ol>
     </section>
   );
 }
 
-function MacShot({ src, alt, caption }: { src: string; alt: string; caption: string }) {
+function Step({
+  n,
+  headline,
+  body,
+  variant,
+  src,
+  alt,
+}: {
+  n: string;
+  headline: string;
+  body: string;
+  variant: "mac" | "phone";
+  src: string;
+  alt: string;
+}) {
   return (
-    <figure className="flex flex-col items-center gap-4">
-      <div
-        className="relative w-full overflow-hidden rounded-2xl border border-(--color-border-strong) bg-(--color-bg-rise)"
-        style={{ aspectRatio: "866 / 914", maxWidth: 520 }}
-      >
-        <Image
-          src={src}
-          alt={alt}
-          fill
-          sizes="(min-width: 768px) 520px, 90vw"
-          style={{ objectFit: "contain" }}
-          priority
-        />
+    <li className="flex flex-col items-center text-center">
+      {/* number */}
+      <span className="font-mono text-[11px] tracking-[0.18em] text-(--color-accent) mb-3">
+        {n}
+      </span>
+
+      {/* headline */}
+      <h3 className="font-display text-[18px] leading-tight tracking-tight text-(--color-fg) mb-2 px-2">
+        {headline}
+      </h3>
+
+      {/* body */}
+      <p className="text-[13px] leading-[1.55] text-(--color-fg-mid) mb-8 max-w-[260px]">
+        {body}
+      </p>
+
+      {/* image */}
+      <div className="relative flex w-full justify-center">
+        {variant === "phone" ? (
+          <PhoneFrame src={src} alt={alt} />
+        ) : (
+          <MacFrame src={src} alt={alt} />
+        )}
       </div>
-      <figcaption className="max-w-md text-center text-[13px] text-(--color-fg-mid)">
-        {caption}
-      </figcaption>
-    </figure>
+    </li>
   );
 }
 
-function PhoneShot({ src, alt, caption }: { src: string; alt: string; caption: string }) {
+/**
+ * iPhone らしいデバイス枠 (黒 bezel + Dynamic Island なし、画面だけ強調)。
+ * 縦長 9:19.5 比率 + 大きめ rounded で「物理的な iPhone」っぽく見せる。
+ * 影付き。
+ */
+function PhoneFrame({ src, alt }: { src: string; alt: string }) {
   return (
-    <figure className="flex flex-col items-center gap-4">
+    <div
+      className="relative"
+      style={{
+        width: "100%",
+        maxWidth: 220,
+        aspectRatio: "9 / 19.5",
+        borderRadius: 38,
+        padding: 8,
+        background: "linear-gradient(180deg, #1a1917 0%, #0e0d0c 100%)",
+        boxShadow:
+          "0 0 0 1px rgba(250,247,242,0.05), 0 30px 60px -20px rgba(0,0,0,0.6), 0 12px 24px -12px rgba(0,0,0,0.4)",
+      }}
+    >
       <div
-        className="relative w-full overflow-hidden rounded-[42px] border border-(--color-border-strong) bg-(--color-bg-rise)"
-        style={{ aspectRatio: "300 / 650", maxWidth: 320 }}
+        className="relative h-full w-full overflow-hidden bg-(--color-bg-rise)"
+        style={{ borderRadius: 30 }}
       >
         <Image
           src={src}
           alt={alt}
           fill
-          sizes="(min-width: 768px) 320px, 90vw"
+          sizes="220px"
           style={{ objectFit: "cover" }}
         />
       </div>
-      <figcaption className="max-w-md text-center text-[13px] text-(--color-fg-mid)">
-        {caption}
-      </figcaption>
-    </figure>
+    </div>
+  );
+}
+
+/**
+ * Mac ウィンドウっぽい枠 (薄い border + 大きめ shadow)。
+ * 16:13 程度の比率で popover/welcome を入れる。
+ */
+function MacFrame({ src, alt }: { src: string; alt: string }) {
+  return (
+    <div
+      className="relative w-full overflow-hidden"
+      style={{
+        maxWidth: 320,
+        aspectRatio: "320 / 280",
+        borderRadius: 18,
+        boxShadow:
+          "0 0 0 1px rgba(250,247,242,0.08), 0 30px 60px -20px rgba(0,0,0,0.6), 0 12px 24px -12px rgba(0,0,0,0.4)",
+      }}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes="320px"
+        style={{ objectFit: "cover", objectPosition: "center top" }}
+      />
+    </div>
   );
 }

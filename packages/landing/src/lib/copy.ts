@@ -24,12 +24,16 @@ export interface Copy {
   heroWaitlistError: string;
   heroFineprint: string;
 
-  // showcase
+  // showcase (3-step narrative)
   showcaseEyebrow: string;
   showcaseTitle: string;
-  showcaseMacWelcomeCaption: string;
-  showcaseIosQueueCaption: string;
-  showcaseIosLiveCaption: string;
+  showcaseLead: string;
+  showcaseStep1Title: string;
+  showcaseStep1Body: string;
+  showcaseStep2Title: string;
+  showcaseStep2Body: string;
+  showcaseStep3Title: string;
+  showcaseStep3Body: string;
 
   // why
   whyEyebrow: string;
@@ -69,14 +73,19 @@ const en: Copy = {
   heroWaitlistError: "Something went wrong. Try again?",
   heroFineprint: "No marketing, no sharing. One email when it's ready.",
 
-  showcaseEyebrow: "What it looks like",
-  showcaseTitle: "Approvals in your pocket, not your face.",
-  showcaseMacWelcomeCaption:
-    "First-run setup. Open Vigili, scan the QR with your iPhone — connected in seconds.",
-  showcaseIosQueueCaption:
-    "iOS queue. Each card shows session, tool, and the command — swipe to decide.",
-  showcaseIosLiveCaption:
-    "Live Activity in the Dynamic Island. Pending count always visible, no notification spam.",
+  showcaseEyebrow: "A 60-second tour",
+  showcaseTitle: "From terminal to phone, in three steps.",
+  showcaseLead:
+    "Set it up once on your Mac. The next time Claude asks for permission, your phone is what you reach for.",
+  showcaseStep1Title: "Pair your phone, once.",
+  showcaseStep1Body:
+    "Vigili's menu bar shows a QR code on first launch. Open Camera on your iPhone — paired in under five seconds. No accounts, no clouds in this step.",
+  showcaseStep2Title: "Claude pauses. You don't.",
+  showcaseStep2Body:
+    "When Claude wants to do something the policy can't auto-decide, your phone wakes. The Dynamic Island shows what's waiting. No banner avalanches.",
+  showcaseStep3Title: "Two taps. Continue.",
+  showcaseStep3Body:
+    "Open the app, glance at the full command, swipe Allow or Deny. Claude resumes in milliseconds. You go back to whatever you were doing.",
 
   whyEyebrow: "The problem",
   whyTitle: "Five Claude sessions, five places to babysit.",
@@ -163,14 +172,19 @@ const ja: Copy = {
   heroWaitlistError: "うまく送れませんでした。再度お試しください。",
   heroFineprint: "送るのは公開時のメール 1 通だけ。それ以外には使いません。",
 
-  showcaseEyebrow: "実際の画面",
-  showcaseTitle: "承認はポケットの中、視界の外。",
-  showcaseMacWelcomeCaption:
-    "初回セットアップ。Vigili を開いて QR を iPhone で読むだけ、数秒で接続完了。",
-  showcaseIosQueueCaption:
-    "iOS の Queue。session / tool / 実際のコマンドを見て Allow/Deny を 2 タップ。",
-  showcaseIosLiveCaption:
-    "Dynamic Island に Live Activity。pending 数が常時見える、通知の連打なし。",
+  showcaseEyebrow: "60 秒で見るツアー",
+  showcaseTitle: "ターミナルから、スマホまで、3 ステップ。",
+  showcaseLead:
+    "セットアップは Mac で 1 回だけ。次に Claude が承認を求めた瞬間、自然に手が伸びるのはスマホになる。",
+  showcaseStep1Title: "スマホを 1 回だけ繋ぐ。",
+  showcaseStep1Body:
+    "Vigili を起動すると menu bar に QR が出る。iPhone の Camera で読むだけで 5 秒以内に接続完了。アカウント不要、この段階ではクラウドも経由しない。",
+  showcaseStep2Title: "Claude が止まる。あなたは止まらない。",
+  showcaseStep2Body:
+    "ポリシーで判断できないツール呼び出しが来た瞬間、スマホが起きる。Dynamic Island に「何が待っているか」が出る。バナー連打にはしない。",
+  showcaseStep3Title: "2 タップ。続行。",
+  showcaseStep3Body:
+    "アプリを開いて、コマンドの全文を見て、Allow か Deny をスワイプ。Claude はミリ秒で再開、あなたは元の作業に戻る。",
 
   whyEyebrow: "解決したい問題",
   whyTitle: "5 つの Claude セッション、5 つの監視ポイント。",
