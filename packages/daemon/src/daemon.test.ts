@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { type Socket, connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -448,5 +448,34 @@ describe("startDaemon — audit log", () => {
     expect(decisions).toContain("deny");
     const decidedBy = rows.map((r) => r.decided_by);
     expect(decidedBy.some((d) => d?.startsWith("rule:") ?? false)).toBe(true);
+  });
+});
+
+describe("startDaemon — bootstrap", () => {
+  it("writes the default policy.yaml when one doesn't exist", async () => {
+    // 通常の beforeEach は empty policy.yaml を書いているので一度 close。
+    await daemon.close();
+
+    // 別の home (policy.yaml 不在) を準備して、明示的な policy を渡さない。
+    const freshHome = mkdtempSync(join(tmpdir(), "vigili-bootstrap-"));
+    const freshPolicyPath = join(freshHome, "policy.yaml");
+    expect(existsSync(freshPolicyPath)).toBe(false);
+
+    const fresh = await startDaemon({
+      home: freshHome,
+      log: () => undefined,
+      enableWs: false,
+    });
+    try {
+      expect(existsSync(freshPolicyPath)).toBe(true);
+      const written = readFileSync(freshPolicyPath, "utf-8");
+      // 個人プロジェクト名が紛れないことを保証する。
+      expect(written).not.toContain("neort-wiki");
+      expect(written).not.toContain("diptych");
+      // 最低限ルールが入っていることを確認。
+      expect(written).toContain("読み取り専用 bash");
+    } finally {
+      await fresh.close();
+    }
   });
 });

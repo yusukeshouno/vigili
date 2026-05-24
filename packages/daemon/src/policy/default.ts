@@ -1,8 +1,21 @@
-# Vigili Policy — Example Template
+/**
+ * 初回起動時に書き出される ~/.vigili/policy.yaml のデフォルト内容。
+ *
+ * このファイルは「Vigili を初めてインストールした人」が触ることを前提に書く。
+ * - プロジェクト固有の名前 (repo_in) は出さない。
+ * - コメントで「なぜそうしているか」を説明する。
+ * - 危険度の高い操作は ask、明らかに安全な日常作業だけ allow。
+ * - 迷ったら ask に落ちる (defaults.unknown = ask)。
+ *
+ * このファイルを更新したら repo 直下の policy.example.yaml も合わせて
+ * 更新する (こちらは GitHub で読まれるドキュメント、daemon は default.ts
+ * を真とする)。
+ */
+
+export const DEFAULT_POLICY_YAML = `# Vigili Policy
 #
-# このファイルは Vigili daemon が初回起動時に書き出すデフォルトと同じ内容です。
-# 真のソースは packages/daemon/src/policy/default.ts。こちらは GitHub で
-# 中身を確認したい人向けのドキュメントコピーです。
+# このファイルは Vigili daemon が初回起動時に書き出したテンプレートです。
+# 編集後は \`vigili-cli reload\` で反映できます。
 #
 # 評価順序:
 #   1. ハードコードされた invariants (rm -rf / 等) が最優先で発火
@@ -23,14 +36,14 @@ rules:
   - name: ".env / 秘密鍵への書き込み"
     when:
       tool: [Edit, Write]
-      path_matches: '(^|/)\.env(\..+)?$|(^|/)secrets?/|\.pem$|\.key$'
+      path_matches: '(^|/)\\.env(\\..+)?$|(^|/)secrets?/|\\.pem$|\\.key$'
     action: ask
     notify: critical
 
   - name: "課金されうる外部 API への curl"
     when:
       tool: Bash
-      command_matches: 'curl.*(api\.openai\.com|api\.anthropic\.com|api\.stripe\.com)'
+      command_matches: 'curl.*(api\\.openai\\.com|api\\.anthropic\\.com|api\\.stripe\\.com)'
     action: ask
     notify: critical
 
@@ -44,14 +57,14 @@ rules:
   - name: "git push --force / -f / --force-with-lease"
     when:
       tool: Bash
-      command_matches: '^git\s+push\b.*(\s-f\b|\s--force(?:-with-lease)?\b)'
+      command_matches: '^git\\s+push\\b.*(\\s-f\\b|\\s--force(?:-with-lease)?\\b)'
     action: ask
     notify: critical
 
   - name: "システム全体への sudo"
     when:
       tool: Bash
-      command_matches: '^sudo\s+(rm|chmod|chown|mv|cp)\b'
+      command_matches: '^sudo\\s+(rm|chmod|chown|mv|cp)\\b'
     action: ask
     notify: critical
 
@@ -62,19 +75,19 @@ rules:
   - name: "読み取り専用 bash"
     when:
       tool: Bash
-      command_matches: '^(ls|cat|head|tail|rg|grep|fd|find|tree|wc|du|df|ps|top|which|whoami|pwd|date|echo|env|history|stat|file|sort|uniq|cut|awk|sed|tr|jq|yq|column|diff|less|more)\b'
+      command_matches: '^(ls|cat|head|tail|rg|grep|fd|find|tree|wc|du|df|ps|top|which|whoami|pwd|date|echo|env|history|stat|file|sort|uniq|cut|awk|sed|tr|jq|yq|column|diff|less|more)\\b'
     action: allow
 
   - name: "git の読み取り系"
     when:
       tool: Bash
-      command_matches: '^git\s+(status|diff|log|branch|show|blame|reflog|stash list|remote -v|ls-files|rev-parse|describe|check-ignore|fetch|pull)\b'
+      command_matches: '^git\\s+(status|diff|log|branch|show|blame|reflog|stash list|remote -v|ls-files|rev-parse|describe|check-ignore|fetch|pull)\\b'
     action: allow
 
   - name: "信頼ドメインへの WebFetch (公式ドキュメント類)"
     when:
       tool: WebFetch
-      url_matches: '^https?://(github\.com|raw\.githubusercontent\.com|docs\.anthropic\.com|developer\.mozilla\.org|nodejs\.org|reactjs\.org|nextjs\.org|tailwindcss\.com|vuejs\.org|sveltejs\.dev|developer\.apple\.com)/'
+      url_matches: '^https?://(github\\.com|raw\\.githubusercontent\\.com|docs\\.anthropic\\.com|developer\\.mozilla\\.org|nodejs\\.org|reactjs\\.org|nextjs\\.org|tailwindcss\\.com|vuejs\\.org|sveltejs\\.dev|developer\\.apple\\.com)/'
     action: allow
 
   # ============================================================
@@ -84,31 +97,31 @@ rules:
   - name: "テスト実行"
     when:
       tool: Bash
-      command_matches: '^(pnpm|npm|yarn)\s+(test|vitest|jest|run\s+test)\b|^npx\s+(vitest|jest|playwright)\b|^(go|cargo)\s+test\b|^pytest\b'
+      command_matches: '^(pnpm|npm|yarn)\\s+(test|vitest|jest|run\\s+test)\\b|^npx\\s+(vitest|jest|playwright)\\b|^(go|cargo)\\s+test\\b|^pytest\\b'
     action: allow
 
   - name: "型チェック・lint・format・build"
     when:
       tool: Bash
-      command_matches: '^(pnpm|npm|yarn)\s+(typecheck|tsc|lint|format|biome|build|run\s+(typecheck|build|lint|format))\b|^npx\s+(tsc|biome|eslint|prettier)\b|^cargo\s+(check|build|clippy|fmt)\b|^(go|gofmt|golangci-lint)\b'
+      command_matches: '^(pnpm|npm|yarn)\\s+(typecheck|tsc|lint|format|biome|build|run\\s+(typecheck|build|lint|format))\\b|^npx\\s+(tsc|biome|eslint|prettier)\\b|^cargo\\s+(check|build|clippy|fmt)\\b|^(go|gofmt|golangci-lint)\\b'
     action: allow
 
   - name: "dev サーバ起動"
     when:
       tool: Bash
-      command_matches: '^(pnpm|npm|yarn)\s+(dev|start)\b|^next\s+dev\b|^vite\b|^uvicorn\b|^rails\s+server\b'
+      command_matches: '^(pnpm|npm|yarn)\\s+(dev|start)\\b|^next\\s+dev\\b|^vite\\b|^uvicorn\\b|^rails\\s+server\\b'
     action: allow
 
   - name: "git の commit / branch 操作 (push は別ルール)"
     when:
       tool: Bash
-      command_matches: '^git\s+(add|commit|checkout|switch|merge|rebase|stash|tag|cherry-pick|reset(\s+--soft|\s+HEAD)?|mv|rm|restore)\b'
+      command_matches: '^git\\s+(add|commit|checkout|switch|merge|rebase|stash|tag|cherry-pick|reset(\\s+--soft|\\s+HEAD)?|mv|rm|restore)\\b'
     action: allow
 
   - name: "git push (--force 系は上のルールで弾く)"
     when:
       tool: Bash
-      command_matches: '^git\s+push(?!.*(\s-f|--force)).*$'
+      command_matches: '^git\\s+push(?!.*(\\s-f|--force)).*$'
     action: allow
 
   # ============================================================
@@ -139,3 +152,4 @@ rules:
       tool: [Edit, Write]
     action: ask
     notify: normal
+`;

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   type ApprovalRequest,
   type AskResolution,
@@ -24,6 +25,7 @@ import {
   openSubscriptionStore,
 } from "./notify/web-push.js";
 import { paths } from "./paths.js";
+import { DEFAULT_POLICY_YAML } from "./policy/default.js";
 import { type DecisionResult, decide } from "./policy/engine.js";
 import { loadPolicyFile } from "./policy/loader.js";
 import { appendGeneratedRule, promoteToRule } from "./policy/promote.js";
@@ -77,6 +79,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const p = paths(options.home);
   const log = options.log ?? ((msg) => console.error(msg));
 
+  if (!options.policy) {
+    await ensureDefaultPolicy(p.policy, log);
+  }
   const initialPolicy = options.policy ?? (await loadPolicyFile(p.policy));
   const config = options.config ?? (await loadConfigFile(p.config));
   const store = openStore(p.db);
@@ -273,6 +278,22 @@ async function handlePromote(promote: PromoteRule, ctx: DaemonContext): Promise<
   } catch (err) {
     ctx.log(`[vigili-daemon] promote 失敗: ${(err as Error).message}`);
   }
+}
+
+/**
+ * 初回起動時の救済: ~/.vigili/policy.yaml が無ければ default.ts の埋め込み
+ * を書き出して、newcomer がいきなり「policy.yaml を読めません」で詰まないようにする。
+ * 親ディレクトリも無ければ作る。
+ */
+async function ensureDefaultPolicy(
+  policyPath: string,
+  log: (msg: string) => void,
+): Promise<void> {
+  if (existsSync(policyPath)) return;
+  const dir = dirname(policyPath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  await writeFile(policyPath, DEFAULT_POLICY_YAML, { encoding: "utf-8", mode: 0o600 });
+  log(`[vigili-daemon] ${policyPath} が無かったのでデフォルトを書き出しました`);
 }
 
 function resolveNotifier(
