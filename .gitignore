@@ -14,3 +14,4 @@ coverage/
 
 # pnpm
 .pnpm-store/
+.vercel
