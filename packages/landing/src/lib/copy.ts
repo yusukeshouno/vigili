@@ -24,6 +24,12 @@ export interface Copy {
   heroWaitlistError: string;
   heroFineprint: string;
 
+  // showcase
+  showcaseEyebrow: string;
+  showcaseTitle: string;
+  showcaseIosQueueCaption: string;
+  showcaseIosLiveCaption: string;
+
   // why
   whyEyebrow: string;
   whyTitle: string;
@@ -61,6 +67,13 @@ const en: Copy = {
   heroWaitlistSuccess: "Thanks. We'll email you the moment it ships.",
   heroWaitlistError: "Something went wrong. Try again?",
   heroFineprint: "No marketing, no sharing. One email when it's ready.",
+
+  showcaseEyebrow: "What it looks like",
+  showcaseTitle: "Approvals in your pocket, not your face.",
+  showcaseIosQueueCaption:
+    "The iOS queue. Each card shows the session, tool, and the actual command — swipe Allow or Deny.",
+  showcaseIosLiveCaption:
+    "Live Activity in the Dynamic Island. Pending count is always visible, no notification spam.",
 
   whyEyebrow: "The problem",
   whyTitle: "Five Claude sessions, five places to babysit.",
@@ -146,6 +159,13 @@ const ja: Copy = {
   heroWaitlistSuccess: "ありがとうございます。リリース時にお知らせします。",
   heroWaitlistError: "うまく送れませんでした。再度お試しください。",
   heroFineprint: "送るのは公開時のメール 1 通だけ。それ以外には使いません。",
+
+  showcaseEyebrow: "実際の画面",
+  showcaseTitle: "承認はポケットの中、視界の外。",
+  showcaseIosQueueCaption:
+    "iOS の Queue。session / tool / 実際のコマンドが見えて、Allow/Deny を 2 タップ。",
+  showcaseIosLiveCaption:
+    "Dynamic Island に Live Activity。pending 数が常時見える、通知の連打なし。",
 
   whyEyebrow: "解決したい問題",
   whyTitle: "5 つの Claude セッション、5 つの監視ポイント。",
