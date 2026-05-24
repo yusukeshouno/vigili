@@ -57,7 +57,8 @@ final class DaemonWsClient: ObservableObject {
 
   /// Mac 専用: `~/.vigili/token` を読む補助 (旧 `~/.sentinel/token` も fallback)。
   /// iOS では使えない (sandbox の外を読めない) のでこの関数を呼ばない。
-  static func macHomeToken() -> String {
+  /// クラス本体の MainActor 隔離からは独立 (純粋にファイル読み)。
+  nonisolated static func macHomeToken() -> String {
     #if os(macOS)
     let home = FileManager.default.homeDirectoryForCurrentUser
     for sub in [".vigili/token", ".sentinel/token"] {
