@@ -55,6 +55,15 @@ export interface Copy {
   howTitle: string;
   howSteps: Array<{ index: string; title: string; body: string }>;
 
+  // setup (quick-start guide with copy-able commands)
+  setupEyebrow: string;
+  setupTitle: string;
+  setupLead: string;
+  setupMacLabel: string;
+  setupMacSteps: Array<{ label: string; cmd?: string; note?: string }>;
+  setupPhoneLabel: string;
+  setupPhoneSteps: Array<{ label: string; note?: string }>;
+
   // security
   secEyebrow: string;
   secTitle: string;
@@ -149,6 +158,40 @@ const en: Copy = {
       title: "The policy grows with you",
       body:
         "Each manual approval is a candidate rule. The daily digest surfaces patterns: 'You allowed 7 `git push` this week — promote?' One tap to fold it into your policy.",
+    },
+  ],
+
+  setupEyebrow: "Quick start",
+  setupTitle: "Mac に daemon を入れて、iPhone で QR を読む。",
+  setupLead:
+    "セットアップは 1 回だけ。次回からは Claude が止まった瞬間にスマホが震える。",
+  setupMacLabel: "Mac — terminal",
+  setupMacSteps: [
+    {
+      label: "daemon をインストール",
+      cmd: "npm install -g @vigili/daemon @vigili/gate",
+    },
+    {
+      label: "daemon を起動 — メニューバーに QR が出る",
+      cmd: "vigili-daemon start",
+    },
+    {
+      label: "Claude Code に hook を登録",
+      cmd: "vigili-gate --install-hook",
+    },
+  ],
+  setupPhoneLabel: "iPhone",
+  setupPhoneSteps: [
+    {
+      label: "App Store から Vigili をインストール",
+      note: "Coming soon — waitlist に登録すると案内が届きます",
+    },
+    {
+      label: "Camera でメニューバーの QR を読む",
+      note: "5 秒以内でペアリング完了。アカウント不要。",
+    },
+    {
+      label: "完了。次に Claude が承認を求めたら Dynamic Island が光る",
     },
   ],
 
@@ -260,6 +303,40 @@ const ja: Copy = {
       title: "policy が育つ",
       body:
         "手で承認した記録から候補ルールを抽出。日次ダイジェストが「今週 git push を 7 回許可しています、ルール化しますか?」と提案する。1 タップで採用。",
+    },
+  ],
+
+  setupEyebrow: "クイックスタート",
+  setupTitle: "Mac に daemon を入れて、iPhone で QR を読む。",
+  setupLead:
+    "セットアップは 1 回だけ。次回からは Claude が止まった瞬間にスマホが震える。",
+  setupMacLabel: "Mac — ターミナル",
+  setupMacSteps: [
+    {
+      label: "daemon をインストール",
+      cmd: "npm install -g @vigili/daemon @vigili/gate",
+    },
+    {
+      label: "daemon を起動 — メニューバーに QR が出る",
+      cmd: "vigili-daemon start",
+    },
+    {
+      label: "Claude Code に hook を登録",
+      cmd: "vigili-gate --install-hook",
+    },
+  ],
+  setupPhoneLabel: "iPhone",
+  setupPhoneSteps: [
+    {
+      label: "App Store から Vigili をインストール",
+      note: "Coming soon — waitlist に登録すると案内が届きます",
+    },
+    {
+      label: "Camera でメニューバーの QR を読む",
+      note: "5 秒以内でペアリング完了。アカウント不要。",
+    },
+    {
+      label: "完了。次に Claude が承認を求めたら Dynamic Island が光る",
     },
   ],
 
