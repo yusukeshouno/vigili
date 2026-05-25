@@ -4,16 +4,12 @@ import Darwin  // POSIX kill(2), SIGKILL
 
 /// daemon の子プロセスを管理する。
 ///
-/// 責務:
-/// - daemon を `node .../daemon/dist/cli.js start` で起動
-/// - stdout/stderr を内部リングバッファに溜め、ファイルにも追記
-/// - 異常終了 (exit != 0) を検知して exponential backoff で再起動
-/// - アプリ quit 時に SIGTERM を送信し、3 秒以内に落ちなければ SIGKILL
+/// 起動順序:
+/// 1. daemon socket が既に alive → 外部 daemon に接続中として扱う (子プロセス不起動)
+/// 2. socket dead → 子プロセスとして daemon を起動し、以後 stdout/stderr を監視
 ///
-/// 設計上の考慮:
-/// - `Process` は非 sandbox 下なら任意の executable を起動できる
-/// - 終了通知は `terminationHandler` で取れる
-/// - stdout/stderr は `Pipe` 経由で `FileHandle.readabilityHandler` を貼って非同期に読む
+/// 外部 daemon モードでは 5 秒ごとに socket を ping し、
+/// dead になったら子プロセスモードに切り替える。
 @MainActor
 final class DaemonController: ObservableObject {
   enum Status: Equatable {
@@ -25,19 +21,17 @@ final class DaemonController: ObservableObject {
 
   @Published private(set) var status: Status = .stopped
 
-  /// 直近 1000 行のログをメモリに保持。SwiftUI から逆順表示などに使う。
   let logBuffer = DaemonLogBuffer(capacity: 1000)
 
   private var process: Process?
   private var stdoutPipe: Pipe?
   private var stderrPipe: Pipe?
 
-  /// 再起動の指数バックオフ用カウンタ。
-  /// `start()` 成功 → 0 にリセット、クラッシュごとに +1。
   private var consecutiveFailures = 0
   private var retryWorkItem: DispatchWorkItem?
+  /// 外部 daemon の死活監視タイマー。
+  private var externalPingTimer: Timer?
 
-  /// node 実行ファイル。Homebrew Apple Silicon を想定するが、UserDefaults で上書き可。
   private var nodeBinary: URL {
     if let override = UserDefaults.standard.string(forKey: "sentinel.nodeBinary") {
       return URL(fileURLWithPath: override)
@@ -45,8 +39,6 @@ final class DaemonController: ObservableObject {
     return URL(fileURLWithPath: "/opt/homebrew/bin/node")
   }
 
-  /// daemon の cli.js。
-  /// デフォルトは現リポジトリの dist。12-F でアプリバンドル内に同梱に切替。
   private var daemonCliJs: URL {
     if let override = UserDefaults.standard.string(forKey: "sentinel.daemonCliJs") {
       return URL(fileURLWithPath: override)
@@ -56,27 +48,118 @@ final class DaemonController: ObservableObject {
       .appendingPathComponent("Dropbox (個人)/sentinel/packages/daemon/dist/cli.js")
   }
 
-  /// daemon ログを永続化するファイル (~/.sentinel/daemon.log)。
   private var logFileURL: URL {
     let home = FileManager.default.homeDirectoryForCurrentUser
-    return home.appendingPathComponent(".sentinel/daemon.log")
+    return home.appendingPathComponent(".vigili/daemon.log")
+  }
+
+  /// daemon の Unix domain socket パス。
+  private static func socketPath() -> String {
+    if let env = ProcessInfo.processInfo.environment["VIGILI_HOME"]
+        ?? ProcessInfo.processInfo.environment["SENTINEL_HOME"] {
+      return "\(env)/daemon.sock"
+    }
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let vigili = "\(home)/.vigili/daemon.sock"
+    let sentinel = "\(home)/.sentinel/daemon.sock"
+    if FileManager.default.fileExists(atPath: "\(home)/.vigili") { return vigili }
+    if FileManager.default.fileExists(atPath: "\(home)/.sentinel") { return sentinel }
+    return vigili
   }
 
   // MARK: - public API
 
   func start() {
-    guard process == nil else { return }
+    guard process == nil, externalPingTimer == nil else { return }
+
+    let sockPath = Self.socketPath()
+    status = .starting
+
+    // 先に外部 daemon が生きているか確認する
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      let alive = await Self.pingUnixSocket(sockPath)
+      if alive {
+        self.logBuffer.append(line: "[Vigili.app] external daemon detected on \(sockPath)")
+        self.status = .running(pid: 0)
+        self.startExternalPing(sockPath: sockPath)
+      } else {
+        self.launchChildProcess()
+      }
+    }
+  }
+
+  func stop(timeout: TimeInterval = 3.0) {
+    retryWorkItem?.cancel()
+    retryWorkItem = nil
+    stopExternalPing()
+    guard let p = process, p.isRunning else {
+      process = nil
+      status = .stopped
+      return
+    }
+    p.terminationHandler = nil
+
+    p.terminate()
+    let deadline = Date().addingTimeInterval(timeout)
+    while p.isRunning && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    if p.isRunning {
+      kill(p.processIdentifier, SIGKILL)
+      logBuffer.append(line: "[Vigili.app] daemon did not exit in \(timeout)s, sent SIGKILL")
+    } else {
+      logBuffer.append(line: "[Vigili.app] daemon stopped cleanly")
+    }
+    process = nil
+    stdoutPipe = nil
+    stderrPipe = nil
+    status = .stopped
+  }
+
+  func restart() {
+    stop()
+    start()
+  }
+
+  // MARK: - external daemon ping
+
+  private func startExternalPing(sockPath: String) {
+    stopExternalPing()
+    let t = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+      Task { @MainActor [weak self] in
+        guard let self, self.process == nil else { return }
+        let alive = await Self.pingUnixSocket(sockPath)
+        if !alive {
+          self.logBuffer.append(line: "[Vigili.app] external daemon gone, will launch own")
+          self.stopExternalPing()
+          self.status = .stopped
+          self.scheduleRetry()
+        }
+      }
+    }
+    RunLoop.main.add(t, forMode: .common)
+    externalPingTimer = t
+  }
+
+  private func stopExternalPing() {
+    externalPingTimer?.invalidate()
+    externalPingTimer = nil
+  }
+
+  // MARK: - child process launch
+
+  private func launchChildProcess() {
     guard FileManager.default.fileExists(atPath: nodeBinary.path) else {
-      logBuffer.append(line: "[Sentinel.app] node binary not found at \(nodeBinary.path)")
+      logBuffer.append(line: "[Vigili.app] node binary not found at \(nodeBinary.path)")
       status = .stopped
       return
     }
     guard FileManager.default.fileExists(atPath: daemonCliJs.path) else {
-      logBuffer.append(line: "[Sentinel.app] daemon cli.js not found at \(daemonCliJs.path)")
+      logBuffer.append(line: "[Vigili.app] daemon cli.js not found at \(daemonCliJs.path)")
       status = .stopped
       return
     }
-    status = .starting
 
     let p = Process()
     p.executableURL = nodeBinary
@@ -94,7 +177,6 @@ final class DaemonController: ObservableObject {
 
     p.terminationHandler = { [weak self] terminated in
       let code = terminated.terminationStatus
-      // termination handler は別スレッドで呼ばれるため main に戻す
       Task { @MainActor [weak self] in
         self?.handleTermination(exitCode: code)
       }
@@ -107,64 +189,24 @@ final class DaemonController: ObservableObject {
       stderrPipe = errPipe
       consecutiveFailures = 0
       status = .running(pid: p.processIdentifier)
-      logBuffer.append(line: "[Sentinel.app] daemon started, pid=\(p.processIdentifier)")
+      logBuffer.append(line: "[Vigili.app] daemon started, pid=\(p.processIdentifier)")
     } catch {
-      logBuffer.append(line: "[Sentinel.app] daemon start failed: \(error.localizedDescription)")
+      logBuffer.append(line: "[Vigili.app] daemon start failed: \(error.localizedDescription)")
       status = .stopped
       scheduleRetry()
     }
-  }
-
-  /// 同期的に SIGTERM → 待機 → 必要なら SIGKILL。
-  /// `timeout` は SIGTERM 後に waitUntilExit を待つ秒数。
-  /// アプリ終了時の `applicationWillTerminate` から呼ばれる。
-  func stop(timeout: TimeInterval = 3.0) {
-    retryWorkItem?.cancel()
-    retryWorkItem = nil
-    guard let p = process, p.isRunning else {
-      process = nil
-      status = .stopped
-      return
-    }
-    p.terminationHandler = nil  // 自動 retry を無効化
-
-    p.terminate()
-    let deadline = Date().addingTimeInterval(timeout)
-    while p.isRunning && Date() < deadline {
-      Thread.sleep(forTimeInterval: 0.05)
-    }
-    if p.isRunning {
-      // 強制終了 (SIGKILL は Process API では直接無いので kill(2) を呼ぶ)
-      kill(p.processIdentifier, SIGKILL)
-      logBuffer.append(line: "[Sentinel.app] daemon did not exit in \(timeout)s, sent SIGKILL")
-    } else {
-      logBuffer.append(line: "[Sentinel.app] daemon stopped cleanly")
-    }
-    process = nil
-    stdoutPipe = nil
-    stderrPipe = nil
-    status = .stopped
-  }
-
-  func restart() {
-    stop()
-    start()
   }
 
   // MARK: - private
 
   private func environmentForChild() -> [String: String] {
     var env = ProcessInfo.processInfo.environment
-    // PATH に homebrew を確実に入れる。launchd と同様、最小構成。
     env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
     env["HOME"] = FileManager.default.homeDirectoryForCurrentUser.path
     return env
   }
 
   private func attachLogReader(_ handle: FileHandle, label: String) {
-    // readabilityHandler は background thread で走るが、self のプロパティは
-    // すべて @MainActor 隔離されている。MainActor に戻すコストを避けるため、
-    // 必要な URL を事前にキャプチャして静的な nonisolated 関数に流す。
     let url = logFileURL
     handle.readabilityHandler = { [weak self] fh in
       let data = fh.availableData
@@ -172,10 +214,7 @@ final class DaemonController: ObservableObject {
         fh.readabilityHandler = nil
         return
       }
-      // ファイル追記は nonisolated なのでこのまま OK
       Self.appendToLogFile(data: data, url: url)
-
-      // メモリ上のリングバッファは @MainActor。MainActor へ戻して書く。
       guard let s = String(data: data, encoding: .utf8) else { return }
       let lines = s.split(separator: "\n", omittingEmptySubsequences: false)
         .map(String.init)
@@ -188,10 +227,6 @@ final class DaemonController: ObservableObject {
     }
   }
 
-  /// ログファイル追記は actor 隔離不要。pure file I/O。
-  /// 並行書き込みの可能性はあるが O_APPEND セマンティクスで安全
-  /// (FileHandle.write は seekToEnd + write を atomic に行うわけではない点に注意
-  ///  ── 12-A 時点では stdout/stderr 二経路の同時 flush は稀なので許容)。
   private nonisolated static func appendToLogFile(data: Data, url: URL) {
     do {
       try FileManager.default.createDirectory(
@@ -204,7 +239,7 @@ final class DaemonController: ObservableObject {
       try fh.write(contentsOf: data)
       try fh.close()
     } catch {
-      NSLog("[Sentinel.app] log append failed: \(error)")
+      NSLog("[Vigili.app] log append failed: \(error)")
     }
   }
 
@@ -212,21 +247,30 @@ final class DaemonController: ObservableObject {
     process = nil
     stdoutPipe = nil
     stderrPipe = nil
-    logBuffer.append(line: "[Sentinel.app] daemon exited code=\(exitCode)")
-    if exitCode == 0 {
-      // 正常終了。stop() 経由で来たケースは status が .stopped 済み。
-      // それ以外で 0 終了することは daemon 設計上ないので一応 retry もする。
-      status = .stopped
-      scheduleRetry()
-    } else {
-      consecutiveFailures += 1
-      status = .crashed(exitCode: exitCode, willRetryAt: Date().addingTimeInterval(retryDelay()))
-      scheduleRetry()
+    logBuffer.append(line: "[Vigili.app] daemon exited code=\(exitCode)")
+
+    // 外部 daemon が生きていれば子プロセス起動は不要
+    let sockPath = Self.socketPath()
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      let alive = await Self.pingUnixSocket(sockPath)
+      if alive {
+        self.logBuffer.append(line: "[Vigili.app] external daemon is alive, switching to external mode")
+        self.status = .running(pid: 0)
+        self.startExternalPing(sockPath: sockPath)
+        return
+      }
+      if exitCode == 0 {
+        self.status = .stopped
+      } else {
+        self.consecutiveFailures += 1
+        self.status = .crashed(exitCode: exitCode, willRetryAt: Date().addingTimeInterval(self.retryDelay()))
+      }
+      self.scheduleRetry()
     }
   }
 
   private func retryDelay() -> TimeInterval {
-    // exponential backoff: 1, 2, 4, 8, 16, 30 (cap)
     let base = pow(2.0, Double(min(consecutiveFailures, 5)))
     return min(base, 30.0)
   }
@@ -240,6 +284,38 @@ final class DaemonController: ObservableObject {
     }
     retryWorkItem = work
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-    logBuffer.append(line: "[Sentinel.app] will retry daemon in \(Int(delay))s")
+    logBuffer.append(line: "[Vigili.app] will retry daemon in \(Int(delay))s")
+  }
+
+  /// Unix domain socket に接続できるか非同期で確認する。
+  private static func pingUnixSocket(_ path: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+      guard FileManager.default.fileExists(atPath: path) else {
+        continuation.resume(returning: false)
+        return
+      }
+      let sock = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+      guard sock >= 0 else { continuation.resume(returning: false); return }
+
+      var addr = sockaddr_un()
+      addr.sun_family = sa_family_t(AF_UNIX)
+      // sun_path は固定長 char[104]。path を安全にコピーする。
+      let pathBytes = Array(path.utf8)
+      let maxLen = MemoryLayout.size(ofValue: addr.sun_path) - 1
+      withUnsafeMutableBytes(of: &addr.sun_path) { buf in
+        let count = min(pathBytes.count, maxLen)
+        for i in 0..<count { buf[i] = pathBytes[i] }
+        buf[count] = 0
+      }
+      let len = socklen_t(MemoryLayout<sockaddr_un>.stride)
+
+      let result = withUnsafePointer(to: &addr) { ptr in
+        ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+          Darwin.connect(sock, sa, len)
+        }
+      }
+      Darwin.close(sock)
+      continuation.resume(returning: result == 0)
+    }
   }
 }

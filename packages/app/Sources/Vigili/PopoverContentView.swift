@@ -104,8 +104,10 @@ struct PopoverContentView: View {
         }
       }
       Spacer()
-      // daemon が crashed / stopped の場合だけ目立たない警告を出す
-      if case .crashed(_, _) = coordinator.daemonStatus {
+      // WS が繋がっていれば daemon は生きているので警告不要
+      if case .connected = coordinator.wsState {
+        // ok — no badge
+      } else if case .crashed(_, _) = coordinator.daemonStatus {
         Text("daemon down")
           .font(.mono(9))
           .foregroundStyle(Theme.red)
