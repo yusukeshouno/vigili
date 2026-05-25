@@ -1,95 +1,151 @@
 import SwiftUI
 
-/// 初回起動時のオンボーディング (Mac の WelcomeView と対称、iOS 側)。
-///
-/// Mac 側は「Vigili がインストール済み、QR を出すから読み取って」というスタンスだが、
-/// iOS 側は scanner なので「Mac で QR を出してね」と誘導する。
-///
-/// 流れ:
-///   1. 3 行で何のアプリかを伝える
-///   2. Scan QR (大きい primary CTA) → MobileSetupView の scanner に直行
-///   3. Skip (secondary) → MobileSetupView の手動入力に行く
 struct MobileWelcomeView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
-
-  /// `true` に立つと親 (RootView) が MobileSetupView をスキャナ自動 open で表示する。
   @Binding var startWithScanner: Bool
+  @State private var copiedCmd: String? = nil
 
   var body: some View {
     ZStack {
       Theme.bg.ignoresSafeArea()
-      VStack(alignment: .leading, spacing: 0) {
-        Spacer(minLength: 8)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
+          // ── header ──────────────────────────────────────────────────
+          HStack(spacing: 12) {
+            FlowerLogo(color: Theme.accent, size: 28)
+            Text("Vigili")
+              .font(.display(22, weight: .semibold))
+              .foregroundStyle(Theme.fg)
+          }
+          .padding(.bottom, 24)
 
-        // header
-        HStack(spacing: 12) {
-          FlowerLogo(color: Theme.accent, size: 28)
-          Text("Vigili")
-            .font(.display(22, weight: .semibold))
+          Text("Approve\nClaude Code\nfrom your phone.")
+            .font(.display(32, weight: .semibold))
             .foregroundStyle(Theme.fg)
-        }
-        .padding(.bottom, 32)
+            .lineSpacing(2)
+            .multilineTextAlignment(.leading)
+            .padding(.bottom, 36)
 
-        // title
-        Text("Approve\nClaude Code\nfrom your phone.")
-          .font(.display(34, weight: .semibold))
-          .foregroundStyle(Theme.fg)
-          .lineSpacing(2)
-          .multilineTextAlignment(.leading)
-          .padding(.bottom, 28)
-
-        // bullets
-        VStack(alignment: .leading, spacing: 14) {
-          bullet(
-            "Mac 側で Vigili daemon を動かしておく。menu bar のアイコンを開くと最初に QR が出ます。",
-          )
-          bullet(
-            "下の Scan ボタンでカメラを開いてその QR を読み取ると、同じネットワークなら即接続。",
-          )
-          bullet(
-            "外出先からも承認したければ、Mac で `vigili-cli pair` を一度実行して、出てきた vigili://pair... QR も同じ scanner で取り込んで。",
-          )
-        }
-        .padding(.bottom, 28)
-
-        Spacer()
-
-        // CTA
-        VStack(spacing: 12) {
-          PillButton(
-            label: "Scan setup QR",
-            icon: "qrcode.viewfinder",
-            style: .primary
-          ) {
-            startWithScanner = true
-            coordinator.dismissWelcome()
+          // ── setup steps ─────────────────────────────────────────────
+          VStack(alignment: .leading, spacing: 22) {
+            stepRow(index: "01", title: "Mac でインストール") {
+              CopyRow(cmd: "npm install -g @vigili/daemon @vigili/gate",
+                      copiedCmd: $copiedCmd, onCopy: copyToClipboard)
+            }
+            stepRow(index: "02", title: "daemon を起動 + hook を登録") {
+              CopyRow(cmd: "vigili-daemon start",
+                      copiedCmd: $copiedCmd, onCopy: copyToClipboard)
+              CopyRow(cmd: "vigili-gate --install-hook",
+                      copiedCmd: $copiedCmd, onCopy: copyToClipboard)
+            }
+            stepRow(index: "03", title: "QR をターミナルまたは menu bar で表示") {
+              CopyRow(cmd: "vigili-daemon qr",
+                      copiedCmd: $copiedCmd, onCopy: copyToClipboard)
+            }
+            stepRow(index: "04", title: "ここでスキャン") {
+              EmptyView()
+            }
           }
-          PillButton(
-            label: "Skip — enter manually",
-            icon: "arrow.right",
-            style: .ghost
-          ) {
-            startWithScanner = false
-            coordinator.dismissWelcome()
+          .padding(.bottom, 32)
+
+          // ── CTA ─────────────────────────────────────────────────────
+          VStack(spacing: 12) {
+            PillButton(
+              label: "Scan setup QR",
+              icon: "qrcode.viewfinder",
+              style: .primary
+            ) {
+              startWithScanner = true
+              coordinator.dismissWelcome()
+            }
+            PillButton(
+              label: "Skip — enter manually",
+              icon: "arrow.right",
+              style: .ghost
+            ) {
+              startWithScanner = false
+              coordinator.dismissWelcome()
+            }
           }
+          .padding(.bottom, 44)
         }
-        .padding(.bottom, 32)
+        .padding(.horizontal, 22)
+        .padding(.top, 20)
       }
-      .padding(.horizontal, 22)
     }
     .preferredColorScheme(.dark)
   }
 
-  private func bullet(_ text: String) -> some View {
-    HStack(alignment: .top, spacing: 10) {
-      Text("·")
-        .font(.system(size: 18, weight: .bold))
-        .foregroundStyle(Theme.accent)
-      Text(text)
-        .font(.system(size: 14))
-        .foregroundStyle(Theme.fgMid)
-        .lineSpacing(3)
-        .fixedSize(horizontal: false, vertical: true)
+  private func copyToClipboard(_ cmd: String) {
+    UIPasteboard.general.string = cmd
+    copiedCmd = cmd
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+      if copiedCmd == cmd { copiedCmd = nil }
     }
+  }
+
+  @ViewBuilder
+  private func stepRow<Content: View>(
+    index: String,
+    title: String,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    HStack(alignment: .top, spacing: 14) {
+      Text(index)
+        .font(.mono(11))
+        .foregroundStyle(Theme.fgDim)
+        .frame(width: 24, alignment: .trailing)
+        .padding(.top, 3)
+      VStack(alignment: .leading, spacing: 8) {
+        Text(title)
+          .font(.system(size: 14, weight: .medium))
+          .foregroundStyle(Theme.fg)
+        content()
+      }
+    }
+  }
+}
+
+// ── copy-able command row ─────────────────────────────────────────────
+
+private struct CopyRow: View {
+  let cmd: String
+  @Binding var copiedCmd: String?
+  let onCopy: (String) -> Void
+
+  private var isCopied: Bool { copiedCmd == cmd }
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Text(cmd)
+        .font(.mono(12))
+        .foregroundStyle(Theme.fg)
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+      Button { onCopy(cmd) } label: {
+        Group {
+          if isCopied {
+            Image(systemName: "checkmark")
+              .foregroundStyle(Theme.accent)
+          } else {
+            Image(systemName: "doc.on.doc")
+              .foregroundStyle(Theme.fgMid)
+          }
+        }
+        .font(.system(size: 13))
+        .frame(width: 28, height: 28)
+        .animation(.easeInOut(duration: 0.18), value: isCopied)
+      }
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 10)
+    .background(Theme.bgRise)
+    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .stroke(Theme.border, lineWidth: 1)
+    )
   }
 }
