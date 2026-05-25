@@ -5,6 +5,18 @@ import SwiftUI
 struct MobileQueueView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
   @State private var showSettings = false
+  /// id → "allow" | "deny"  — tracks cards mid-exit for color flash + direction
+  @State private var decidedIds: [String: String] = [:]
+
+  private func decide(id: String, decision: String) {
+    withAnimation(.easeOut(duration: 0.12)) {
+      decidedIds[id] = decision
+    }
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(90))
+      coordinator.decide(id: id, decision: decision)
+    }
+  }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -66,12 +78,33 @@ struct MobileQueueView: View {
           ApprovalCard(request: req)
             .opacity(idx == 0 ? 1.0 : 0.55)
             .scaleEffect(idx == 0 ? 1.0 : 0.985)
-            .transition(.scale(scale: 0.95).combined(with: .opacity))
+            .overlay {
+              if let dec = decidedIds[req.id] {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                  .fill(
+                    dec == "allow"
+                      ? Color(red: 0.15, green: 0.78, blue: 0.45).opacity(0.22)
+                      : Color(red: 0.9, green: 0.25, blue: 0.25).opacity(0.22)
+                  )
+              }
+            }
+            .transition(.asymmetric(
+              insertion: .scale(scale: 0.9, anchor: .top).combined(with: .opacity),
+              removal: .move(edge: decidedIds[req.id] == "deny" ? .leading : .trailing)
+                .combined(with: .opacity)
+            ))
+            .onDisappear {
+              let id = req.id
+              Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
+                decidedIds.removeValue(forKey: id)
+              }
+            }
         }
       }
       .padding(.horizontal, 18)
       .padding(.vertical, 14)
-      .animation(.spring(response: 0.4, dampingFraction: 0.85), value: coordinator.pending.count)
+      .animation(.spring(response: 0.32, dampingFraction: 0.75), value: coordinator.pending.count)
     }
   }
 
@@ -82,13 +115,13 @@ struct MobileQueueView: View {
         label: "Deny",
         icon: "xmark",
         style: .ghost,
-        action: { if let id = topCard?.id { coordinator.decide(id: id, decision: "deny") } }
+        action: { if let id = topCard?.id { decide(id: id, decision: "deny") } }
       )
       PillButton(
         label: "Allow",
         icon: "checkmark",
         style: .primary,
-        action: { if let id = topCard?.id { coordinator.decide(id: id, decision: "allow") } }
+        action: { if let id = topCard?.id { decide(id: id, decision: "allow") } }
       )
     }
     .padding(.horizontal, 18)
