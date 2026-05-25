@@ -5,6 +5,8 @@
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
+    "vigili-daemon": "./dist/cli.js",
+    "vigili-cli": "./dist/sentinel-cli.js",
     "sentinel-daemon": "./dist/cli.js",
     "sentinel-cli": "./dist/sentinel-cli.js"
   },

@@ -4,6 +4,7 @@ import { createConnection } from "node:net";
 import { startDaemon } from "./daemon.js";
 import { paths } from "./paths.js";
 import { PolicyLoadError } from "./policy/loader.js";
+import { runSetupQr } from "./setup-qr.js";
 
 async function main(): Promise<number> {
   const [, , cmd, ...rest] = process.argv;
@@ -14,6 +15,8 @@ async function main(): Promise<number> {
       return stop();
     case "status":
       return status();
+    case "qr":
+      return runSetupQr(rest);
     case "version":
     case "--version":
     case "-v": {
@@ -35,19 +38,22 @@ async function main(): Promise<number> {
 }
 
 function printHelp(): void {
-  console.log(`Usage: sentinel-daemon <command>
+  console.log(`Usage: vigili-daemon <command>
 
 Commands:
   start              Run the daemon in the foreground (use launchd for daemonization).
   stop               Stop the running daemon (via PID file).
   status             Show whether the daemon is running.
+  qr                 Show pairing QR for the Vigili iOS app.
+      --url <url>    Override daemon URL (default: auto-detect LAN IP / Tailscale)
+      --plain        Print only the vigili:// URL (no QR)
   version            Print version.
 
 Files:
-  ~/.sentinel/policy.yaml   Policy rules (validated on start).
-  ~/.sentinel/daemon.sock   Unix socket (gate connects here).
-  ~/.sentinel/queue.db      SQLite audit log.
-  ~/.sentinel/daemon.pid    PID of the running daemon.
+  ~/.vigili/policy.yaml   Policy rules (validated on start).
+  ~/.vigili/daemon.sock   Unix socket (gate connects here).
+  ~/.vigili/queue.db      SQLite audit log.
+  ~/.vigili/daemon.pid    PID of the running daemon.
 `);
 }
 

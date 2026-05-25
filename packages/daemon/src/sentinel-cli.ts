@@ -6,6 +6,7 @@ import { computeStats, type StatsBuckets } from "./db/stats.js";
 import { openStore } from "./db/store.js";
 import { paths } from "./paths.js";
 import { pair as pairCommand } from "./pair.js";
+import { runSetupQr, detectPublicHost } from "./setup-qr.js";
 import { type AdminResponse, AdminResponseSchema } from "./server/admin.js";
 
 async function main(): Promise<number> {
@@ -26,7 +27,7 @@ async function main(): Promise<number> {
     case "digest":
       return digest(rest);
     case "setup-qr":
-      return setupQr(rest);
+      return runSetupQr(rest);
     case "setup-link":
       return setupLink(rest);
     case "pair":
@@ -369,79 +370,9 @@ async function resolve(decision: FinalDecision, args: string[]): Promise<number>
 }
 
 /**
- * iPhone アプリの Setup を QR スキャン 1 回で済ませる用。
+ * `vigili://setup?u=...&t=...` の URL を組み立てて出力する。
  *
- * デフォルトは `sentinel://setup?u=...&t=...` の URL を QR にする。
- * これだと iPhone 標準のカメラ.app からも認識して「Sentinel で開く」が出るので、
- * アプリ内のスキャナ経由でも、標準カメラ経由でもどちらも使える。
- *
- * --json で `{"u":..., "t":...}` の JSON ペイロード (旧形式) を埋める。
- *
- * QR のセル数を抑えるため短いキー (u, t) を使う。
- */
-async function setupQr(args: string[]): Promise<number> {
-  const urlIdx = args.indexOf("--url");
-  const explicitUrl = urlIdx >= 0 ? args[urlIdx + 1] : undefined;
-  const plain = args.includes("--plain");
-  const useJson = args.includes("--json");
-
-  const p = paths();
-
-  // token を読む
-  let token: string;
-  try {
-    const { readFileSync } = await import("node:fs");
-    token = readFileSync(p.token, "utf-8").trim();
-  } catch (err) {
-    console.error(`[vigili-cli] token を読めません: ${(err as Error).message}`);
-    console.error(`(daemon を一度起動すると ${p.token} が生成されます)`);
-    return 1;
-  }
-
-  // URL を取得 (--url か Tailscale 自動検出)
-  let url: string;
-  if (explicitUrl) {
-    url = explicitUrl;
-  } else {
-    const detected = await detectPublicHost();
-    if (!detected) {
-      console.error(
-        "[vigili-cli] LAN IP / Tailscale FQDN を自動検出できません。--url で明示してください。",
-      );
-      return 1;
-    }
-    url = detected;
-  }
-
-  const payload = useJson
-    ? JSON.stringify({ u: url, t: token })
-    : `sentinel://setup?u=${encodeURIComponent(url)}&t=${encodeURIComponent(token)}`;
-
-  if (plain) {
-    console.log(payload);
-    return 0;
-  }
-
-  console.log("");
-  console.log("  Scan this QR with iPhone Camera or Sentinel app:");
-  console.log("");
-  const mod = await import("qrcode-terminal");
-  const qr = (mod.default ?? mod) as { generate: (text: string, opts?: { small?: boolean }, cb?: (output: string) => void) => void };
-  qr.generate(payload, { small: true }, (output) => {
-    console.log(output);
-  });
-  console.log("");
-  console.log(`  URL:    ${url}`);
-  console.log(`  Token:  ${token.slice(0, 8)}…${token.slice(-4)} (${token.length} chars)`);
-  console.log(`  Format: ${useJson ? "JSON payload" : "sentinel:// URL (works with iPhone Camera.app too)"}`);
-  console.log("");
-  return 0;
-}
-
-/**
- * `sentinel://setup?u=...&t=...` の URL を組み立てて出力する。
- *
- * AirDrop / iMessage で iPhone に送り、タップすると Sentinel iOS app が起動して
+ * AirDrop / iMessage で iPhone に送り、タップすると Vigili iOS app が起動して
  * 設定 + 接続が一気に進む (Setup 画面のスキップ)。
  *
  * --copy で pbcopy 経由でクリップボードに入れる (Universal Clipboard で iPhone でもペースト可)。
@@ -501,86 +432,6 @@ async function pbcopy(text: string): Promise<void> {
     proc.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`pbcopy exit ${code}`))));
     proc.stdin.write(text);
     proc.stdin.end();
-  });
-}
-
-/**
- * 公開ホスト名 (iPhone から見えるホスト) を決定する。ポート込みで返す。
- *
- * 優先順位:
- *  1. en0 の LAN IP (`192.168.x.x:7878`) — 同 LAN にいる前提なら最速・確実
- *  2. Tailscale Self.DNSName (TLS 終端で :443 想定なのでポートなし) — 外出先用
- *
- * どちらも取れなければ null。
- */
-async function detectPublicHost(): Promise<string | null> {
-  const lan = await detectLanIp();
-  if (lan) return `${lan}:7878`;
-  return await detectTailscaleHost();
-}
-
-/**
- * `os.networkInterfaces()` から最初に見つかった IPv4 LAN IP を返す。
- * loopback / link-local は除外。
- */
-async function detectLanIp(): Promise<string | null> {
-  const { networkInterfaces } = await import("node:os");
-  const ifaces = networkInterfaces();
-  // en0 を最優先
-  const order = ["en0", "en1", "en2", "en3"];
-  const keys = Object.keys(ifaces).sort((a, b) => {
-    const ai = order.indexOf(a);
-    const bi = order.indexOf(b);
-    if (ai < 0 && bi < 0) return a.localeCompare(b);
-    if (ai < 0) return 1;
-    if (bi < 0) return -1;
-    return ai - bi;
-  });
-  for (const name of keys) {
-    const addrs = ifaces[name];
-    if (!addrs) continue;
-    for (const a of addrs) {
-      if (a.family !== "IPv4" || a.internal) continue;
-      if (a.address.startsWith("169.254.")) continue; // APIPA
-      return a.address;
-    }
-  }
-  return null;
-}
-
-/**
- * `tailscale status --json` を呼んで Self.DNSName を取る。
- * Tailscale が無い / 未ログインなら null。
- */
-async function detectTailscaleHost(): Promise<string | null> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve) => {
-    // tailscale バイナリの場所は homebrew のどちらか
-    const candidates = ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale", "tailscale"];
-    let idx = 0;
-    const tryNext = (): void => {
-      if (idx >= candidates.length) {
-        resolve(null);
-        return;
-      }
-      const bin = candidates[idx++] as string;
-      const child = spawn(bin, ["status", "--json"], { stdio: ["ignore", "pipe", "pipe"] });
-      let out = "";
-      child.stdout.on("data", (d: Buffer) => { out += d.toString("utf-8"); });
-      child.on("error", () => tryNext());
-      child.on("exit", (code) => {
-        if (code !== 0) { tryNext(); return; }
-        try {
-          const parsed = JSON.parse(out) as { Self?: { DNSName?: string } };
-          const dns = parsed.Self?.DNSName ?? "";
-          const cleaned = dns.replace(/\.$/u, "");
-          resolve(cleaned.length > 0 ? cleaned : null);
-        } catch {
-          resolve(null);
-        }
-      });
-    };
-    tryNext();
   });
 }
 
