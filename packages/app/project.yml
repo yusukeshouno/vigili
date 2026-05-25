@@ -49,6 +49,7 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
   generateEmptyDirectories: false
+  postGenCommand: find Vigili.xcodeproj/xcshareddata/xcschemes -name "*.xcscheme" -exec sed -i '' 's/allowLocationSimulation = "YES">/allowLocationSimulation = "YES"\n      consoleMode = "0">/g' {} \;
 
 settings:
   base:
