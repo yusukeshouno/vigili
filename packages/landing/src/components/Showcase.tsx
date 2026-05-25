@@ -1,4 +1,3 @@
-import Image from "next/image";
 import type { Copy } from "@/lib/copy";
 
 /**
@@ -50,11 +49,13 @@ export function Showcase({ copy }: { copy: Copy }) {
           />
         </ol>
 
-        {/* phone */}
+        {/* phone — autoplay looping video of cards appearing + being approved */}
         <figure className="flex justify-center md:col-span-5 md:justify-end">
           <PhoneFrame
-            src="/screenshots/ios-queue.png"
-            alt="Vigili iOS app showing pending approval cards with Allow and Deny buttons"
+            poster="/screenshots/ios-queue.png"
+            mp4="/screenshots/queue-loop.mp4"
+            webm="/screenshots/queue-loop.webm"
+            alt="Vigili iOS app: 3 pending cards appearing then being approved"
           />
         </figure>
       </div>
@@ -94,9 +95,21 @@ function Step({
 }
 
 /**
- * iPhone デバイス枠 (黒 bezel + drop shadow)。
+ * iPhone デバイス枠 (黒 bezel + drop shadow) に動画を入れる。
+ * autoplay + muted + loop + playsInline で iOS Safari でも自動再生される。
+ * poster で video の load 前 / 初期表示に静止画を見せる。
  */
-function PhoneFrame({ src, alt }: { src: string; alt: string }) {
+function PhoneFrame({
+  poster,
+  mp4,
+  webm,
+  alt,
+}: {
+  poster: string;
+  mp4: string;
+  webm: string;
+  alt: string;
+}) {
   return (
     <div
       className="relative"
@@ -115,14 +128,25 @@ function PhoneFrame({ src, alt }: { src: string; alt: string }) {
         className="relative h-full w-full overflow-hidden bg-(--color-bg-rise)"
         style={{ borderRadius: 33 }}
       >
-        <Image
-          src={src}
-          alt={alt}
-          fill
-          sizes="280px"
-          style={{ objectFit: "cover" }}
-          priority
-        />
+        <video
+          poster={poster}
+          aria-label={alt}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        >
+          <source src={webm} type="video/webm" />
+          <source src={mp4} type="video/mp4" />
+        </video>
       </div>
     </div>
   );
