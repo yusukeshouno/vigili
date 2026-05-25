@@ -62,7 +62,7 @@ export interface Copy {
   setupMacLabel: string;
   setupMacSteps: Array<{ label: string; cmd?: string; note?: string }>;
   setupPhoneLabel: string;
-  setupPhoneSteps: Array<{ label: string; note?: string }>;
+  setupPhoneSteps: Array<{ label: string; cmd?: string; note?: string }>;
 
   // security
   secEyebrow: string;
@@ -183,15 +183,16 @@ const en: Copy = {
   setupPhoneLabel: "iPhone",
   setupPhoneSteps: [
     {
-      label: "App Store から Vigili をインストール",
-      note: "Coming soon — waitlist に登録すると案内が届きます",
+      label: "Install Vigili from the App Store",
+      note: "Coming soon — join the waitlist to be notified.",
     },
     {
-      label: "Camera でメニューバーの QR を読む",
-      note: "5 秒以内でペアリング完了。アカウント不要。",
+      label: "Show the pairing QR in the menu bar (or terminal)",
+      cmd: "vigili-daemon qr",
+      note: "Paired in under five seconds. No account needed.",
     },
     {
-      label: "完了。次に Claude が承認を求めたら Dynamic Island が光る",
+      label: "Scan with iPhone Camera. Done — Dynamic Island lights up on the next approval.",
     },
   ],
 
@@ -332,11 +333,12 @@ const ja: Copy = {
       note: "Coming soon — waitlist に登録すると案内が届きます",
     },
     {
-      label: "Camera でメニューバーの QR を読む",
+      label: "メニューバー (またはターミナル) でペアリング QR を表示",
+      cmd: "vigili-daemon qr",
       note: "5 秒以内でペアリング完了。アカウント不要。",
     },
     {
-      label: "完了。次に Claude が承認を求めたら Dynamic Island が光る",
+      label: "iPhone の Camera で読む。完了 — 次の承認で Dynamic Island が光る",
     },
   ],
 

@@ -44,12 +44,7 @@ export function SetupSection({ copy }: { copy: Copy }) {
                 >
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <div>
-                  <p className="text-[14px] leading-[1.55] text-(--color-fg)">{step.label}</p>
-                  {step.note && (
-                    <p className="mt-1 text-[12px] leading-[1.5] text-(--color-fg-dim)">{step.note}</p>
-                  )}
-                </div>
+                <SetupStep step={step} />
               </li>
             ))}
           </ol>
@@ -76,7 +71,7 @@ function SetupStep({ step }: { step: Step }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-[13px] text-(--color-fg-mid)">{step.label}</p>
+      <p className="text-[14px] leading-[1.55] text-(--color-fg)">{step.label}</p>
 
       {step.cmd && (
         <div
