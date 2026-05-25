@@ -6,6 +6,40 @@
 # 設定変更はこの project.yml だけを触る。
 
 name: Vigili
+
+schemes:
+  Vigili:
+    build:
+      targets:
+        Vigili: all
+        VigiliWidget: [build]
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+  VigiliMobile:
+    build:
+      targets:
+        VigiliMobile: all
+        VigiliActivity: [build]
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
 options:
   bundleIdPrefix: io.vigili
   createIntermediateGroups: true
