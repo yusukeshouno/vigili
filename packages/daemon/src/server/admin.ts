@@ -1,4 +1,9 @@
-import { ApprovalRequestSchema, FinalDecisionSchema, PolicyRuleSchema } from "@vigili/shared";
+import {
+  ApprovalRequestSchema,
+  FinalDecisionSchema,
+  PolicyRuleSchema,
+  StatsBucketsSchema,
+} from "@vigili/shared";
 import { z } from "zod";
 
 /**
@@ -78,32 +83,10 @@ export const AdminRequestSchema = z.discriminatedUnion("action", [
 export type AdminRequest = z.infer<typeof AdminRequestSchema>;
 
 /**
- * stats レスポンスは `StatsBuckets` の構造をそのまま使う。
- * Swift / TypeScript で同形を扱えるよう、zod スキーマで明示する。
+ * stats レスポンスは shared の `StatsBucketsSchema` をそのまま使う。
+ * WS の `stats` メッセージと同じ正準スキーマを共有する (重複定義を避ける)。
  */
-const StatsBucketsZ = z.object({
-  total: z.number().int(),
-  by_decision: z.object({
-    allow: z.number().int(),
-    deny: z.number().int(),
-    cancelled: z.number().int(),
-    pending: z.number().int(),
-  }),
-  by_source: z.record(z.number().int()),
-  by_tool: z.record(z.number().int()),
-  by_tag: z.record(z.number().int()),
-  human_response_ms: z.object({
-    count: z.number().int(),
-    mean: z.number().nullable(),
-    p50: z.number().nullable(),
-    p95: z.number().nullable(),
-    max: z.number().nullable(),
-  }),
-  range: z.object({
-    from: z.number().int(),
-    to: z.number().int(),
-  }),
-});
+const StatsBucketsZ = StatsBucketsSchema;
 
 /** 自動判定された decisions の 1 件。Mac app / CLI が受け取る。 */
 const PolicyHistoryItemZ = z.object({

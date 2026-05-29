@@ -110,6 +110,51 @@ describe("WS server", () => {
     c.close();
   });
 
+  it("sends stats right after snapshot when currentStats is provided", async () => {
+    const statsPort = await getFreePort();
+    const statsServer = await startWsServer({
+      port: statsPort,
+      host: "127.0.0.1",
+      token: TOKEN,
+      queue: createPendingQueue(),
+      log: () => undefined,
+      currentStats: () => ({
+        total: 3,
+        by_decision: { allow: 2, deny: 1, cancelled: 0, pending: 0 },
+        by_source: { "auto-rule": 2, "human-pwa": 0 },
+        by_tool: { Bash: 3 },
+        by_tag: { "(untagged)": 3 },
+        human_response_ms: { count: 0, mean: null, p50: null, p95: null, max: null },
+        range: { from: 0, to: 1 },
+      }),
+    });
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${statsPort}/ws?token=${encodeURIComponent(TOKEN)}`);
+      const got: WsServerMessage[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error("timeout")), 1500);
+        ws.on("message", (raw: Buffer) => {
+          got.push(JSON.parse(raw.toString("utf-8")) as WsServerMessage);
+          if (got.length >= 2) {
+            clearTimeout(t);
+            resolve();
+          }
+        });
+        ws.on("error", reject);
+      });
+      ws.close();
+      expect(got[0]?.type).toBe("snapshot");
+      const stats = got[1];
+      expect(stats?.type).toBe("stats");
+      if (stats?.type === "stats") {
+        expect(stats.stats.by_decision.allow).toBe(2);
+        expect(stats.stats.by_source["auto-rule"]).toBe(2);
+      }
+    } finally {
+      await statsServer.close();
+    }
+  });
+
   it("broadcasts pending on new ask", async () => {
     const c = await connect();
     await c.next(); // snapshot

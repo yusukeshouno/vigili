@@ -70,7 +70,7 @@ const EMPTY_SOURCES: Record<DecisionSource, number> = {
 };
 
 interface Row {
-  decision: "allow" | "deny" | null;
+  decision: "allow" | "deny" | "expired" | null;
   decided_by: string | null;
   created_at: number;
   resolved_at: number | null;
@@ -103,9 +103,10 @@ export function computeStats(db: Database.Database, fromMs: number, toMs: number
     const src = classifyDecisionSource(r.decided_by);
 
     // 外部要因による cancellation は deny にカウントしない (Claude Code dialog 等)
+    // expired (TTL sweep の回収) は fail-safe deny 相当として deny に数える。
     if (src === "cancelled") stats.by_decision.cancelled += 1;
     else if (r.decision === "allow") stats.by_decision.allow += 1;
-    else if (r.decision === "deny") stats.by_decision.deny += 1;
+    else if (r.decision === "deny" || r.decision === "expired") stats.by_decision.deny += 1;
     else stats.by_decision.pending += 1;
 
     stats.by_source[src] += 1;

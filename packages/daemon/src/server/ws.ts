@@ -1,6 +1,7 @@
 import fastifyWebsocket from "@fastify/websocket";
 import {
   type Message,
+  type StatsBuckets,
   type WsClientMessage,
   WsClientMessageSchema,
   type WsServerMessage,
@@ -25,6 +26,12 @@ export interface WsServerOptions {
   onSendMessage?: (session_id: string, body: string) => Message | undefined;
   /** snapshot に同梱する recent messages を取得するコールバック (省略時は空配列)。 */
   recentMessages?: () => Message[];
+  /**
+   * 接続直後に送る観測可能性サマリーを計算するコールバック (省略時は送らない)。
+   * iOS の待機画面サマリーカードがこれを表示する。resolved/sweep のたびに
+   * daemon 側から `broadcast({ type: "stats", ... })` で更新を push する。
+   */
+  currentStats?: () => StatsBuckets;
   log?: (msg: string) => void;
   /** Web Push のエンドポイントも同じ Fastify インスタンスに乗せる場合に渡す。 */
   push?: { vapid: VapidKeys; store: SubscriptionStore };
@@ -106,6 +113,11 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
           : { type: "snapshot", pending: options.queue.list() },
       );
 
+      // 続けて観測可能性サマリー (今日の自動承認件数等) を送る。
+      // pending が空の待機画面では「0 waiting」しか出せないので、iOS はこれを表示する。
+      const stats = options.currentStats?.();
+      if (stats) wrap.send({ type: "stats", stats });
+
       socket.on("message", (raw: Buffer) => {
         let parsed: unknown;
         try {
@@ -143,7 +155,7 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
   });
 
   const host = options.host ?? "127.0.0.1";
-  await app.listen({ port: options.port, host });
+  await listenWithRetry(app, options.port, host, log);
   log(`[vigili-ws] listening on ws://${host}:${options.port}/ws`);
 
   // Bonjour で同 LAN にブロードキャスト (iPhone 等が NWBrowser で見つける)。
@@ -200,6 +212,41 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
     },
     broadcast,
   };
+}
+
+/**
+ * `app.listen` を EADDRINUSE に対して数回リトライする。
+ *
+ * launchd で daemon を再起動すると、旧プロセスが TCP ポートを解放しきる前に
+ * 新プロセスが bind を試みて EADDRINUSE で即死し、それを launchd が更に再起動 …
+ * という tight loop に陥ることがある。このループ中は relay agent 接続が flap し、
+ * iOS のリモート (relay) 経路が繋がらなくなる。数百 ms 待ってリトライすれば、
+ * 旧プロセスのポート解放を待ってから bind できる。
+ */
+async function listenWithRetry(
+  app: FastifyInstance,
+  port: number,
+  host: string,
+  log: (msg: string) => void,
+  attempts = 8,
+  delayMs = 500,
+): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      await app.listen({ port, host });
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EADDRINUSE" && i < attempts - 1) {
+        log(
+          `[vigili-ws] port ${port} busy (EADDRINUSE), retry ${i + 1}/${attempts} in ${delayMs}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 function handleClientMessage(

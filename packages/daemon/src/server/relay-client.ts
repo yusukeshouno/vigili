@@ -14,11 +14,7 @@
  * 再接続: 指数バックオフ + max cap (デフォルト 30s)。
  */
 
-import {
-  type WsClientMessage,
-  WsClientMessageSchema,
-  type WsServerMessage,
-} from "@vigili/shared";
+import { type WsClientMessage, WsClientMessageSchema, type WsServerMessage } from "@vigili/shared";
 import WebSocket, { type RawData } from "ws";
 
 export interface RelayClientOptions {
@@ -49,6 +45,9 @@ export interface RelayClient {
   isConnected(): boolean;
 }
 
+/** keepalive: この間隔で ping を撃ち、次の interval までに pong が来なければ half-open とみなす。 */
+const PING_INTERVAL_MS = 20_000;
+
 export function createRelayClient(options: RelayClientOptions): RelayClient {
   const { url, pairingId, agentKey, reconnectMaxSeconds, onClientMessage, onOpen, log } = options;
   let ws: WebSocket | null = null;
@@ -57,6 +56,46 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
   let reconnectTimer: NodeJS.Timeout | null = null;
   /** WS 接続できていない間、相手に届かない send を捨てるか溜めるか — まず捨てる方針。 */
   let connected = false;
+  /** keepalive 用の周期 ping タイマと「前回 ping への pong 待ち」フラグ。 */
+  let pingTimer: NodeJS.Timeout | null = null;
+  let awaitingPong = false;
+
+  function stopPing(): void {
+    if (pingTimer) {
+      clearInterval(pingTimer);
+      pingTimer = null;
+    }
+    awaitingPong = false;
+  }
+
+  /**
+   * 周期 ping で half-open 接続を検知する。TCP は片側が消えても無音のままになり得る
+   * (laptop sleep / NAT mapping 失効 / proxy idle kill)。pong が前回 interval までに
+   * 返らなければ terminate し、'close' → scheduleReconnect に乗せて貼り直す。
+   */
+  function startPing(): void {
+    stopPing();
+    awaitingPong = false;
+    pingTimer = setInterval(() => {
+      const sock = ws;
+      if (!sock || sock.readyState !== WebSocket.OPEN) return;
+      if (awaitingPong) {
+        log("[vigili-relay] pong 未達 — half-open とみなし terminate");
+        try {
+          sock.terminate();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      awaitingPong = true;
+      try {
+        sock.ping();
+      } catch (err) {
+        log(`[vigili-relay] ping failed: ${(err as Error).message}`);
+      }
+    }, PING_INTERVAL_MS);
+  }
 
   const endpoint = `${url.replace(/\/$/, "")}/v1/agents/${encodeURIComponent(
     pairingId,
@@ -77,12 +116,18 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
       connected = true;
       retry = 0;
       log("[vigili-relay] connected");
+      startPing();
       // 呼び出し側が snapshot 等を flush できるよう通知
       try {
         onOpen?.();
       } catch (err) {
         log(`[vigili-relay] onOpen handler threw: ${(err as Error).message}`);
       }
+    });
+
+    // 相手 (hub) が pong を返したら接続は生きている。次の interval の terminate を防ぐ。
+    ws.on("pong", () => {
+      awaitingPong = false;
     });
 
     ws.on("message", (raw: RawData) => {
@@ -114,6 +159,7 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
 
     ws.on("close", (code, reason) => {
       connected = false;
+      stopPing();
       const detail = `code=${code}${reason.length > 0 ? ` reason=${reason.toString("utf-8")}` : ""}`;
       log(`[vigili-relay] closed (${detail})`);
       // 401 (auth) / 404 (no pairing) は再接続しても直らない。短期だけ retry してから諦める。
@@ -150,6 +196,7 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
     },
     async stop() {
       closed = true;
+      stopPing();
       if (reconnectTimer) {
         clearTimeout(reconnectTimer);
         reconnectTimer = null;

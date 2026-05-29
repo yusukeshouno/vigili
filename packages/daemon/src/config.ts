@@ -14,6 +14,10 @@ export const ConfigSchema = z
         // LAN 上の他デバイス (iPhone 等) からも繋げるよう 0.0.0.0 default。
         // 認証は Bearer token (Unix socket は別ルートで gate 専用なので保護される)。
         ws_host: z.string().default("0.0.0.0"),
+        // decision が付かないまま残った pending を回収するまでの TTL (秒)。
+        // gate の ask タイムアウト (300s) より少し長くして、正常応答中の
+        // リクエストを誤って expired にしないようにする。
+        pending_ttl_seconds: z.number().int().positive().default(360),
       })
       .default({}),
     ntfy: z

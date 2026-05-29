@@ -1,6 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { type ApprovalRequest, ApprovalRequestSchema, type FinalDecision } from "@vigili/shared";
+import {
+  type ApprovalRequest,
+  ApprovalRequestSchema,
+  type FinalDecision,
+  type StoredDecision,
+} from "@vigili/shared";
 import Database from "better-sqlite3";
 
 const MIGRATIONS = [
@@ -32,7 +37,7 @@ interface Row {
   tool_name: string;
   tool_input: string;
   cwd: string;
-  decision: FinalDecision | null;
+  decision: StoredDecision | null;
   decided_by: string | null;
   reason: string | null;
 }
@@ -55,12 +60,25 @@ export interface ResolveRequestInput {
   reason: string | null;
 }
 
+export interface SweepExpiredInput {
+  /** 現在時刻 (epoch ms)。resolved_at に入る。 */
+  now: number;
+  /** created_at がこの ms より古い pending を expired にする TTL。 */
+  ttlMs: number;
+}
+
 export interface RequestStore {
   insert(input: InsertRequestInput): void;
   resolve(input: ResolveRequestInput): void;
   get(id: string): ApprovalRequest | null;
   listPending(): ApprovalRequest[];
   listRecent(limit: number): ApprovalRequest[];
+  /**
+   * TTL を超えても decision が付かなかった pending を expired に確定する。
+   * (gate が諦めて切断したのに DB に残った zombie の回収。)
+   * @returns expired にした行 (確定前のスナップショット)。
+   */
+  sweepExpired(input: SweepExpiredInput): ApprovalRequest[];
   close(): void;
   /** stats / archive など低レベル query 用に raw DB と path を公開する。 */
   raw(): { db: Database.Database; path: string };
@@ -91,6 +109,14 @@ export function openStore(dbPath: string): RequestStore {
   );
   const recentStmt = db.prepare<[number]>(
     "SELECT * FROM approval_requests ORDER BY created_at DESC LIMIT ?",
+  );
+  const sweepSelectStmt = db.prepare<[number]>(
+    "SELECT * FROM approval_requests WHERE decision IS NULL AND created_at < ?",
+  );
+  const sweepUpdateStmt = db.prepare<[number, number]>(
+    `UPDATE approval_requests
+        SET decision = 'expired', decided_by = 'timeout', resolved_at = ?, reason = 'gate timed out'
+      WHERE decision IS NULL AND created_at < ?`,
   );
 
   const rowToRequest = (row: Row): ApprovalRequest => {
@@ -133,6 +159,15 @@ export function openStore(dbPath: string): RequestStore {
     },
     listRecent(limit) {
       return (recentStmt.all(limit) as Row[]).map(rowToRequest);
+    },
+    sweepExpired({ now, ttlMs }) {
+      const cutoff = now - ttlMs;
+      // 確定前に対象行を取得しておく (呼び出し側が in-memory queue / snapshot の
+      // 突き合わせに id を使う)。SELECT 時点では decision IS NULL なので parse は通る。
+      const rows = sweepSelectStmt.all(cutoff) as Row[];
+      if (rows.length === 0) return [];
+      sweepUpdateStmt.run(now, cutoff);
+      return rows.map(rowToRequest);
     },
     close() {
       db.close();

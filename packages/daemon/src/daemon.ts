@@ -13,8 +13,8 @@ import {
 } from "@vigili/shared";
 import { type SentinelConfig, loadConfigFile } from "./config.js";
 import { type MessageStore, createMessageStore } from "./db/messages.js";
-import { type RequestStore, openStore } from "./db/store.js";
 import { computeStats, pruneOldRequests } from "./db/stats.js";
+import { type RequestStore, openStore } from "./db/store.js";
 import { createNtfyNotifier } from "./notify/ntfy.js";
 import { NULL_NOTIFIER, type Notifier, multiNotifier } from "./notify/types.js";
 import {
@@ -34,6 +34,7 @@ import { AdminRequestSchema, type AdminResponse } from "./server/admin.js";
 import { type RelayClient, createRelayClient } from "./server/relay-client.js";
 import { type ConnContext, type SocketServer, startSocketServer } from "./server/socket.js";
 import { type RunningWsServer, startWsServer } from "./server/ws.js";
+import { sweepStalePending } from "./sweep.js";
 import { loadOrCreateToken } from "./token.js";
 
 export interface DaemonOptions {
@@ -55,6 +56,8 @@ export interface DaemonOptions {
   wsPort?: number;
   /** WS サーバの host。デフォルト config.daemon.ws_host (127.0.0.1)。 */
   wsHost?: string;
+  /** pending TTL sweep の TTL (ms)。省略時は config.daemon.pending_ttl_seconds。テスト用。 */
+  pendingTtlMs?: number;
 }
 
 export interface RunningDaemon {
@@ -90,6 +93,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const queue = createPendingQueue();
   const token = loadOrCreateToken(p.token);
 
+  // 待機画面サマリー用の「今日 (ローカル 00:00 〜 現在 +60s)」集計。
+  // WS の snapshot 直後と、resolved / sweep のたびにクライアントへ push する。
+  const todayStats = (): import("@vigili/shared").StatsBuckets => {
+    const now = Date.now();
+    return computeStats(store.raw().db, startOfTodayLocalMs(now), now + 60_000);
+  };
+
   // Web Push: 有効なら VAPID 鍵 + subscription store を用意する。
   // notifier はその後で組み立てる (ntfy と並列に走らせる場合あり)。
   let pushVapid: VapidKeys | null = null;
@@ -97,14 +107,10 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   if (config.push.enabled) {
     pushVapid = loadOrCreateVapidKeys(p.vapid, config.push.subject);
     pushStore = openSubscriptionStore(p.pushSubs);
-    log(
-      `[vigili-daemon] web-push ready (subs=${pushStore.size()}, vapid=${p.vapid})`,
-    );
+    log(`[vigili-daemon] web-push ready (subs=${pushStore.size()}, vapid=${p.vapid})`);
   }
 
   const notifier = resolveNotifier(options, config, log, pushVapid, pushStore);
-
-  await writeFile(p.pid, String(process.pid), { mode: 0o600 });
 
   const sessionTags = options.sessionTags ?? config.session_tags;
 
@@ -167,9 +173,16 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         });
       },
       recentMessages: () => ctx.messageStore.listRecent(50),
+      currentStats: todayStats,
       ...(pushVapid && pushStore ? { push: { vapid: pushVapid, store: pushStore } } : {}),
     });
   }
+
+  // WS リスナーが bind できた後にだけ PID file を書く。bind 前に書くと、
+  // EADDRINUSE で落ちた瞬間に「ポートを掴んでいる生存プロセスが別に居るのに
+  // pidfile は死んだ PID を指す」状態になり、次の起動で stale 判定 → 再 bind 失敗
+  // という launchd 再起動ループ (relay agent が flap し iOS リモートが切れる) を誘発する。
+  await writeFile(p.pid, String(process.pid), { mode: 0o600 });
 
   // --- Vigili Cloud Relay への outbound WSS (Phase 14-B) ---
   let relay: RelayClient | null = null;
@@ -192,6 +205,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         pending: queue.list(),
         messages: messageStore.listRecent(50),
       });
+      relayRef.send({ type: "stats", stats: todayStats() });
     };
     relay.start();
     log(`[vigili-daemon] relay outbound enabled (pairing=${config.relay.pairing_id})`);
@@ -203,6 +217,10 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     relay?.send(msg);
   };
 
+  // 決着のたびに今日の集計を作り直して push する (待機画面サマリーを最新に保つ)。
+  // allow/deny カウントが動くのは resolve の瞬間なので、ここが主要な更新点。
+  queue.onResolved(() => broadcastAll({ type: "stats", stats: todayStats() }));
+
   // queue のイベントを LAN WS は内部 listener で捕まえてるが、relay の方には別途流す必要がある。
   // 二重送信を避けるため LAN WS の onPending/onResolved 経路を残しつつ、relay には
   // 独自に subscribe する。
@@ -211,10 +229,58 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     queue.onResolved((id, decision) => relay?.send({ type: "resolved", id, decision }));
   }
 
+  // --- LAN 外 (relay 経路) で承認が飛んでこない問題の対策 ---
+  // LAN WS は client 接続のたびに snapshot を送れるが、relay の hub は client 接続を
+  // agent (= この daemon) に通知しない。実運用では「pending 発生 → プッシュ通知 →
+  // ユーザーがアプリを開いて relay 接続」という順序なので、接続時点で既に存在する
+  // pending は snapshot 無しでは iOS 側に現れない。これが off-LAN で承認が来ない主因。
+  //
+  // hub / iOS を触らず daemon 単独で塞ぐため、pending が 1 件以上残っている間だけ
+  // relay へ snapshot を周期再送する。これで「後から接続した client」も数秒以内に
+  // 現在のキューを受け取れる。pending が空のアイドル時は一切送らない (帯域・電池節約)。
+  const RELAY_SNAPSHOT_INTERVAL_MS = 3000;
+  let relaySnapshotTimer: NodeJS.Timeout | null = null;
+  if (relay) {
+    relaySnapshotTimer = setInterval(() => {
+      const r = relay;
+      if (!r?.isConnected()) return;
+      const pending = queue.list();
+      if (pending.length === 0) return;
+      r.send({
+        type: "snapshot",
+        pending,
+        messages: messageStore.listRecent(50),
+      });
+    }, RELAY_SNAPSHOT_INTERVAL_MS);
+  }
+
   // ctx の broadcast コールバックを実体に差し替える (LAN + Relay 同時)
   ctx.onMessageAdded = (m) => broadcastAll({ type: "message-added", message: m });
   ctx.onMessageDelivered = (id, delivered_at) =>
     broadcastAll({ type: "message-delivered", id, delivered_at });
+
+  // pending TTL sweep: gate が諦めても decision IS NULL のまま残った zombie を
+  // 起動直後に 1 回 + 60 秒ごとに回収して expired に確定させる。回収したら
+  // 最新 snapshot を再送し、アプリの「pending カード」を消す (待機画面に戻す)。
+  const SWEEP_INTERVAL_MS = 60 * 1000;
+  const pendingTtlMs = options.pendingTtlMs ?? config.daemon.pending_ttl_seconds * 1000;
+  const runSweep = (): void => {
+    try {
+      const swept = sweepStalePending({ store, queue, now: Date.now(), ttlMs: pendingTtlMs });
+      if (swept.length === 0) return;
+      broadcastAll({
+        type: "snapshot",
+        pending: queue.list(),
+        messages: messageStore.listRecent(50),
+      });
+      broadcastAll({ type: "stats", stats: todayStats() });
+      log(`[vigili-daemon] sweep: expired ${swept.length} stale pending request(s)`);
+    } catch (err) {
+      log(`[vigili-daemon] sweep 失敗: ${(err as Error).message}`);
+    }
+  };
+  runSweep();
+  const sweepTimer = setInterval(runSweep, SWEEP_INTERVAL_MS);
 
   // SIGHUP で policy をホットリロード (CLI / launchd 経由で利用可)
   const sigHandler = (): void => {
@@ -292,8 +358,10 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     token,
     close: async () => {
       process.off("SIGHUP", sigHandler);
+      clearInterval(sweepTimer);
       clearInterval(archiveTimer);
       clearInterval(digestTimer);
+      if (relaySnapshotTimer) clearInterval(relaySnapshotTimer);
       queue.cancelAll("daemon shutdown");
       await socket.close();
       if (ws) await ws.close();
@@ -329,10 +397,7 @@ async function handlePromote(promote: PromoteRule, ctx: DaemonContext): Promise<
  * を書き出して、newcomer がいきなり「policy.yaml を読めません」で詰まないようにする。
  * 親ディレクトリも無ければ作る。
  */
-async function ensureDefaultPolicy(
-  policyPath: string,
-  log: (msg: string) => void,
-): Promise<void> {
+async function ensureDefaultPolicy(policyPath: string, log: (msg: string) => void): Promise<void> {
   if (existsSync(policyPath)) return;
   const dir = dirname(policyPath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
