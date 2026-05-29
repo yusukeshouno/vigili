@@ -12,7 +12,10 @@
 import { randomUUID } from "node:crypto";
 import fastifyWebsocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+// 型のみ import (runtime 依存を増やさない)。fastify-websocket の socket は ws の WebSocket。
+import type { WebSocket as WsWebSocket } from "ws";
 import { z } from "zod";
+import { type ApnsSender, createApnsSenderFromEnv } from "./apns.js";
 import {
   constantTimeEqualString,
   generatePairingId,
@@ -21,8 +24,8 @@ import {
   hashToken,
   verifyPassword,
 } from "./auth.js";
-import { openRelayStore, type PairingRow, type RelayStore } from "./db.js";
-import { createPairingHub, type HubSocket, type PairingHub } from "./hub.js";
+import { type PairingRow, type RelayStore, openRelayStore } from "./db.js";
+import { type HubSocket, type PairingHub, createPairingHub } from "./hub.js";
 import { extractBearer, issueSession, verifySessionToken } from "./session.js";
 
 export interface RelayOptions {
@@ -36,6 +39,8 @@ export interface RelayOptions {
   store?: RelayStore;
   /** 既存の hub を渡してテストで観察するためのフック */
   hub?: PairingHub;
+  /** 既存の APNs sender を渡してテストで観察するためのフック。未指定なら env から組む。 */
+  apns?: ApnsSender;
 }
 
 export interface RunningRelay {
@@ -63,12 +68,23 @@ const RegisterDeviceSchema = z.object({
   platform: z.enum(["ios", "ipados", "macos"]),
 });
 
+/**
+ * iOS app は account session ではなく QR で受け取った user_token しか持たない。
+ * そのため pairing は URL の :pid + Bearer user_token で識別し、body には端末側の
+ * apns_token / platform だけを載せる (pairing_id は path から取る)。
+ */
+const ClientRegisterDeviceSchema = z.object({
+  apns_token: z.string().min(8).max(256),
+  platform: z.enum(["ios", "ipados", "macos"]),
+});
+
 export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
   const log = options.log ?? ((m) => console.error(m));
   const dbPath = options.dbPath ?? `${process.env.HOME ?? ""}/.sentinel/relay.db`;
   const store = options.store ?? openRelayStore(dbPath);
   const hub = options.hub ?? createPairingHub(log);
   const ownsStore = !options.store;
+  const apns = options.apns ?? createApnsSenderFromEnv(log);
 
   const app: FastifyInstance = Fastify({ logger: false });
   await app.register(fastifyWebsocket);
@@ -220,6 +236,37 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
     return reply.code(204).send();
   });
 
+  // ---------- REST: client device registration (user_token 認証) ----------
+  //
+  // iOS app が APNs device token を登録する経路。WS client と同じ user_token で
+  // 認証し、pairing は path の :pid から取る。これが無いと off-LAN で
+  // バックグラウンドの端末を起こせない (= push が飛ばせない)。
+
+  app.post("/v1/clients/:pid/devices", async (req, reply) => {
+    const pid = (req.params as { pid: string }).pid;
+    const provided = extractBearer(req.headers.authorization, req.url ?? "");
+    if (!provided) return reply.code(401).send({ error: "unauthorized" });
+    const pairing = store.findPairingById(pid);
+    if (!pairing) return reply.code(404).send({ error: "pairing_not_found" });
+    if (!constantTimeEqualString(hashToken(provided), pairing.user_token_hash)) {
+      return reply.code(401).send({ error: "invalid_user_token" });
+    }
+    const parsed = ClientRegisterDeviceSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid_body" });
+    const now = Date.now();
+    store.upsertDevice({
+      id: randomUUID(),
+      account_id: pairing.account_id,
+      pairing_id: pid,
+      apns_token: parsed.data.apns_token,
+      platform: parsed.data.platform,
+      last_seen_at: now,
+      created_at: now,
+    });
+    log(`[relay] device registered pairing=${pid} platform=${parsed.data.platform}`);
+    return reply.code(201).send({ ok: true });
+  });
+
   // ---------- WSS: agents (Mac daemon) ----------
 
   app.get(
@@ -243,11 +290,22 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
       const pid = (req.params as { pid: string }).pid;
       const wrap = wrapSocket(socket);
       const { detach } = hub.attachAgent(pid, wrap);
+      const stopKeepalive = setupKeepalive(socket, log, `agent pid=${pid}`);
       socket.on("message", (raw: Buffer) => {
-        hub.forwardAgentToClients(pid, raw.toString("utf-8"));
+        const text = raw.toString("utf-8");
+        hub.forwardAgentToClients(pid, text);
+        // off-LAN でバックグラウンドの端末は WS がサスペンドされるので、
+        // 新規 pending はここで APNs push して起こす。
+        void maybePushApns(pid, text);
       });
-      socket.on("close", () => detach());
-      socket.on("error", () => detach());
+      socket.on("close", () => {
+        stopKeepalive();
+        detach();
+      });
+      socket.on("error", () => {
+        stopKeepalive();
+        detach();
+      });
     },
   );
 
@@ -274,11 +332,18 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
       const pid = (req.params as { pid: string }).pid;
       const wrap = wrapSocket(socket);
       const { detach } = hub.attachClient(pid, wrap);
+      const stopKeepalive = setupKeepalive(socket, log, `client pid=${pid}`);
       socket.on("message", (raw: Buffer) => {
         hub.forwardClientToAgent(pid, raw.toString("utf-8"));
       });
-      socket.on("close", () => detach());
-      socket.on("error", () => detach());
+      socket.on("close", () => {
+        stopKeepalive();
+        detach();
+      });
+      socket.on("error", () => {
+        stopKeepalive();
+        detach();
+      });
     },
   );
 
@@ -301,11 +366,56 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
     return auth;
   }
 
+  /**
+   * agent → relay の生メッセージを覗き、`type:"pending"` なら登録済み端末へ APNs push する。
+   * relay は本来 payload を opaque に転送するだけだが、push のためにここだけ中身を読む
+   * (内容は title/body の組み立てにしか使わず、転送自体は forwardAgentToClients が別に行う)。
+   */
+  async function maybePushApns(pid: string, text: string): Promise<void> {
+    if (!apns.enabled) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return;
+    }
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      (parsed as { type?: unknown }).type !== "pending"
+    ) {
+      return;
+    }
+    const request = (parsed as { request?: unknown }).request;
+    if (typeof request !== "object" || request === null) return;
+    const r = request as { tool_name?: unknown; session_tag?: unknown };
+    const toolName = typeof r.tool_name === "string" && r.tool_name ? r.tool_name : "操作";
+    const tag = typeof r.session_tag === "string" && r.session_tag ? r.session_tag : null;
+    const title = tag ? `承認待ち · ${tag}` : "承認待ち";
+    const body = `${toolName} の実行許可を求めています`;
+    const devices = store.listDevicesForPairing(pid);
+    if (devices.length === 0) return;
+    await Promise.all(
+      devices.map(async (d) => {
+        try {
+          const result = await apns.send(d.apns_token, { title, body, threadId: pid });
+          if (result.unregistered) {
+            store.deleteDeviceByToken(d.apns_token);
+            log(`[relay] APNs token 失効のため削除 (pairing=${pid})`);
+          } else if (result.status !== 200) {
+            log(`[relay] APNs send status=${result.status} reason=${result.reason ?? "-"}`);
+          }
+        } catch (err) {
+          log(`[relay] APNs send 例外: ${(err as Error).message}`);
+        }
+      }),
+    );
+  }
+
   const host = options.host ?? "0.0.0.0";
   await app.listen({ port: options.port, host });
   const listenAddr = app.server.address();
-  const actualPort =
-    typeof listenAddr === "object" && listenAddr ? listenAddr.port : options.port;
+  const actualPort = typeof listenAddr === "object" && listenAddr ? listenAddr.port : options.port;
   log(`[relay] listening on http://${host}:${actualPort}`);
 
   return {
@@ -315,9 +425,46 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
     hub,
     close: async () => {
       await app.close();
+      apns.close();
       if (ownsStore) store.close();
     },
   };
+}
+
+/** keepalive: server からこの間隔で ping し、1 周期 pong が無ければ dead とみなす。 */
+const RELAY_PING_INTERVAL_MS = 30_000;
+
+/**
+ * 接続ごとに server-side ping/pong watchdog を仕掛ける。
+ *
+ * 半開き (half-open) 接続 — laptop sleep / NAT mapping 失効 / proxy idle kill 等で
+ * TCP の片側が消えても 'close' が飛んでこないケース — を検知する。pong が前回 ping
+ * までに返らなければ terminate し、ハンドラの 'close' 経由で hub から detach させる。
+ */
+function setupKeepalive(socket: WsWebSocket, log: (m: string) => void, tag: string): () => void {
+  let alive = true;
+  socket.on("pong", () => {
+    alive = true;
+  });
+  const timer = setInterval(() => {
+    if (socket.readyState !== 1 /* OPEN */) return;
+    if (!alive) {
+      log(`[hub] ${tag} unresponsive (no pong) — terminating`);
+      try {
+        socket.terminate();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    alive = false;
+    try {
+      socket.ping();
+    } catch {
+      /* ignore */
+    }
+  }, RELAY_PING_INTERVAL_MS);
+  return () => clearInterval(timer);
 }
 
 function wrapSocket(socket: { send: (data: string) => void; close: () => void }): HubSocket {
