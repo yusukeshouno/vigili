@@ -39,9 +39,10 @@ export function ApprovalCard({ request, progress = 0 }: Props) {
       style={{
         borderRadius: 16,
         background: "var(--color-bg-rise)",
+        animation: "card-enter 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both",
       }}
     >
-      {/* 判定アウトライン (allow=green / deny=red) — drag 中だけ */}
+      {/* 判定アウトライン + glow (allow=green / deny=red) — drag 中だけ */}
       {verdict ? (
         <div
           aria-hidden
@@ -49,12 +50,16 @@ export function ApprovalCard({ request, progress = 0 }: Props) {
           style={{
             inset: -1,
             borderRadius: 17,
-            border: `1px solid ${
+            border: `1.5px solid ${
               verdict === "allow"
-                ? `rgba(123,174,137,${0.4 + Math.abs(progress) * 0.5})`
-                : `rgba(214,118,108,${0.4 + Math.abs(progress) * 0.5})`
+                ? `rgba(123,174,137,${0.5 + Math.abs(progress) * 0.45})`
+                : `rgba(214,118,108,${0.5 + Math.abs(progress) * 0.45})`
             }`,
-            transition: "border-color .15s",
+            boxShadow:
+              verdict === "allow"
+                ? `inset 0 0 32px rgba(123,174,137,${0.12 * Math.abs(progress)}), 0 0 18px rgba(123,174,137,${0.18 * Math.abs(progress)})`
+                : `inset 0 0 32px rgba(214,118,108,${0.12 * Math.abs(progress)}), 0 0 18px rgba(214,118,108,${0.18 * Math.abs(progress)})`,
+            transition: "border-color .1s, box-shadow .1s",
           }}
         />
       ) : null}

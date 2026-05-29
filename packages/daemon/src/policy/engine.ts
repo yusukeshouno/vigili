@@ -40,7 +40,10 @@ export function decide(
   }
 
   // 2. ルールを上から評価、最初にマッチしたもの
+  const now = ctx.now ?? new Date();
   for (const rule of policy.rules) {
+    // 期限切れルールはスキップ
+    if (rule.expires_at !== undefined && new Date(rule.expires_at) < now) continue;
     if (ruleMatches(rule, req, ctx)) {
       return {
         action: rule.action,

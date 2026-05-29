@@ -31,21 +31,22 @@ struct StandingWatchView: View {
         let spinPhase = t.truncatingRemainder(dividingBy: spinCycle)
         let spinRotation: Double = {
           guard spinPhase < spinDuration else { return 0 }
-          let progress = spinPhase / spinDuration       // 0 → 1
-          let eased = easeInOut(progress)               // 滑らかに加減速
+          let progress = spinPhase / spinDuration
+          let eased = easeInOut(progress)
           return eased * 360
         }()
 
         ZStack {
-          ForEach(0..<3) { i in
+          // 波紋を 4 本に増やし、よりダイナミックに
+          ForEach(0..<4) { i in
             ripple(phase: phase, index: i)
           }
-          FlowerLogo(color: Theme.accent.opacity(0.85), size: 36)
-            // 呼吸: 1.0 → 1.05 → 1.0 を 1 周期で
-            .scaleEffect(1.0 + 0.05 * sin(phase * .pi * 2))
+          FlowerLogo(color: Theme.accent.opacity(0.9), size: 32)
+            // 呼吸: 振れ幅を 8% に拡大してよりダイナミックに
+            .scaleEffect(1.0 + 0.08 * sin(phase * .pi * 2))
             .rotationEffect(.degrees(spinRotation))
         }
-        .frame(width: 96, height: 96)
+        .frame(width: 110, height: 110)
       }
 
       Text("standing watch")
@@ -70,15 +71,16 @@ struct StandingWatchView: View {
   }
 
   /// 波紋リング。`index` で位相をずらし、波が連続して広がるように見せる。
-  /// 半径 18 → 46pt、不透明度 0.55 → 0 で線形補間。
+  /// 半径 20 → 54pt に拡大、不透明度も 0.65 からフェード。
   private func ripple(phase: CGFloat, index: Int) -> some View {
-    let offset = CGFloat(index) / 3.0
+    let offset = CGFloat(index) / 4.0
     var local = phase + offset
     while local >= 1.0 { local -= 1.0 }
-    let radius = 18 + local * 28
-    let opacity = max(0, 0.55 * (1 - local))
+    let radius = 20 + local * 34
+    let opacity = max(0, 0.65 * (1 - local))
+    let lineWidth = max(0.5, 1.5 * (1 - local))
     return Circle()
-      .stroke(Theme.accent.opacity(Double(opacity)), lineWidth: 1)
+      .stroke(Theme.accent.opacity(Double(opacity)), lineWidth: lineWidth)
       .frame(width: radius * 2, height: radius * 2)
   }
 }

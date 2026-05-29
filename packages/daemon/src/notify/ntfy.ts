@@ -53,6 +53,22 @@ export function createNtfyNotifier(
         log(`[vigili-ntfy] POST 失敗: ${(err as Error).message}`);
       }
     },
+    async send({ title, body }) {
+      const headers: Record<string, string> = {
+        "X-Title": encodeHeaderValue(title),
+        "X-Priority": String(config.priority.normal),
+        "X-Tags": "vigili",
+        "Content-Type": "text/plain; charset=utf-8",
+      };
+      try {
+        const res = await fetcher(url, { method: "POST", headers, body });
+        if (!res.ok) {
+          log(`[vigili-ntfy] send ${res.status}`);
+        }
+      } catch (err) {
+        log(`[vigili-ntfy] send 失敗: ${(err as Error).message}`);
+      }
+    },
   };
 }
 

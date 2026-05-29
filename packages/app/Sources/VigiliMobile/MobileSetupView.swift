@@ -22,7 +22,7 @@ struct MobileSetupView: View {
       VStack(spacing: 24) {
           // ヘッダー
           VStack(spacing: 12) {
-            FlowerLogo(color: Theme.accent, size: 56)
+            FlowerLogo(color: Theme.accent, size: 44)
             Text("Vigili")
               .font(.display(28, weight: .semibold))
               .foregroundStyle(Theme.fg)
@@ -260,7 +260,7 @@ struct MobileSetupView: View {
             }
           } label: {
             HStack(spacing: 10) {
-              FlowerLogo(color: Theme.accent, size: 18)
+              FlowerLogo(color: Theme.accent, size: 14)
               VStack(alignment: .leading, spacing: 2) {
                 Text(svc.name)
                   .font(.display(13, weight: .medium))
@@ -394,8 +394,10 @@ struct MobileSetupView: View {
         }
       }
     }
-    // ② sentinel:// URL
-    if raw.hasPrefix("sentinel://") {
+    // ② vigili://setup または sentinel://setup URL (LAN/Tailscale 直結)
+    //    vigili-daemon qr は vigili://setup?u=...&t=... を生成する。
+    //    WelcomeView (Mac) は sentinel://setup?u=...&t=... を生成する (移行期)。
+    if raw.hasPrefix("vigili://setup") || raw.hasPrefix("sentinel://") {
       if let url = URL(string: raw),
          let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) {
         let items = comps.queryItems ?? []
@@ -404,7 +406,7 @@ struct MobileSetupView: View {
         if applyValues(u: u, t: t) { return true }
       }
     }
-    // ② JSON
+    // ③ JSON
     if raw.hasPrefix("{") {
       if let data = raw.data(using: .utf8),
          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {

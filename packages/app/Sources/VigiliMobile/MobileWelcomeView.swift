@@ -4,6 +4,10 @@ struct MobileWelcomeView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
   @Binding var startWithScanner: Bool
   @State private var copiedCmd: String? = nil
+  /// ロゴ登場アニメーションのトリガー
+  @State private var logoAppeared = false
+  /// ステップ行スタッガード用
+  @State private var stepsAppeared = false
 
   var body: some View {
     ZStack {
@@ -12,10 +16,23 @@ struct MobileWelcomeView: View {
         VStack(alignment: .leading, spacing: 0) {
           // ── header ──────────────────────────────────────────────────
           HStack(spacing: 12) {
-            FlowerLogo(color: Theme.accent, size: 28)
+            FlowerLogo(color: Theme.accent, size: 22)
+              // ロゴが画面に現れるとき: 0 → 1.2 → 1.0 でバウンス + -90°から回転
+              .scaleEffect(logoAppeared ? 1.0 : 0.2)
+              .rotationEffect(.degrees(logoAppeared ? 0 : -120))
+              .animation(
+                .spring(response: 0.52, dampingFraction: 0.52),
+                value: logoAppeared
+              )
             Text("Vigili")
               .font(.display(22, weight: .semibold))
               .foregroundStyle(Theme.fg)
+              .opacity(logoAppeared ? 1 : 0)
+              .offset(x: logoAppeared ? 0 : -12)
+              .animation(
+                .spring(response: 0.4, dampingFraction: 0.7).delay(0.08),
+                value: logoAppeared
+              )
           }
           .padding(.bottom, 24)
 
@@ -24,27 +41,48 @@ struct MobileWelcomeView: View {
             .foregroundStyle(Theme.fg)
             .lineSpacing(2)
             .multilineTextAlignment(.leading)
+            .opacity(logoAppeared ? 1 : 0)
+            .offset(y: logoAppeared ? 0 : 14)
+            .animation(
+              .spring(response: 0.45, dampingFraction: 0.68).delay(0.14),
+              value: logoAppeared
+            )
             .padding(.bottom, 36)
 
-          // ── setup steps ─────────────────────────────────────────────
+          // ── setup steps: stagger each row ───────────────────────────
           VStack(alignment: .leading, spacing: 22) {
             stepRow(index: "01", title: "Mac でインストール") {
               CopyRow(cmd: "npm install -g @vigili/daemon @vigili/gate",
                       copiedCmd: $copiedCmd, onCopy: copyToClipboard)
             }
+            .opacity(stepsAppeared ? 1 : 0)
+            .offset(y: stepsAppeared ? 0 : 20)
+            .animation(.spring(response: 0.4, dampingFraction: 0.68).delay(0.18), value: stepsAppeared)
+
             stepRow(index: "02", title: "daemon を起動 + hook を登録") {
               CopyRow(cmd: "vigili-daemon start",
                       copiedCmd: $copiedCmd, onCopy: copyToClipboard)
               CopyRow(cmd: "vigili-gate --install-hook",
                       copiedCmd: $copiedCmd, onCopy: copyToClipboard)
             }
+            .opacity(stepsAppeared ? 1 : 0)
+            .offset(y: stepsAppeared ? 0 : 20)
+            .animation(.spring(response: 0.4, dampingFraction: 0.68).delay(0.26), value: stepsAppeared)
+
             stepRow(index: "03", title: "QR をターミナルまたは menu bar で表示") {
               CopyRow(cmd: "vigili-daemon qr",
                       copiedCmd: $copiedCmd, onCopy: copyToClipboard)
             }
+            .opacity(stepsAppeared ? 1 : 0)
+            .offset(y: stepsAppeared ? 0 : 20)
+            .animation(.spring(response: 0.4, dampingFraction: 0.68).delay(0.34), value: stepsAppeared)
+
             stepRow(index: "04", title: "ここでスキャン") {
               EmptyView()
             }
+            .opacity(stepsAppeared ? 1 : 0)
+            .offset(y: stepsAppeared ? 0 : 20)
+            .animation(.spring(response: 0.4, dampingFraction: 0.68).delay(0.42), value: stepsAppeared)
           }
           .padding(.bottom, 32)
 
@@ -67,6 +105,9 @@ struct MobileWelcomeView: View {
               coordinator.dismissWelcome()
             }
           }
+          .opacity(stepsAppeared ? 1 : 0)
+          .offset(y: stepsAppeared ? 0 : 16)
+          .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(0.52), value: stepsAppeared)
           .padding(.bottom, 44)
         }
         .padding(.horizontal, 22)
@@ -74,6 +115,12 @@ struct MobileWelcomeView: View {
       }
     }
     .preferredColorScheme(.dark)
+    .onAppear {
+      logoAppeared = true
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        stepsAppeared = true
+      }
+    }
   }
 
   private func copyToClipboard(_ cmd: String) {

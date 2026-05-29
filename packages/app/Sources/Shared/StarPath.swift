@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// PWA の `icon.svg` / `Brand.tsx` と共有する Vigili の 10 突点星 (v4 — sharper)。
+/// PWA の `icon.svg` / `Brand.tsx` と共有する Vigili の 10 突点星 (v5 — latest)。
 ///
 /// 原典は Adobe Illustrator の SVG path (relative 命令の連続)。
 /// viewBox 0 0 105 118.52、bbox 中心 (52.5, 59.26)。突点が伸びて鋭く、 bbox は
@@ -67,9 +67,11 @@ enum StarPath {
     path.addLine(to: p(46.43, 43.84))
     path.addCurve(to: p(47.45, 43.48), control1: p(46.78, 44.21), control2: p(47.41, 43.99))
     path.addLine(to: p(50.41, 5.6))
-    path.addCurve(to: p(51.59, 5.57), control1: p(50.47, 4.89), control2: p(51.49, 4.86))
-    path.addLine(to: p(56.66, 43.21))
-    path.addCurve(to: p(57.7, 43.51), control1: p(56.73, 43.72), control2: p(57.37, 43.91))
+    // v5 で末尾の制御点が微調整され、突点先端が start に対してさらに鋭くなる。
+    path.addCurve(to: p(51.59, 5.63), control1: p(50.47, 4.89), control2: p(51.49, 4.86))
+    path.addLine(to: p(56.66, 43.27))
+    path.addCurve(to: p(57.70, 43.57), control1: p(56.73, 43.78), control2: p(57.37, 43.97))
+    path.addLine(to: p(57.70, 43.55))  // SVG `v-.02`: closeSubpath が start (57.7, 43.49) へ閉じる
     path.closeSubpath()
     return path
   }

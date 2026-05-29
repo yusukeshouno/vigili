@@ -2,20 +2,24 @@
  * LP の文言を 1 か所に集約。
  * EN がデフォルト、JA は ?lang=ja で切替。
  *
- * トーン: minimal、direct、開発者向け。煽らない。
+ * Claude Design からの handoff デザインに準拠した richer な構成。
  */
 
 export type Lang = "en" | "ja";
 
 export interface Copy {
-  // header
+  // nav
+  navProduct: string;
+  navHow: string;
+  navSecurity: string;
   navWaitlist: string;
-  navGithub: string;
   langSwitchTo: string;
 
   // hero
-  heroEyebrow: string;
-  heroTitle: string;
+  heroPill: string;
+  heroTitleLeft: string;
+  heroTitleEm: string;
+  heroTitleRight: string;
   heroSubtitle: string;
   heroWaitlistPlaceholder: string;
   heroWaitlistSubmit: string;
@@ -24,348 +28,276 @@ export interface Copy {
   heroWaitlistError: string;
   heroFineprint: string;
 
-  // surfaces (3 apps)
+  // surfaces
   surfacesEyebrow: string;
   surfacesTitle: string;
-  surfaceMacAppName: string;
+  surfacesLead: string;
+  surfaceMacAppLabel: string;
+  surfaceMacAppHeadline: string;
   surfaceMacAppBody: string;
-  surfaceWidgetName: string;
+  surfaceWidgetLabel: string;
+  surfaceWidgetHeadline: string;
   surfaceWidgetBody: string;
-  surfacePhoneName: string;
+  surfacePhoneLabel: string;
+  surfacePhoneHeadline: string;
   surfacePhoneBody: string;
 
-  // showcase (3-step narrative)
-  showcaseEyebrow: string;
-  showcaseTitle: string;
-  showcaseLead: string;
-  showcaseStep1Title: string;
-  showcaseStep1Body: string;
-  showcaseStep2Title: string;
-  showcaseStep2Body: string;
-  showcaseStep3Title: string;
-  showcaseStep3Body: string;
+  // tour
+  tourEyebrow: string;
+  tourTitle: string;
+  tourLead: string;
+  tourStep1Title: string;
+  tourStep1Body: string;
+  tourStep2Title: string;
+  tourStep2Body: string;
+  tourStep3Title: string;
+  tourStep3Body: string;
 
-  // why
-  whyEyebrow: string;
-  whyTitle: string;
-  whyBullets: Array<{ title: string; body: string }>;
+  // problem
+  problemEyebrow: string;
+  problemTitle: string;
+  problemLead: string;
+  problemCard1Label: string;
+  problemCard1Title: string;
+  problemCard1Body: string;
+  problemCard2Label: string;
+  problemCard2Title: string;
+  problemCard2Body: string;
+  problemCard3Label: string;
+  problemCard3Title: string;
+  problemCard3Body: string;
 
-  // how
+  // how it works
   howEyebrow: string;
   howTitle: string;
-  howSteps: Array<{ index: string; title: string; body: string }>;
-
-  // setup (quick-start guide with copy-able commands)
-  setupEyebrow: string;
-  setupTitle: string;
-  setupLead: string;
-  setupMacLabel: string;
-  setupMacSteps: Array<{ label: string; cmd?: string; note?: string }>;
-  setupPhoneLabel: string;
-  setupPhoneSteps: Array<{ label: string; cmd?: string; note?: string }>;
+  howLead: string;
+  howStep1Title: string;
+  howStep1Body: string;
+  howStep2Title: string;
+  howStep2Body: string;
+  howStep3Title: string;
+  howStep3Body: string;
 
   // security
   secEyebrow: string;
   secTitle: string;
-  secBullets: Array<{ title: string; body: string }>;
+  secLead: string;
+  sec1Title: string;
+  sec1Body: string;
+  sec2Title: string;
+  sec2Body: string;
+  sec3Title: string;
+  sec3Body: string;
 
   // footer
-  footerTagline: string;
-  footerOss: string;
+  footerEyebrow: string;
+  footerTitle: string;
   footerPrivacy: string;
-  footerStatus: string;
 }
 
 const en: Copy = {
+  navProduct: "Product",
+  navHow: "How it works",
+  navSecurity: "Security",
   navWaitlist: "Get notified",
-  navGithub: "GitHub",
   langSwitchTo: "日本語",
 
-  heroEyebrow: "Coming soon",
-  heroTitle: "Approve Claude Code\nfrom your phone.",
+  heroPill: "Coming soon · macOS + iOS",
+  // 行分割は <br /> ではなく `\n` で表現し、コンポーネント側で分割する。
+  heroTitleLeft: "Five sessions.",
+  heroTitleEm: "One list",
+  heroTitleRight: " to approve.",
   heroSubtitle:
-    "A local-first approval mesh. Auto-allow the safe calls. Deny the dangerous ones. Push only the ambiguous middle to your pocket — two taps and Claude continues.",
-  heroWaitlistPlaceholder: "you@example.com",
+    "Running five Claude Code windows means five terminals to keep watching. Every permission prompt freezes a window, so you tab-hunt to find which. Vigili pulls every request into one list — handled from the menu bar, or your phone when you're away. Auto-rules grow as you use it, so the list keeps shrinking.",
+  heroWaitlistPlaceholder: "you@studio.com",
   heroWaitlistSubmit: "Notify me",
   heroWaitlistSubmitting: "Adding…",
   heroWaitlistSuccess: "Thanks. We'll email you the moment it ships.",
   heroWaitlistError: "Something went wrong. Try again?",
   heroFineprint: "No marketing, no sharing. One email when it's ready.",
 
-  surfacesEyebrow: "Three surfaces, one queue",
-  surfacesTitle: "Catch approvals wherever you happen to be.",
-  surfaceMacAppName: "Mac app",
+  surfacesEyebrow: "Three ways to see what's waiting",
+  surfacesTitle: "All sessions, all requests, in one list.",
+  surfacesLead:
+    "Vigili gives you the same queue on every surface you already use — quietly in the menu bar, glanceable on the desktop, in your pocket when you walk away.",
+  surfaceMacAppLabel: "Mac app",
+  surfaceMacAppHeadline: "Every request, one menu-bar click away.",
   surfaceMacAppBody:
-    "Lives in your menu bar. One click reveals the pending card, allow or deny in place. The daemon keeps running even when the popover is closed.",
-  surfaceWidgetName: "Mac widget",
+    "Every approval request across every Claude window, in a single list. Work through five sessions' worth from one place — no more tab-hunting.",
+  surfaceWidgetLabel: "Mac widget",
+  surfaceWidgetHeadline: "A glance is enough.",
   surfaceWidgetBody:
-    "A desktop widget that glances at the queue without opening anything. Shows the pending count and today's auto-allowed total.",
-  surfacePhoneName: "iPhone app",
+    "A desktop widget that shows how many requests are waiting — and how many Vigili silently handled for you today.",
+  surfacePhoneLabel: "iPhone app",
+  surfacePhoneHeadline: "For when you've stepped away.",
   surfacePhoneBody:
-    "Native iOS app with Live Activity in the Dynamic Island. Same queue as the Mac, two taps to approve, works on LAN or via relay when you're out.",
+    "The same list, in your pocket. Dynamic Island shows the count — tap to approve in a meeting or on a walk. Sessions resume the moment you tap.",
 
-  showcaseEyebrow: "A 60-second tour",
-  showcaseTitle: "From terminal to phone, in three steps.",
-  showcaseLead:
-    "Set it up once on your Mac. The next time Claude asks for permission, your phone is what you reach for.",
-  showcaseStep1Title: "Pair your phone, once.",
-  showcaseStep1Body:
-    "Vigili's menu bar shows a QR code on first launch. Open Camera on your iPhone — paired in under five seconds. No accounts, no clouds in this step.",
-  showcaseStep2Title: "Claude pauses. You don't.",
-  showcaseStep2Body:
-    "When Claude wants to do something the policy can't auto-decide, your phone wakes. The Dynamic Island shows what's waiting. No banner avalanches.",
-  showcaseStep3Title: "Two taps. Continue.",
-  showcaseStep3Body:
-    "Open the app, glance at the full command, swipe Allow or Deny. Claude resumes in milliseconds. You go back to whatever you were doing.",
+  tourEyebrow: "A 60-second tour",
+  tourTitle: "Set up once. Every window included.",
+  tourLead:
+    "Install Vigili on your Mac and pair your phone once. From then on, every Claude Code window you open is already in the loop — no per-session setup.",
+  tourStep1Title: "Pair your phone, once.",
+  tourStep1Body:
+    "On first launch, a QR appears in the Mac menu bar. Scan it with your iPhone camera — paired in under five seconds. No account, no cloud sign-up. Every Claude window after uses this pairing.",
+  tourStep2Title: "Step away. Your phone takes over.",
+  tourStep2Body:
+    "When a window stops on something your rules can't decide automatically, your phone wakes up. Dynamic Island shows what's waiting and which project — no need to walk back to the terminal.",
+  tourStep3Title: "Tap to approve. The window resumes.",
+  tourStep3Body:
+    "Open the app and work through the list. Tap Allow to unblock that window. Tap Always and Vigili adds a 24-hour rule that auto-approves the same pattern. The list shrinks as the day goes on.",
 
-  whyEyebrow: "The problem",
-  whyTitle: "Five Claude sessions, five places to babysit.",
-  whyBullets: [
-    {
-      title: "Approval fatigue",
-      body:
-        "Every `Bash`, `Edit`, `WebFetch` prompts you for permission. Across 4–6 parallel sessions that's hundreds of prompts a day, and the only way to clear them is to be staring at the terminal.",
-    },
-    {
-      title: "Context-switching tax",
-      body:
-        "You're in another window. You hear the bell. You switch back, squint at the diff, type 'yes'. Five times an hour. Each switch costs minutes of focus.",
-    },
-    {
-      title: "Sleepy 'yes'",
-      body:
-        "Tired humans approve recklessly. The whole point of asking is lost. A tool that pushes everything to you isn't safety — it's noise.",
-    },
-  ],
+  problemEyebrow: "The problem",
+  problemTitle: "Five Claude windows. Five places to keep checking.",
+  problemLead:
+    "Permission prompts were designed for one terminal. Run five Claude Code windows in parallel and the system breaks down — context loss, terminal whack-a-mole, \"yes-fatigue.\" Vigili was built for that exact pattern.",
+  problemCard1Label: "Today",
+  problemCard1Title: "Constant terminal-switching",
+  problemCard1Body:
+    "Each Claude window freezes until you respond. With five running, you tab-hunt to find the one that's waiting, read it, type yes, switch back. The context loss adds up fast.",
+  problemCard2Label: "Today",
+  problemCard2Title: "No overview of what's blocked",
+  problemCard2Body:
+    "You have to visit each window one by one. Vigili gives you a single list across sessions — visible from the menu bar at a glance.",
+  problemCard3Label: "Today",
+  problemCard3Title: "Approving without reading",
+  problemCard3Body:
+    "After the tenth interruption, you stop reading and say yes. The permission system is just friction. Auto-rules grow as you use Vigili, so fewer requests reach you in the first place.",
 
   howEyebrow: "How it works",
-  howTitle: "Classify, then route.",
-  howSteps: [
-    {
-      index: "01",
-      title: "Local policy decides",
-      body:
-        "A small daemon runs on your machine. Claude's PreToolUse hook routes every approval through it. Your `policy.yaml` matches read-only commands → allow, dangerous patterns → deny, the rest → ask.",
-    },
-    {
-      index: "02",
-      title: "Only 'ask' reaches you",
-      body:
-        "Allow and deny resolve in milliseconds — Claude keeps moving. The 'ask' bucket pushes to your phone via web push or Live Activity. Two taps to approve, swipe to deny.",
-    },
-    {
-      index: "03",
-      title: "The policy grows with you",
-      body:
-        "Each manual approval is a candidate rule. The daily digest surfaces patterns: 'You allowed 7 `git push` this week — promote?' One tap to fold it into your policy.",
-    },
-  ],
-
-  setupEyebrow: "Quick start",
-  setupTitle: "Mac に daemon を入れて、iPhone で QR を読む。",
-  setupLead:
-    "セットアップは 1 回だけ。次回からは Claude が止まった瞬間にスマホが震える。",
-  setupMacLabel: "Mac — terminal",
-  setupMacSteps: [
-    {
-      label: "daemon をインストール",
-      cmd: "npm install -g @vigili/daemon @vigili/gate",
-    },
-    {
-      label: "daemon を起動 — メニューバーに QR が出る",
-      cmd: "vigili-daemon start",
-    },
-    {
-      label: "Claude Code に hook を登録",
-      cmd: "vigili-gate --install-hook",
-    },
-  ],
-  setupPhoneLabel: "iPhone",
-  setupPhoneSteps: [
-    {
-      label: "Install Vigili from the App Store",
-      note: "Coming soon — join the waitlist to be notified.",
-    },
-    {
-      label: "Show the pairing QR in the menu bar (or terminal)",
-      cmd: "vigili-daemon qr",
-      note: "Paired in under five seconds. No account needed.",
-    },
-    {
-      label: "Scan with iPhone Camera. Done — Dynamic Island lights up on the next approval.",
-    },
-  ],
+  howTitle: "Set up once. Works across every window.",
+  howLead:
+    "Vigili sits between Claude Code and you. Once installed, every window on your Mac routes its approvals through Vigili — no per-window setup, no Claude config to maintain.",
+  howStep1Title: "Every Claude window flows through Vigili",
+  howStep1Body:
+    "Once installed, every Claude Code window on your Mac sends its approval requests through Vigili first. No matter how many windows you open — they're all visible in one place, on your Mac and on your phone.",
+  howStep2Title: "Rules handle the obvious — and grow over time",
+  howStep2Body:
+    "Vigili ships with sensible defaults: reading files is always allowed, deleting system folders is always blocked. Tap Always on an approval and Vigili creates a rule for the same pattern. Rules auto-expire daily, so stale allows don't pile up.",
+  howStep3Title: "Only genuinely unclear requests reach you",
+  howStep3Body:
+    "Requests your rules can't decide — typically 5–15% to start — get pushed to your phone. One list across all windows, worked through in order. Approve from your desk or while away. Either way, the windows resume.",
 
   secEyebrow: "Security",
-  secTitle: "Your code never leaves the machine.",
-  secBullets: [
-    {
-      title: "LAN-direct by default",
-      body:
-        "When your phone is on the same network, the Mac daemon talks to the iOS app directly over Bonjour. No relay, no cloud, no third party in the middle.",
-    },
-    {
-      title: "Optional cloud relay for outside",
-      body:
-        "Away from your LAN? An optional managed relay routes by pairing-id without authenticating against your code. You can also self-host it — the relay is OSS.",
-    },
-    {
-      title: "Fail-safe deny",
-      body:
-        "If the daemon dies or the policy file fails to parse, the gate exits with deny. We never auto-allow when the supervisor is down.",
-    },
-  ],
+  secTitle: "Your code stays on your machine.",
+  secLead:
+    "Vigili was built so a third party never has to see your code or your commands. No accounts, no cloud sync by default — and if the service ever fails, Claude waits, never approves on its own.",
+  sec1Title: "Same Wi-Fi? Direct connection.",
+  sec1Body:
+    "When your phone is on the same network as your Mac, they talk directly — nothing goes through the internet. No third party in the middle.",
+  sec2Title: "Away from home? Optional relay.",
+  sec2Body:
+    "Out of the house? An optional relay passes the requests through — never storing your code or commands. The relay is open source, so you can run your own.",
+  sec3Title: "If Vigili stops, Claude pauses.",
+  sec3Body:
+    "If something goes wrong with Vigili, Claude stops and waits. It never approves on its own when you're not watching. Every window stays blocked until you're back.",
 
-  footerTagline: "Approve Claude Code from your phone.",
-  footerOss: "OSS on GitHub",
+  footerEyebrow: "Coming soon",
+  footerTitle: "All your Claude sessions. One list to work through.",
   footerPrivacy: "Privacy",
-  footerStatus: "Status",
 };
 
 const ja: Copy = {
+  navProduct: "プロダクト",
+  navHow: "仕組み",
+  navSecurity: "セキュリティ",
   navWaitlist: "通知を受け取る",
-  navGithub: "GitHub",
   langSwitchTo: "English",
 
-  heroEyebrow: "近日公開",
-  heroTitle: "Claude Code の承認を\nスマホで。",
+  heroPill: "近日公開 · macOS + iOS",
+  // 半角スペースを残すと word-break: keep-all が "1 " と "つのリスト" の間で折り返す。
+  // JA 側は半角スペースを除去して 1 つの単位として扱う。
+  heroTitleLeft: "5 セッション、",
+  heroTitleEm: "ひとつのリスト",
+  heroTitleRight: "で承認。",
   heroSubtitle:
-    "ローカル優先の承認メッシュ。安全な操作は自動許可、危険な操作は自動拒否、判断が要るものだけスマホに飛ぶ。2 タップで Claude が再開します。",
-  heroWaitlistPlaceholder: "you@example.com",
+    "5 つの Claude Code ウィンドウを動かしていると、5 か所を見張ることになります。リクエストのたびにウィンドウが止まり、どれが待っているかを探すために切り替え続ける。Vigili は全リクエストを 1 つのリストにまとめ、Mac のメニューバーから、離席中はスマホから処理できます。ルールは使うほど育ち、リストはどんどん短くなっていきます。",
+  heroWaitlistPlaceholder: "you@studio.com",
   heroWaitlistSubmit: "通知を受け取る",
   heroWaitlistSubmitting: "登録中…",
   heroWaitlistSuccess: "ありがとうございます。リリース時にお知らせします。",
   heroWaitlistError: "うまく送れませんでした。再度お試しください。",
   heroFineprint: "送るのは公開時のメール 1 通だけ。それ以外には使いません。",
 
-  surfacesEyebrow: "3 つの面、1 つのキュー",
-  surfacesTitle: "今いる場所で承認を受け取る。",
-  surfaceMacAppName: "Mac アプリ",
+  surfacesEyebrow: "3 つの見え方",
+  surfacesTitle: "全セッションの承認を、1 つのリストで。",
+  surfacesLead:
+    "Vigili は同じキューを、あなたが既に使っている画面に届けます。メニューバーで静かに、デスクトップで一目で、ポケットの中で離席中も。",
+  surfaceMacAppLabel: "Mac アプリ",
+  surfaceMacAppHeadline: "全リクエストが、メニューバーの 1 クリック。",
   surfaceMacAppBody:
-    "メニューバーに常駐。クリックで pending カードが開き、その場で Allow/Deny。popover を閉じても daemon は走り続ける。",
-  surfaceWidgetName: "Mac ウィジェット",
+    "全ウィンドウの承認リクエストが 1 つのリストに。5 セッション分を 1 か所で処理 — ターミナルを探す必要はもうない。",
+  surfaceWidgetLabel: "Mac ウィジェット",
+  surfaceWidgetHeadline: "見るだけで分かる。",
   surfaceWidgetBody:
-    "アプリを開かずにキューの状況を見るデスクトップウィジェット。pending 件数 + 今日の自動許可数が一目でわかる。",
-  surfacePhoneName: "iPhone アプリ",
+    "いくつ待っているか、今日 Vigili が静かに処理した件数 — どちらも一目でわかるデスクトップウィジェット。",
+  surfacePhoneLabel: "iPhone アプリ",
+  surfacePhoneHeadline: "離席中はこちらで。",
   surfacePhoneBody:
-    "ネイティブ iOS アプリ。Dynamic Island に Live Activity、Mac と同じキューを 2 タップで承認、LAN でも外出時の relay でも動く。",
+    "同じリストをポケットに。Dynamic Island に待ち件数が表示され、会議中・散歩中でもタップで承認。タップした瞬間にセッションが再開します。",
 
-  showcaseEyebrow: "60 秒で見るツアー",
-  showcaseTitle: "ターミナルから、スマホまで、3 ステップ。",
-  showcaseLead:
-    "セットアップは Mac で 1 回だけ。次に Claude が承認を求めた瞬間、自然に手が伸びるのはスマホになる。",
-  showcaseStep1Title: "スマホを 1 回だけ繋ぐ。",
-  showcaseStep1Body:
-    "Vigili を起動すると menu bar に QR が出る。iPhone の Camera で読むだけで 5 秒以内に接続完了。アカウント不要、この段階ではクラウドも経由しない。",
-  showcaseStep2Title: "Claude が止まる。あなたは止まらない。",
-  showcaseStep2Body:
-    "ポリシーで判断できないツール呼び出しが来た瞬間、スマホが起きる。Dynamic Island に「何が待っているか」が出る。バナー連打にはしない。",
-  showcaseStep3Title: "2 タップ。続行。",
-  showcaseStep3Body:
-    "アプリを開いて、コマンドの全文を見て、Allow か Deny をスワイプ。Claude はミリ秒で再開、あなたは元の作業に戻る。",
+  tourEyebrow: "60 秒で見るツアー",
+  tourTitle: "1 回セットアップ。全ウィンドウが対象になる。",
+  tourLead:
+    "Mac にインストールしてスマホとペアリングするだけ。以後、開く Claude Code ウィンドウはすべて自動で対象になります。",
+  tourStep1Title: "スマホを 1 回だけ繋ぐ。",
+  tourStep1Body:
+    "初回起動時にメニューバーに QR が出ます。iPhone のカメラで読むだけで 5 秒以内にペアリング完了。アカウント不要、クラウド登録なし。以後のウィンドウはすべてこの接続を使います。",
+  tourStep2Title: "席を離れる。スマホが代わりに教えてくれる。",
+  tourStep2Body:
+    "ルールで判断できないリクエストが来ると、スマホが起きます。Dynamic Island に何が待っているか・どのプロジェクトからかが出るので、ターミナルに戻る必要はありません。",
+  tourStep3Title: "タップで承認。ウィンドウが再開する。",
+  tourStep3Body:
+    "アプリを開いてリストを処理します。「Allow」でそのウィンドウを再開、「Always」を押せば同じパターンに 24 時間ルールが作られ、自動承認されるようになります。リストは日が進むほど短くなっていきます。",
 
-  whyEyebrow: "解決したい問題",
-  whyTitle: "5 つの Claude セッション、5 つの監視ポイント。",
-  whyBullets: [
-    {
-      title: "承認疲れ",
-      body:
-        "`Bash`/`Edit`/`WebFetch` のたびに許可を求められる。4〜6 並列なら 1 日数百件。ターミナルの前にいる時しか捌けない。",
-    },
-    {
-      title: "コンテキストスイッチ税",
-      body:
-        "別ウィンドウで作業中。ベルが鳴る。戻って diff を見て 'yes' と打つ。1 時間 5 回。1 回ごとに分単位で集中が削られる。",
-    },
-    {
-      title: "眠い時の 'yes'",
-      body:
-        "疲れた人間は雑に許可する。聞く意味が失われる。全部投げてくるツールは安全装置ではなくただのノイズ。",
-    },
-  ],
+  problemEyebrow: "解決したい問題",
+  problemTitle: "5 つの Claude ウィンドウ。5 か所を見張る問題。",
+  problemLead:
+    "承認 dialog は 1 つのターミナル用に設計されています。Claude Code を 5 つ並列で動かすと、文脈の喪失・ターミナル探し・「とにかく yes」と仕組みが破綻します。Vigili はまさにこの問題のために作られました。",
+  problemCard1Label: "今",
+  problemCard1Title: "ターミナル切り替えが止まらない",
+  problemCard1Body:
+    "各 Claude ウィンドウは応答するまで止まります。5 つ動かしていると、待っているウィンドウを探し、内容を読み、yes と打ち、元に戻る。文脈の損失はすぐに積み重なります。",
+  problemCard2Label: "今",
+  problemCard2Title: "何が止まっているか俯瞰できない",
+  problemCard2Body:
+    "各ウィンドウを 1 つずつ見るしかありません。Vigili は全セッションを横断する 1 つのリストを、メニューバーから一目で確認できるようにします。",
+  problemCard3Label: "今",
+  problemCard3Title: "読まずに許可するようになる",
+  problemCard3Body:
+    "10 回目の中断で、内容を読まずに yes を押すようになります。承認という仕組みは形だけになります。Vigili のルールは使うほど育つので、人間に届くリクエストの数が減っていきます。",
 
   howEyebrow: "仕組み",
-  howTitle: "分類してから振り分ける。",
-  howSteps: [
-    {
-      index: "01",
-      title: "ローカル policy が判定",
-      body:
-        "小さな daemon が常駐し、Claude の PreToolUse hook を捕まえる。`policy.yaml` が read-only → allow、危険 → deny、それ以外 → ask に振り分ける。",
-    },
-    {
-      index: "02",
-      title: "ask だけがスマホに",
-      body:
-        "allow と deny は数ミリ秒で解決され、Claude は止まらない。ask だけが Web Push / Live Activity でスマホに届く。2 タップで承認、スワイプで拒否。",
-    },
-    {
-      index: "03",
-      title: "policy が育つ",
-      body:
-        "手で承認した記録から候補ルールを抽出。日次ダイジェストが「今週 git push を 7 回許可しています、ルール化しますか?」と提案する。1 タップで採用。",
-    },
-  ],
-
-  setupEyebrow: "クイックスタート",
-  setupTitle: "Mac に daemon を入れて、iPhone で QR を読む。",
-  setupLead:
-    "セットアップは 1 回だけ。次回からは Claude が止まった瞬間にスマホが震える。",
-  setupMacLabel: "Mac — ターミナル",
-  setupMacSteps: [
-    {
-      label: "daemon をインストール",
-      cmd: "npm install -g @vigili/daemon @vigili/gate",
-    },
-    {
-      label: "daemon を起動 — メニューバーに QR が出る",
-      cmd: "vigili-daemon start",
-    },
-    {
-      label: "Claude Code に hook を登録",
-      cmd: "vigili-gate --install-hook",
-    },
-  ],
-  setupPhoneLabel: "iPhone",
-  setupPhoneSteps: [
-    {
-      label: "App Store から Vigili をインストール",
-      note: "Coming soon — waitlist に登録すると案内が届きます",
-    },
-    {
-      label: "メニューバー (またはターミナル) でペアリング QR を表示",
-      cmd: "vigili-daemon qr",
-      note: "5 秒以内でペアリング完了。アカウント不要。",
-    },
-    {
-      label: "iPhone の Camera で読む。完了 — 次の承認で Dynamic Island が光る",
-    },
-  ],
+  howTitle: "1 回セットアップ。全ウィンドウに効く。",
+  howLead:
+    "Vigili は Claude Code とあなたの間に立ちます。一度インストールすれば、Mac 上のすべてのウィンドウが承認を Vigili 経由で流します — ウィンドウごとの設定も、Claude 側の設定維持も不要です。",
+  howStep1Title: "全 Claude ウィンドウが Vigili を経由する",
+  howStep1Body:
+    "Mac にインストールすると、すべての Claude Code ウィンドウの承認リクエストが Vigili に流れます。Mac でもスマホでも、横断的に 1 つのリストで見られます。",
+  howStep2Title: "明らかなものはルールが処理 — そして育つ",
+  howStep2Body:
+    "最初から「読み取りは許可」「システムフォルダ削除は拒否」などのデフォルトが入っています。承認時に「Always」を押すと同じパターンのルールが作られます。ルールは毎日自動で失効するので古いものが溜まりません。",
+  howStep3Title: "本当に判断が必要なものだけ届く",
+  howStep3Body:
+    "ルールで決められないリクエスト — 最初は全体の 5〜15% 程度 — がスマホに届きます。全ウィンドウ横断の 1 リストを順に処理。机からでも離席中でも承認でき、どちらでもウィンドウが再開します。",
 
   secEyebrow: "セキュリティ",
-  secTitle: "コードは端末から出ない。",
-  secBullets: [
-    {
-      title: "LAN 直結が既定",
-      body:
-        "同一ネットワークにいる時は Mac daemon と iOS app が Bonjour で直結。relay もクラウドも介在しない。",
-    },
-    {
-      title: "外出時は relay (任意)",
-      body:
-        "LAN から離れた時のみ管理 relay を経由。pairing-id でルーティングするだけで、コードに対する認証はしない。relay は OSS なので自前運用も可。",
-    },
-    {
-      title: "落ちたら deny",
-      body:
-        "daemon が落ちたり policy が壊れていたら gate は deny で抜ける。監視役が居ない時に自動許可することは絶対にない。",
-    },
-  ],
+  secTitle: "コードはあなたのパソコンから出ない。",
+  secLead:
+    "Vigili は第三者があなたのコードやコマンドを見ない設計です。アカウント不要、デフォルトでクラウド同期なし — もし Vigili が止まっても、Claude は勝手に進まず待ちます。",
+  sec1Title: "同じ Wi-Fi なら直接つながる",
+  sec1Body:
+    "スマホと Mac が同じネットワークにいるとき、両者は直接通信します。インターネットを経由しないので、間に第三者は入りません。",
+  sec2Title: "外出先はリレー経由（任意）",
+  sec2Body:
+    "自宅の Wi-Fi から離れているときは、任意のリレーサービスを経由してリクエストを転送します。コードや承認内容は保存されません。リレーはオープンソースで、自前で運用することもできます。",
+  sec3Title: "Vigili が止まったら、Claude も止まる",
+  sec3Body:
+    "Vigili に問題が起きた場合、Claude はその場で止まって待ちます。あなたが見ていないときに勝手に許可することは絶対にありません。すべてのウィンドウは復帰までブロックされたままです。",
 
-  footerTagline: "Claude Code の承認をスマホで。",
-  footerOss: "GitHub で OSS 公開",
+  footerEyebrow: "近日公開",
+  footerTitle: "全 Claude セッションを、1 つのリストで。",
   footerPrivacy: "プライバシー",
-  footerStatus: "ステータス",
 };
 
 export function getCopy(lang: Lang): Copy {

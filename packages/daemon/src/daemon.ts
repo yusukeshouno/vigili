@@ -28,7 +28,7 @@ import { paths } from "./paths.js";
 import { DEFAULT_POLICY_YAML } from "./policy/default.js";
 import { type DecisionResult, decide } from "./policy/engine.js";
 import { loadPolicyFile } from "./policy/loader.js";
-import { appendGeneratedRule, promoteToRule } from "./policy/promote.js";
+import { appendGeneratedRule, loadGeneratedRules, promoteToRule } from "./policy/promote.js";
 import { type PendingQueue, type Resolution, createPendingQueue } from "./queue.js";
 import { AdminRequestSchema, type AdminResponse } from "./server/admin.js";
 import { type RelayClient, createRelayClient } from "./server/relay-client.js";
@@ -82,7 +82,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   if (!options.policy) {
     await ensureDefaultPolicy(p.policy, log);
   }
-  const initialPolicy = options.policy ?? (await loadPolicyFile(p.policy));
+  const initialPolicy = options.policy ?? (await loadPolicyFile(p.policy, log));
   const config = options.config ?? (await loadConfigFile(p.config));
   const store = openStore(p.db);
   // messages テーブルは queue.db に同居する (small, single DB で OK)
@@ -248,6 +248,42 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   runArchive();
   const archiveTimer = setInterval(runArchive, ARCHIVE_INTERVAL_MS);
 
+  // 日次サマリー通知: JST 20:00 に今日の自動処理件数をプッシュ通知する
+  let lastDigestDate = "";
+  const runDailyDigest = (): void => {
+    try {
+      // JST = UTC+9
+      const nowJst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+      const hhmm = `${String(nowJst.getUTCHours()).padStart(2, "0")}:${String(nowJst.getUTCMinutes()).padStart(2, "0")}`;
+      const dateStr = nowJst.toISOString().slice(0, 10); // "YYYY-MM-DD"
+      if (hhmm !== "20:00" || dateStr === lastDigestDate) return;
+      lastDigestDate = dateStr;
+
+      // 今日の JST 0:00 〜 今の集計
+      const midnightJstMs = new Date(`${dateStr}T00:00:00+09:00`).getTime();
+      const stats = computeStats(store.raw().db, midnightJstMs, Date.now());
+      const autoAllow = (stats.by_source["auto-rule"] ?? 0) + (stats.by_source["invariant"] ?? 0);
+      const humanAllow = stats.by_source["human-pwa"] ?? 0;
+      const total = stats.by_decision.allow + stats.by_decision.deny;
+
+      if (total === 0) return; // 何も起きていない日は通知しない
+
+      const body =
+        `自動承認 ${autoAllow} 件 · 手動承認 ${humanAllow} 件` +
+        (stats.by_decision.deny > 0 ? ` · ブロック ${stats.by_decision.deny} 件` : "");
+      void notifier.send({
+        title: "Vigili 本日のサマリー",
+        body,
+        tag: "daily-digest",
+        urgency: "normal",
+      });
+      log(`[vigili-daemon] daily digest 通知 (${body})`);
+    } catch (err) {
+      log(`[vigili-daemon] daily digest 失敗: ${(err as Error).message}`);
+    }
+  };
+  const digestTimer = setInterval(runDailyDigest, 60 * 1000); // 1分ごとにチェック
+
   return {
     store,
     socket,
@@ -257,6 +293,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     close: async () => {
       process.off("SIGHUP", sigHandler);
       clearInterval(archiveTimer);
+      clearInterval(digestTimer);
       queue.cancelAll("daemon shutdown");
       await socket.close();
       if (ws) await ws.close();
@@ -268,7 +305,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
 async function reloadPolicy(ctx: DaemonContext): Promise<void> {
   try {
-    const fresh = await loadPolicyFile(ctx.policyPath);
+    const fresh = await loadPolicyFile(ctx.policyPath, ctx.log);
     ctx.policy = fresh;
     ctx.log(`[vigili-daemon] policy reloaded (${fresh.rules.length} rules including generated)`);
   } catch (err) {
@@ -437,6 +474,171 @@ async function handleAdmin(value: unknown, conn: ConnContext, ctx: DaemonContext
     conn.send(resp);
     return;
   }
+  if (req.action === "rules") {
+    // 現在メモリに載っているルール一覧 + generated ファイルのルール名を返す。
+    const generatedNames = await loadGeneratedRules(ctx.generatedPolicyPath).then(
+      (rules) => rules.map((r) => r.name),
+      () => [] as string[],
+    );
+    const resp: AdminResponse = {
+      kind: "admin",
+      action: "rules",
+      ok: true,
+      rules: ctx.policy.rules,
+      generatedRuleNames: generatedNames,
+    };
+    conn.send(resp);
+    return;
+  }
+  if (req.action === "history") {
+    const limit = req.limit ?? 100;
+    const db = ctx.store.raw().db;
+    interface HistRow {
+      id: string;
+      created_at: number;
+      resolved_at: number | null;
+      tool_name: string;
+      tool_input: string;
+      decision: string;
+      decided_by: string;
+    }
+    const rows = db
+      .prepare<[], HistRow>(
+        `SELECT id, created_at, resolved_at, tool_name, tool_input, decision, decided_by
+         FROM approval_requests
+         WHERE decided_by LIKE 'policy:%' AND decision IS NOT NULL
+         ORDER BY created_at DESC
+         LIMIT ${limit}`,
+      )
+      .all();
+    const items = rows.map((r) => {
+      let summary = "";
+      try {
+        const inp = JSON.parse(r.tool_input) as Record<string, unknown>;
+        summary =
+          (inp["command"] as string | undefined) ??
+          (inp["path"] as string | undefined) ??
+          (inp["url"] as string | undefined) ??
+          JSON.stringify(inp).slice(0, 80);
+      } catch {
+        summary = r.tool_input.slice(0, 80);
+      }
+      const ruleName = r.decided_by.startsWith("policy:")
+        ? r.decided_by.slice("policy:".length)
+        : r.decided_by;
+      return {
+        id: r.id,
+        created_at: r.created_at,
+        resolved_at: r.resolved_at,
+        tool_name: r.tool_name,
+        tool_input_summary: summary,
+        decision: r.decision as "allow" | "deny",
+        rule_name: ruleName,
+      };
+    });
+    const resp: AdminResponse = { kind: "admin", action: "history", ok: true, items };
+    conn.send(resp);
+    return;
+  }
+  if (req.action === "rule-delete") {
+    try {
+      const existing = await loadGeneratedRules(ctx.generatedPolicyPath);
+      const found = existing.some((r) => r.name === req.name);
+      if (!found) {
+        const resp: AdminResponse = {
+          kind: "admin",
+          action: "rule-delete",
+          ok: false,
+          error: `generated rule "${req.name}" が見つかりません`,
+        };
+        conn.send(resp);
+        return;
+      }
+      const filtered = existing.filter((r) => r.name !== req.name);
+      const { stringify: stringifyYaml } = await import("yaml");
+      const HEADER = `# Auto-generated by Vigili.\n#\n# このファイルは PWA で "Allow & promote to rule" を押すたびに追記されます。\n`;
+      const body = stringifyYaml({ rules: filtered }, { lineWidth: 0 });
+      const content = `${HEADER}\n${body}`;
+      const { writeFile, rename } = await import("node:fs/promises");
+      const tmp = `${ctx.generatedPolicyPath}.${process.pid}.tmp`;
+      await writeFile(tmp, content, { mode: 0o600 });
+      await rename(tmp, ctx.generatedPolicyPath);
+      await reloadPolicy(ctx);
+      ctx.log(`[vigili-daemon] deleted generated rule "${req.name}"`);
+      const resp: AdminResponse = { kind: "admin", action: "rule-delete", ok: true };
+      conn.send(resp);
+      return;
+    } catch (err) {
+      const resp: AdminResponse = {
+        kind: "admin",
+        action: "rule-delete",
+        ok: false,
+        error: (err as Error).message,
+      };
+      conn.send(resp);
+      return;
+    }
+  }
+  if (req.action === "policy-catalog") {
+    const { POLICY_CATALOG } = await import("./policy/default.js");
+    const resp: AdminResponse = {
+      kind: "admin",
+      action: "policy-catalog",
+      ok: true,
+      items: POLICY_CATALOG.map((e) => ({
+        id: e.id,
+        category: e.category,
+        label: e.label,
+        description: e.description,
+      })),
+    };
+    conn.send(resp);
+    return;
+  }
+  if (req.action === "policy-write-from-catalog") {
+    try {
+      const { POLICY_CATALOG, MINIMAL_POLICY_YAML } = await import("./policy/default.js");
+      const { stringify: stringifyYaml, parse: parseYaml } = await import("yaml");
+      const selected = new Set(req.selected_ids);
+      const rules = POLICY_CATALOG.filter((e) => selected.has(e.id)).map((e) => e.rule);
+
+      // 既存 policy.yaml がある場合は .bak に退避（破壊防止）
+      const { writeFile, rename, readFile } = await import("node:fs/promises");
+      try {
+        const existing = await readFile(ctx.policyPath, "utf-8");
+        await writeFile(`${ctx.policyPath}.bak`, existing, { mode: 0o600 });
+      } catch {
+        // 初回（ファイル無し）の場合は退避不要
+      }
+
+      // MINIMAL_POLICY_YAML の defaults をベースに、選択ルールを足して書き出す
+      const base = parseYaml(MINIMAL_POLICY_YAML) as { defaults: unknown };
+      const body = stringifyYaml({ defaults: base.defaults, rules }, { lineWidth: 0 });
+      const header = `# Vigili Policy — Mac アプリのウィザードで生成 (${new Date().toISOString()})\n# 手動で編集する場合は \`vigili-cli reload\` で反映してください。\n\n`;
+      const tmp = `${ctx.policyPath}.${process.pid}.tmp`;
+      await writeFile(tmp, header + body, { mode: 0o600 });
+      await rename(tmp, ctx.policyPath);
+      await reloadPolicy(ctx);
+      ctx.log(`[vigili-daemon] wizard wrote ${rules.length} rules to ${ctx.policyPath}`);
+      const resp: AdminResponse = {
+        kind: "admin",
+        action: "policy-write-from-catalog",
+        ok: true,
+        written: rules.length,
+      };
+      conn.send(resp);
+      return;
+    } catch (err) {
+      const resp: AdminResponse = {
+        kind: "admin",
+        action: "policy-write-from-catalog",
+        ok: false,
+        error: (err as Error).message,
+      };
+      conn.send(resp);
+      return;
+    }
+  }
   // resolve
   const ok = ctx.queue.resolve(req.id, req.decision, "human:cli", req.reason ?? null);
   const resp: AdminResponse = ok
@@ -522,6 +724,21 @@ async function handleToolRequest(
       ctx.queue.resolve(id, "deny", "cancelled:gate-disconnected", "gate が応答待ち中に切断");
     }
   });
+
+  // Race condition 対策: onClose は socket の 'close' イベントに乗る一度きりのコールバック。
+  // gate が "ask" レスポンスを受け取った直後に切断した場合、'close' イベントは既に
+  // 発火済みで closeListeners は空になっているため上記 onClose は呼ばれない。
+  // → この時点で既に closed なら即座に deny して store に記録し return する。
+  if (conn.isClosed()) {
+    ctx.store.resolve({
+      id,
+      resolved_at: Date.now(),
+      decision: "deny",
+      decided_by: "cancelled:gate-pre-disconnected",
+      reason: "gate が enroll 前に既に切断していた",
+    });
+    return;
+  }
 
   // ntfy 通知 (fire-and-forget)。result.notify が無ければ "normal"。
   void ctx.notifier.notify({

@@ -16,11 +16,16 @@ export interface NotifyInput {
 
 export interface Notifier {
   notify(input: NotifyInput): Promise<void>;
+  /** 承認リクエスト以外の任意プッシュ通知（日次サマリーなど）。 */
+  send(payload: { title: string; body: string; tag?: string; urgency?: string }): Promise<void>;
 }
 
 /** ノーオペ Notifier。設定が無い / disabled なときに使う。 */
 export const NULL_NOTIFIER: Notifier = {
   async notify() {
+    /* no-op */
+  },
+  async send() {
     /* no-op */
   },
 };
@@ -36,6 +41,9 @@ export function multiNotifier(notifiers: Notifier[]): Notifier {
   return {
     async notify(input) {
       await Promise.allSettled(active.map((n) => n.notify(input)));
+    },
+    async send(payload) {
+      await Promise.allSettled(active.map((n) => n.send(payload)));
     },
   };
 }

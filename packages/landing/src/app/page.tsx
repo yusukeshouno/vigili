@@ -2,7 +2,6 @@ import { Footer } from "@/components/Footer";
 import { Hero } from "@/components/Hero";
 import { HowSection } from "@/components/HowSection";
 import { SecuritySection } from "@/components/SecuritySection";
-import { SetupSection } from "@/components/SetupSection";
 import { Showcase } from "@/components/Showcase";
 import { Surfaces } from "@/components/Surfaces";
 import { TopBar } from "@/components/TopBar";
@@ -21,16 +20,17 @@ export default async function Page({ searchParams }: PageProps) {
   const copy = getCopy(lang);
 
   return (
-    <main className="min-h-dvh">
+    <div className={lang === "ja" ? "lang-ja" : "lang-en"} lang={lang}>
       <TopBar lang={lang} copy={copy} />
-      <Hero lang={lang} copy={copy} />
-      <Surfaces copy={copy} />
-      <Showcase copy={copy} />
-      <WhySection copy={copy} />
-      <HowSection copy={copy} />
-      <SetupSection copy={copy} />
-      <SecuritySection copy={copy} />
-      <Footer copy={copy} />
-    </main>
+      <main>
+        <Hero lang={lang} copy={copy} />
+        <Surfaces copy={copy} />
+        <Showcase copy={copy} />
+        <WhySection copy={copy} />
+        <HowSection copy={copy} />
+        <SecuritySection copy={copy} />
+      </main>
+      <Footer lang={lang} copy={copy} />
+    </div>
   );
 }

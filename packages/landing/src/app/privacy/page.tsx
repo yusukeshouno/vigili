@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Footer } from "@/components/Footer";
-import { StarMark } from "@/components/StarMark";
+import { VigiliMark } from "@/components/Sparkle";
 import { type Lang, getCopy } from "@/lib/copy";
 
 export const metadata: Metadata = {
@@ -20,36 +20,57 @@ export default async function PrivacyPage({ searchParams }: PageProps) {
   const copy = getCopy(lang);
 
   return (
-    <main className="min-h-dvh">
+    <>
       {/* slim top bar */}
-      <header className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-7 sm:px-10">
-        <Link href={`/?lang=${lang}`} className="press flex items-center gap-2.5">
-          <StarMark size={22} />
-          <span className="font-display text-[17px] tracking-tight">Vigili</span>
+      <header
+        style={{
+          maxWidth: 760,
+          margin: "0 auto",
+          padding: "24px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Link href={`/?lang=${lang}`} className="brand">
+          <VigiliMark size={24} />
+          <span className="name">Vigili</span>
         </Link>
         <Link
           href={`/?lang=${lang}`}
-          className="font-mono text-[11px] uppercase tracking-[0.12em] text-(--color-fg-mid) press hover:text-(--color-fg)"
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--color-fg-3)",
+          }}
         >
           ← {lang === "ja" ? "ホーム" : "home"}
         </Link>
       </header>
 
-      <article className="mx-auto w-full max-w-3xl px-6 pt-8 pb-24 sm:px-10 sm:pt-12 sm:pb-32">
-        <span className="label">{lang === "ja" ? "プライバシー" : "Privacy"}</span>
-        <h1 className="mt-3 font-display text-[36px] leading-[1.1] tracking-tight sm:text-[48px]">
+      <article
+        style={{
+          maxWidth: 760,
+          margin: "0 auto",
+          padding: "32px 24px 120px",
+        }}
+      >
+        <span className="eyebrow">{lang === "ja" ? "プライバシー" : "Privacy"}</span>
+        <h1 style={{ marginTop: 18, fontSize: "clamp(36px, 4vw, 56px)", lineHeight: 1.05 }}>
           {lang === "ja" ? "集めないものを明示する。" : "What we don't collect."}
         </h1>
 
         {lang === "ja" ? <PrivacyJa /> : <PrivacyEn />}
 
-        <p className="mt-12 text-[11px] text-(--color-fg-dim)">
-          {lang === "ja" ? "最終更新: " : "Last updated: "}2026-05-24
+        <p style={{ marginTop: 48, fontSize: 11, color: "var(--color-fg-3)" }}>
+          {lang === "ja" ? "最終更新: " : "Last updated: "}2026-05-26
         </p>
       </article>
 
-      <Footer copy={copy} />
-    </main>
+      <Footer lang={lang} copy={copy} />
+    </>
   );
 }
 
@@ -57,7 +78,17 @@ export default async function PrivacyPage({ searchParams }: PageProps) {
 
 function PrivacyEn() {
   return (
-    <div className="mt-10 flex flex-col gap-7 text-[15px] leading-[1.7] text-(--color-fg-mid)">
+    <div
+      style={{
+        marginTop: 40,
+        display: "flex",
+        flexDirection: "column",
+        gap: 28,
+        fontSize: 15,
+        lineHeight: 1.7,
+        color: "var(--color-fg-2)",
+      }}
+    >
       <Block title="What the Vigili daemon sees">
         <p>
           The daemon runs entirely on your machine. The only thing it intercepts is the
@@ -116,7 +147,17 @@ function PrivacyEn() {
 
 function PrivacyJa() {
   return (
-    <div className="mt-10 flex flex-col gap-7 text-[15px] leading-[1.7] text-(--color-fg-mid)">
+    <div
+      style={{
+        marginTop: 40,
+        display: "flex",
+        flexDirection: "column",
+        gap: 28,
+        fontSize: 15,
+        lineHeight: 1.7,
+        color: "var(--color-fg-2)",
+      }}
+    >
       <Block title="Vigili daemon が見ているもの">
         <p>
           daemon は完全にあなたの端末内で動作します。Claude Code の各ツール呼び出しの入力
@@ -171,9 +212,11 @@ function PrivacyJa() {
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h2 className="font-display text-[18px] tracking-tight text-(--color-fg)">{title}</h2>
-      <div className="mt-3 flex flex-col gap-3">{children}</div>
+    <section style={{ padding: 0, borderTop: 0 }}>
+      <h2 style={{ fontSize: 20, color: "var(--color-fg)" }}>{title}</h2>
+      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+        {children}
+      </div>
     </section>
   );
 }
@@ -181,7 +224,15 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 function Code({ children }: { children: React.ReactNode }) {
   return (
     <code
-      className="rounded-md bg-(--color-bg-rise) px-1.5 py-0.5 font-mono text-[13px] text-(--color-fg)"
+      style={{
+        borderRadius: 4,
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-rule)",
+        padding: "1px 6px",
+        fontFamily: "var(--font-mono)",
+        fontSize: 13,
+        color: "var(--color-fg)",
+      }}
     >
       {children}
     </code>

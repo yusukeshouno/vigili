@@ -47,6 +47,8 @@ export const PolicyRuleSchema = z
     action: PolicyActionSchema,
     reason: z.string().optional(),
     notify: NotifyLevelSchema.optional(),
+    /** ISO 8601 日時。この日時を過ぎたルールはエンジンがスキップする。未指定は無期限。 */
+    expires_at: z.string().datetime({ offset: true }).optional(),
   })
   .refine((rule) => rule.notify === undefined || rule.action === "ask", {
     message: "notify は action: ask のときのみ指定できます",

@@ -54,6 +54,85 @@ struct ApprovalRequest: Identifiable, Hashable {
     lhs.id == rhs.id && lhs.decision == rhs.decision
   }
 
+  // MARK: - promote ペイロード生成
+
+  /// "今後は自動で承認" ボタン用の promote ペイロードを生成する。
+  /// Mac / iOS どちらからも呼べるよう、共有モデルに置く。
+  func buildPromotePayload() -> [String: Any] {
+    var match: [String: Any] = ["tool": toolName]
+    var nameParts: [String] = []
+
+    switch toolName {
+    case "Bash":
+      if let cmd = toolInput["command"] as? String {
+        let escaped = NSRegularExpression.escapedPattern(for: cmd)
+        match["command_matches"] = "^\(escaped)$"
+        let clean = String(cmd.prefix(32))
+          .components(separatedBy: CharacterSet.alphanumerics.inverted)
+          .filter { !$0.isEmpty }
+          .joined(separator: "-")
+          .lowercased()
+        nameParts = ["bash", clean.isEmpty ? "cmd" : clean]
+      } else {
+        nameParts = ["bash"]
+      }
+    case "Edit", "Write":
+      let path = (toolInput["file_path"] as? String)
+        ?? (toolInput["path"] as? String) ?? ""
+      if !path.isEmpty {
+        let escaped = NSRegularExpression.escapedPattern(for: path)
+        match["path_matches"] = "^\(escaped)$"
+        let base = URL(fileURLWithPath: path).lastPathComponent
+          .components(
+            separatedBy: CharacterSet.alphanumerics
+              .union(CharacterSet(charactersIn: "._-")).inverted
+          )
+          .joined(separator: "-")
+          .lowercased()
+        nameParts = [toolName.lowercased(), base.isEmpty ? "file" : base]
+      } else {
+        nameParts = [toolName.lowercased()]
+      }
+    case "WebFetch":
+      if let urlStr = toolInput["url"] as? String,
+         let url = URL(string: urlStr),
+         let host = url.host {
+        let escaped = NSRegularExpression.escapedPattern(for: host)
+        match["url_matches"] = escaped
+        let cleanHost = host
+          .components(
+            separatedBy: CharacterSet.alphanumerics
+              .union(CharacterSet(charactersIn: ".-")).inverted
+          )
+          .joined(separator: "-")
+          .lowercased()
+        nameParts = ["fetch", cleanHost.isEmpty ? "url" : cleanHost]
+      } else {
+        nameParts = ["fetch"]
+      }
+    default:
+      nameParts = [toolName.lowercased()]
+    }
+
+    // プロジェクトスコープ: sessionTag があればそのプロジェクト専用ルールにする
+    if let tag = sessionTag, !tag.isEmpty {
+      match["repo_in"] = [tag]
+      // プロジェクト名を rule 名に含める
+      let cleanTag = tag
+        .components(separatedBy: CharacterSet.alphanumerics.inverted)
+        .filter { !$0.isEmpty }
+        .joined(separator: "-")
+        .lowercased()
+        .prefix(20)
+      nameParts.insert(String(cleanTag), at: 0)
+    }
+
+    // 名前衝突防止のため末尾に短いタイムスタンプを付ける
+    let ts = String(Int(Date().timeIntervalSince1970) % 100_000)
+    let ruleName = "auto-allow-" + (nameParts + [ts]).joined(separator: "-")
+    return ["rule_name": ruleName, "match": match]
+  }
+
   // MARK: - 表示用 helpers
 
   /// 12-C のカード表示で使う「コマンドのプレビュー」。
@@ -76,6 +155,8 @@ struct StatsBuckets {
   struct ByDecision {
     let allow: Int
     let deny: Int
+    /// 外部要因による cancel（Claude Code dialog で承認済み等）。deny にはカウントしない。
+    let cancelled: Int
     let pending: Int
   }
   struct HumanResponse {
@@ -115,7 +196,8 @@ struct StatsBuckets {
       let rTo = (r["to"] as? NSNumber)?.doubleValue
     else { return nil }
     self.total = total
-    self.byDecision = ByDecision(allow: allow, deny: deny, pending: pendingC)
+    let cancelledC = (bd["cancelled"] as? NSNumber)?.intValue ?? 0
+    self.byDecision = ByDecision(allow: allow, deny: deny, cancelled: cancelledC, pending: pendingC)
     self.bySource = bs.compactMapValues { ($0 as? NSNumber)?.intValue }
     self.byTool = bt.compactMapValues { ($0 as? NSNumber)?.intValue }
     self.byTag = bg.compactMapValues { ($0 as? NSNumber)?.intValue }
@@ -156,6 +238,101 @@ struct StatsBuckets {
       return String(format: "%.1fm", ms / 60_000)
     }
     return "median \(format(humanResponse.p50)) · p95 \(format(humanResponse.p95))"
+  }
+}
+
+/// daemon の `PolicyRule` (shared/src/policy.ts) と対応する Swift モデル。
+/// when の各フィールドを一行サマリーに変換して表示に使う。
+struct PolicyRule: Identifiable {
+  let name: String
+  let action: String  // "allow" | "deny" | "ask"
+  let reason: String?
+  /// when 条件を人間向けに 1 行にまとめたもの。
+  let whenSummary: String
+  /// expires_at (ISO 8601) をパースした日付。nil = 無期限。
+  let expiresAt: Date?
+
+  var id: String { name }
+
+  /// 期限切れかどうか。
+  var isExpired: Bool {
+    guard let exp = expiresAt else { return false }
+    return exp < Date()
+  }
+
+  /// 残り時間の表示文字列。24時間以内なら時間/分単位。
+  var expiryLabel: String? {
+    guard let exp = expiresAt else { return nil }
+    let now = Date()
+    if exp < now { return "期限切れ" }
+    let interval = exp.timeIntervalSince(now)
+    let totalMinutes = Int(interval / 60)
+    if totalMinutes < 1 { return "まもなく失効" }
+    if totalMinutes < 60 { return "\(totalMinutes)分後に失効" }
+    let hours = totalMinutes / 60
+    if hours < 24 { return "\(hours)時間後に失効" }
+    return "\(hours / 24)日後に失効"
+  }
+
+  init?(dict: [String: Any]) {
+    guard
+      let name = dict["name"] as? String,
+      let action = dict["action"] as? String,
+      let when = dict["when"] as? [String: Any]
+    else { return nil }
+    self.name = name
+    self.action = action
+    self.reason = dict["reason"] as? String
+    self.whenSummary = Self.summarize(when: when)
+    if let expiresStr = dict["expires_at"] as? String {
+      let formatter = ISO8601DateFormatter()
+      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      self.expiresAt = formatter.date(from: expiresStr)
+        ?? ISO8601DateFormatter().date(from: expiresStr)
+    } else {
+      self.expiresAt = nil
+    }
+  }
+
+  private static func summarize(when: [String: Any]) -> String {
+    var parts: [String] = []
+    if let tool = when["tool"] {
+      if let arr = tool as? [String] { parts.append("tool: \(arr.joined(separator: "|"))") }
+      else if let s = tool as? String { parts.append("tool: \(s)") }
+    }
+    if let v = when["command_matches"] as? String { parts.append("cmd ≈ /\(v)/") }
+    if let v = when["path_matches"] as? String { parts.append("path ≈ /\(v)/") }
+    if let v = when["url_matches"] as? String { parts.append("url ≈ /\(v)/") }
+    if let repos = when["repo_in"] as? [String] { parts.append("repo: \(repos.joined(separator: ", "))") }
+    if let tb = when["time_between"] as? [String], tb.count == 2 { parts.append("\(tb[0])–\(tb[1])") }
+    return parts.isEmpty ? "(any)" : parts.joined(separator: " · ")
+  }
+}
+
+/// daemon の policy history item (admin "history" action) と対応する Swift モデル。
+struct PolicyHistoryItem: Identifiable {
+  let id: String
+  let createdAt: Date
+  let toolName: String
+  let toolInputSummary: String
+  let decision: String  // "allow" | "deny"
+  let ruleName: String
+
+  init?(dict: [String: Any]) {
+    guard
+      let id = dict["id"] as? String,
+      let createdMs = (dict["created_at"] as? NSNumber)?.doubleValue,
+      let toolName = dict["tool_name"] as? String,
+      let summary = dict["tool_input_summary"] as? String,
+      let decision = dict["decision"] as? String,
+      let ruleName = dict["rule_name"] as? String
+    else { return nil }
+    self.id = id
+    self.createdAt = Date(timeIntervalSince1970: createdMs / 1000.0)
+    self.toolName = toolName
+    self.toolInputSummary = summary
+    self.decision = decision
+    self.ruleName = ruleName
   }
 }
 

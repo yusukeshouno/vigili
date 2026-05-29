@@ -1,38 +1,53 @@
-import type { Copy } from "@/lib/copy";
-import { StarMark } from "./StarMark";
+import Link from "next/link";
+import type { Copy, Lang } from "@/lib/copy";
+import { Sparkle, VigiliMark } from "./Sparkle";
+import { WaitlistForm } from "./WaitlistForm";
 
-export function Footer({ copy }: { copy: Copy }) {
+export function Footer({ lang, copy }: { lang: Lang; copy: Copy }) {
   return (
-    <footer className="mx-auto w-full max-w-6xl border-t border-(--color-border) px-6 py-12 sm:px-10">
-      <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
-        <div className="flex items-center gap-2.5">
-          <StarMark size={18} />
-          <span className="font-display text-[14px] tracking-tight">Vigili</span>
-          <span className="ml-3 text-[12px] text-(--color-fg-dim)">— {copy.footerTagline}</span>
+    <footer className="foot">
+      <Sparkle
+        className="bg-sparkle"
+        style={{
+          bottom: -60,
+          right: -40,
+          width: 420,
+          height: 420,
+          opacity: 0.08,
+          color: "var(--color-coral-soft)",
+        }}
+      />
+      <Sparkle
+        className="bg-sparkle"
+        style={{
+          top: 40,
+          left: -30,
+          width: 200,
+          height: 200,
+          opacity: 0.06,
+          color: "var(--color-coral-soft)",
+        }}
+      />
+      <div className="wrap">
+        <div className="foot-hero">
+          <span className="eyebrow" style={{ color: "var(--color-coral-soft)" }}>
+            {copy.footerEyebrow}
+          </span>
+          <h2>{copy.footerTitle}</h2>
+          <WaitlistForm lang={lang} copy={copy} variant="dark" />
         </div>
-
-        <nav className="flex items-center gap-5 text-[12px] text-(--color-fg-mid)">
-          <a
-            href="https://github.com/yusukeshouno/vigili"
-            target="_blank"
-            rel="noreferrer"
-            className="press hover:text-(--color-fg)"
-          >
-            {copy.footerOss}
-          </a>
-          <a
-            href="https://relay.vigili.io/healthz"
-            target="_blank"
-            rel="noreferrer"
-            className="press hover:text-(--color-fg)"
-          >
-            {copy.footerStatus}
-          </a>
-        </nav>
+        <div className="foot-row">
+          <Link href="#top" className="brand">
+            <span className="mark">
+              <VigiliMark size={22} />
+            </span>
+            <span className="name">Vigili</span>
+          </Link>
+          <div>
+            © {new Date().getFullYear()} Vigili · <Link href="/privacy">{copy.footerPrivacy}</Link>
+          </div>
+        </div>
       </div>
-      <p className="mt-6 font-mono text-[10px] tracking-[0.12em] uppercase text-(--color-fg-dim)">
-        © {new Date().getFullYear()} Vigili
-      </p>
     </footer>
   );
 }

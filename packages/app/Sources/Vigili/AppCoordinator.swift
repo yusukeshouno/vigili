@@ -172,6 +172,12 @@ final class AppCoordinator: ObservableObject {
     wsClient.decide(id: id, decision: decision)
   }
 
+  /// "今後は自動で承認" ボタンから呼ばれる。
+  /// request.buildPromotePayload() でルールを自動生成して allow + promote を送る。
+  func decideAndPromote(id: String, request: ApprovalRequest) {
+    wsClient.decideWithPromote(id: id, promote: request.buildPromotePayload())
+  }
+
   /// WelcomeView の "Got it" で呼ばれる。marker file を書いて以後出さない。
   func dismissWelcome() {
     let home = Self.vigiliHome()

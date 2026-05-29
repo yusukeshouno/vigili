@@ -23,7 +23,7 @@ export function extractCommand(req: ToolRequest): string | undefined {
 }
 
 export function extractPath(req: ToolRequest): string | undefined {
-  if (req.tool_name !== "Edit" && req.tool_name !== "Write") return undefined;
+  if (req.tool_name !== "Edit" && req.tool_name !== "Write" && req.tool_name !== "Read") return undefined;
   return pickString(req.tool_input, "file_path") ?? pickString(req.tool_input, "path");
 }
 

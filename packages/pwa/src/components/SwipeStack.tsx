@@ -55,6 +55,8 @@ export function SwipeStack<T extends SwipeStackItem>({
 
   const [drag, setDrag] = useState({ x: 0, y: 0, dragging: false });
   const [flyOut, setFlyOut] = useState<{ x: number; y: number; rot: number } | null>(null);
+  /** 0=idle, non-zero=shake offset applied to top card before deny flyout */
+  const [shakeX, setShakeX] = useState(0);
   const startRef = useRef({ x: 0, y: 0, t: 0 });
   const elRef = useRef<HTMLDivElement>(null);
   const movedRef = useRef(false);
@@ -66,16 +68,47 @@ export function SwipeStack<T extends SwipeStackItem>({
   const commit = useCallback(
     (verdict: "allow" | "deny") => {
       if (!top) return;
-      const targetX = verdict === "allow" ? 700 : -700;
-      setFlyOut({ x: targetX, y: drag.y * 1.4, rot: targetX * 0.06 });
-      setTimeout(() => {
-        onDecide(top, verdict);
-        setQueue((q) => q.slice(1));
-        setFlyOut(null);
-        reset();
-      }, 320);
+      const isButtonPress = !drag.dragging; // button click vs. drag-release
+
+      if (verdict === "deny") {
+        if (isButtonPress) {
+          // Button press: shake at center first, then fly left
+          setShakeX(-16);
+          setTimeout(() => setShakeX(13), 75);
+          setTimeout(() => setShakeX(-9), 150);
+          setTimeout(() => {
+            setShakeX(0);
+            setFlyOut({ x: -980, y: 60, rot: -70 });
+            setTimeout(() => {
+              onDecide(top, verdict);
+              setQueue((q) => q.slice(1));
+              setFlyOut(null);
+              reset();
+            }, 380);
+          }, 240);
+        } else {
+          // Drag release: already at a negative offset — fly directly, no shake
+          setFlyOut({ x: -980, y: drag.y * 1.4 + 40, rot: -70 });
+          setTimeout(() => {
+            onDecide(top, verdict);
+            setQueue((q) => q.slice(1));
+            setFlyOut(null);
+            reset();
+          }, 380);
+        }
+      } else {
+        // Allow: arc upward and spin off to the right
+        const arcY = drag.dragging ? drag.y * 1.4 - 30 : -55;
+        setFlyOut({ x: 980, y: arcY, rot: 62 });
+        setTimeout(() => {
+          onDecide(top, verdict);
+          setQueue((q) => q.slice(1));
+          setFlyOut(null);
+          reset();
+        }, 370);
+      }
     },
-    [top, drag.y, onDecide, reset],
+    [top, drag.dragging, drag.y, onDecide, reset],
   );
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
@@ -163,14 +196,20 @@ export function SwipeStack<T extends SwipeStackItem>({
               tx = flyOut.x;
               ty = flyOut.y;
               rot = flyOut.rot;
+              scale = 0.82; // shrink as it flies away
               opacity = 0;
-              transition = "transform .32s cubic-bezier(.4,.05,.5,1), opacity .32s";
+              transition = "transform .40s cubic-bezier(.3,.05,.4,1), opacity .28s ease-in, scale .40s";
             } else if (drag.dragging) {
               tx = drag.x;
               ty = Math.abs(drag.x) * 0.06 + drag.y * 0.2;
-              rot = drag.x * 0.05;
+              rot = drag.x * 0.055;
               scale = 1;
               transition = "none";
+            } else if (shakeX !== 0) {
+              // Pre-deny shake: no drag state, but offset applied
+              tx = shakeX;
+              rot = shakeX * 0.045;
+              transition = "transform 68ms ease-out";
             }
           }
 
@@ -226,18 +265,18 @@ function HintOverlay({
   progress,
 }: { side: "left" | "right"; active: boolean; progress: number }) {
   const isAllow = side === "right";
-  // Claude warm semantic colors (much more muted than the previous Aurora)
   const color = isAllow ? "123,174,137" : "214,118,108";
+  const committed = progress > 0.85;
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute top-0 bottom-0 z-20"
       style={{
         [side]: 0,
-        width: "40%",
-        background: `linear-gradient(${side === "right" ? "270deg" : "90deg"}, rgba(${color}, ${0.18 * progress}), rgba(${color}, 0))`,
+        width: "50%",
+        background: `linear-gradient(${side === "right" ? "270deg" : "90deg"}, rgba(${color}, ${0.28 * progress}), rgba(${color}, 0))`,
         borderRadius: 16,
-        transition: "opacity .15s",
+        transition: "opacity .12s",
         opacity: active ? 1 : 0,
       }}
     >
@@ -245,20 +284,21 @@ function HintOverlay({
         className="font-mono absolute flex items-center gap-2"
         style={{
           top: "50%",
-          [side]: 24,
-          transform: `translateY(-50%) scale(${0.7 + progress * 0.4})`,
-          transition: "transform .12s",
+          [side]: 22,
+          transform: `translateY(-50%) scale(${0.6 + progress * 0.55}) ${committed ? "rotate(-5deg)" : ""}`,
+          transition: "transform .1s",
           color: isAllow ? "var(--color-green-soft)" : "var(--color-red-soft)",
-          fontSize: 12,
-          fontWeight: 500,
-          letterSpacing: "0.16em",
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: "0.18em",
           textTransform: "uppercase",
+          textShadow: `0 0 18px rgba(${color}, ${0.6 * progress})`,
         }}
       >
         {isAllow ? (
-          <CheckIcon size={20} strokeWidth={1.8} />
+          <CheckIcon size={22} strokeWidth={2} />
         ) : (
-          <XIcon size={20} strokeWidth={1.8} />
+          <XIcon size={22} strokeWidth={2} />
         )}
         {isAllow ? "Allow" : "Deny"}
       </div>
@@ -269,6 +309,7 @@ function HintOverlay({
 /**
  * Claude-style flat pill pair under the stack.
  * Deny: ghost outline (border-strong). Allow: filled coral.
+ * Both have a springy press + drag-responsive emphasis.
  */
 function DecisionPills({
   onAllow,
@@ -281,10 +322,13 @@ function DecisionPills({
 }) {
   const allowEmph = dragX > 30;
   const denyEmph = dragX < -30;
+  const allowPull = Math.max(0, Math.min(1, dragX / 120));
+  const denyPull = Math.max(0, Math.min(1, -dragX / 120));
+
   return (
     <div
       className="absolute left-0 right-0 z-30 flex items-center justify-center gap-2.5"
-      style={{ bottom: -78 }}
+      style={{ bottom: -84 }}
     >
       <button
         type="button"
@@ -298,19 +342,28 @@ function DecisionPills({
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          padding: "12px 22px",
+          padding: "13px 22px",
           borderRadius: 9999,
-          background: denyEmph ? "rgba(214,118,108,0.16)" : "transparent",
-          color: denyEmph ? "var(--color-red)" : "var(--color-fg)",
-          border: `1px solid ${denyEmph ? "var(--color-red)" : "var(--color-border-strong)"}`,
+          background: denyEmph
+            ? `rgba(214,118,108,${0.08 + denyPull * 0.2})`
+            : "transparent",
+          color: denyEmph ? "var(--color-red-soft)" : "var(--color-fg-mid)",
+          border: `1.5px solid ${
+            denyEmph ? "var(--color-red)" : "var(--color-border-strong)"
+          }`,
           cursor: "pointer",
           fontFamily: "var(--font-ui)",
           fontSize: 14,
           fontWeight: 500,
-          transition: "background .15s, color .15s, border-color .15s",
+          transform: `scale(${1 + denyPull * 0.04})`,
+          boxShadow: denyEmph
+            ? `0 0 22px -4px rgba(214,118,108,${0.3 * denyPull})`
+            : "none",
+          transition:
+            "background .12s, color .12s, border-color .12s, box-shadow .12s, transform 380ms cubic-bezier(0.34,1.56,0.64,1)",
         }}
       >
-        <XIcon size={14} strokeWidth={1.8} />
+        <XIcon size={15} strokeWidth={2} />
         Deny
       </button>
 
@@ -326,20 +379,26 @@ function DecisionPills({
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          padding: "12px 22px",
+          padding: "13px 22px",
           borderRadius: 9999,
-          background: "var(--color-accent)",
+          background: allowEmph
+            ? "var(--color-accent-soft)"
+            : "var(--color-accent)",
           color: "#fff",
-          border: `1px solid ${allowEmph ? "var(--color-accent-soft)" : "var(--color-accent)"}`,
+          border: "1.5px solid transparent",
           cursor: "pointer",
           fontFamily: "var(--font-ui)",
           fontSize: 14,
           fontWeight: 500,
-          transition: "background .15s, transform .12s",
-          transform: allowEmph ? "scale(1.02)" : "scale(1)",
+          transform: `scale(${1 + allowPull * 0.06})`,
+          boxShadow: allowEmph
+            ? `0 4px 28px -4px rgba(193,97,65,${0.4 + allowPull * 0.3})`
+            : "0 2px 12px -4px rgba(193,97,65,0.3)",
+          transition:
+            "background .12s, box-shadow .12s, transform 380ms cubic-bezier(0.34,1.56,0.64,1)",
         }}
       >
-        <CheckIcon size={14} strokeWidth={1.8} />
+        <CheckIcon size={15} strokeWidth={2} />
         Allow
       </button>
     </div>
@@ -349,9 +408,23 @@ function DecisionPills({
 function EmptyStackHint() {
   return (
     <div
-      className="label absolute inset-0 flex items-center justify-center"
-      style={{ fontSize: 13 }}
+      className="label absolute inset-0 flex flex-col items-center justify-center gap-3"
+      style={{
+        fontSize: 13,
+        animation: "float-up 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both",
+      }}
     >
+      <span
+        aria-hidden
+        style={{
+          fontSize: 32,
+          display: "block",
+          color: "var(--color-green)",
+          animation: "jelly 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both 80ms",
+        }}
+      >
+        ✓
+      </span>
       Queue cleared
     </div>
   );

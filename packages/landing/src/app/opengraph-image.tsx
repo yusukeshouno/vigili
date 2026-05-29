@@ -8,7 +8,7 @@ import { ImageResponse } from "next/og";
  */
 
 export const runtime = "edge";
-export const alt = "Vigili — Approve Claude Code from your phone";
+export const alt = "Vigili — All your Claude Code sessions. One queue.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -64,8 +64,8 @@ export default function OpenGraphImage() {
             maxWidth: 980,
           }}
         >
-          <span style={{ display: "flex" }}>Approve Claude Code</span>
-          <span style={{ display: "flex" }}>from your phone.</span>
+          <span style={{ display: "flex" }}>All your sessions.</span>
+          <span style={{ display: "flex" }}>One queue.</span>
         </div>
       </div>
 
@@ -80,7 +80,7 @@ export default function OpenGraphImage() {
             lineHeight: 1.35,
           }}
         >
-          A local-first approval mesh. Push only the ambiguous middle to your pocket.
+          Every Claude Code session's approvals in one queue. Auto-decide the routine, two-tap the rest.
         </span>
         <span
           style={{

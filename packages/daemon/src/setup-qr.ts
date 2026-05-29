@@ -1,11 +1,15 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { spawn } from "node:child_process";
+import { parse as parseYaml } from "yaml";
 import { paths } from "./paths.js";
 
 /**
  * `vigili-daemon qr` / `vigili-cli setup-qr` の共通実装。
- * LAN IP か Tailscale FQDN を検出して `vigili://setup?u=...&t=...` QR を表示する。
+ * LAN IP か Tailscale FQDN を検出して `vigili://setup?u=...&t=...[&r=...&p=...&k=...]` を出力する。
+ *
+ * Relay 設定 (config.yaml + 保存済み user_token) が揃っているときは relay 情報も同梱して
+ * 1 つの QR で LAN + 外出先の両方に対応させる。
  */
 export async function runSetupQr(args: string[]): Promise<number> {
   const urlIdx = args.indexOf("--url");
@@ -38,9 +42,29 @@ export async function runSetupQr(args: string[]): Promise<number> {
     url = detected;
   }
 
-  const payload = useJson
-    ? JSON.stringify({ u: url, t: token })
-    : `vigili://setup?u=${encodeURIComponent(url)}&t=${encodeURIComponent(token)}`;
+  // relay 設定 (config.yaml に relay: 節 + キャッシュされた user_token) があれば
+  // unified QR を組み立てる。
+  const relay = readRelayInfo();
+
+  let payload: string;
+  if (useJson) {
+    const obj: Record<string, string> = { u: url, t: token };
+    if (relay) {
+      obj.r = relay.url;
+      obj.p = relay.pairingId;
+      obj.k = relay.userToken;
+    }
+    payload = JSON.stringify(obj);
+  } else {
+    let qs = `u=${encodeURIComponent(url)}&t=${encodeURIComponent(token)}`;
+    if (relay) {
+      qs +=
+        `&r=${encodeURIComponent(relay.url)}` +
+        `&p=${encodeURIComponent(relay.pairingId)}` +
+        `&k=${encodeURIComponent(relay.userToken)}`;
+    }
+    payload = `vigili://setup?${qs}`;
+  }
 
   if (plain) {
     console.log(payload);
@@ -60,8 +84,36 @@ export async function runSetupQr(args: string[]): Promise<number> {
   console.log("");
   console.log(`  URL:    ${url}`);
   console.log(`  Token:  ${token.slice(0, 8)}…${token.slice(-4)} (${token.length} chars)`);
+  if (relay) {
+    console.log(`  Relay:  ${relay.url}  (pid ${relay.pairingId.slice(0, 8)}…)`);
+    console.log("  → 外出先でも繋がるよう unified QR (LAN + relay) を生成しました");
+  } else {
+    console.log("  Relay:  未設定 (`vigili-cli pair` で外出先用も追加できます)");
+  }
   console.log("");
   return 0;
+}
+
+interface RelayInfo {
+  url: string;
+  pairingId: string;
+  userToken: string;
+}
+
+function readRelayInfo(): RelayInfo | null {
+  const p = paths();
+  if (!existsSync(p.config) || !existsSync(p.relayUserToken)) return null;
+  try {
+    const raw = readFileSync(p.config, "utf-8");
+    const parsed = parseYaml(raw) as { relay?: { url?: string; pairing_id?: string } } | null;
+    const r = parsed?.relay;
+    if (!r?.url || !r?.pairing_id) return null;
+    const userToken = readFileSync(p.relayUserToken, "utf-8").trim();
+    if (!userToken) return null;
+    return { url: r.url, pairingId: r.pairing_id, userToken };
+  } catch {
+    return null;
+  }
 }
 
 export async function detectPublicHost(): Promise<string | null> {

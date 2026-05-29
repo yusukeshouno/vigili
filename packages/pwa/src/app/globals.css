@@ -243,38 +243,107 @@ textarea {
   position: relative;
   display: inline-block;
 }
+.a-dot::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  opacity: 0;
+  animation: a-pulse 2s ease-out infinite 0.6s;
+}
 .a-dot::after {
   content: "";
   position: absolute;
   inset: -3px;
   border-radius: 50%;
   background: currentColor;
-  opacity: 0.4;
-  animation: a-pulse 1.8s ease-out infinite;
+  opacity: 0;
+  animation: a-pulse 2s ease-out infinite;
 }
 @keyframes a-pulse {
   0% {
-    transform: scale(0.4);
-    opacity: 0.55;
+    transform: scale(0.5);
+    opacity: 0.7;
   }
-  80% {
-    transform: scale(2.2);
+  75% {
+    transform: scale(2.8);
     opacity: 0;
   }
   100% {
-    transform: scale(2.2);
+    transform: scale(2.8);
     opacity: 0;
   }
 }
 
-/* press feedback */
+/* press feedback — spring overshoot on release */
 @media (prefers-reduced-motion: no-preference) {
   .press {
-    transition: transform 120ms cubic-bezier(0.4, 0, 0.2, 1);
+    /* overshoot spring back: cubic-bezier(0.34, 1.56, 0.64, 1) gives ~6% overshoot */
+    transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   .press:active {
-    transform: scale(0.985);
+    transform: scale(0.91);
+    transition: transform 60ms linear;
   }
+}
+
+/* ─────────── card entrance ─────────── */
+@keyframes card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.008);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ─────────── pop-in (badges, icons) ─────────── */
+@keyframes pop-in {
+  0% { transform: scale(0.3); opacity: 0; }
+  55% { transform: scale(1.18); opacity: 1; }
+  80% { transform: scale(0.96); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ─────────── shake-x (deny feedback) ─────────── */
+@keyframes shake-x {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  15% { transform: translateX(-11px) rotate(-1.5deg); }
+  30% { transform: translateX(10px) rotate(1.2deg); }
+  45% { transform: translateX(-8px) rotate(-0.8deg); }
+  60% { transform: translateX(6px) rotate(0.4deg); }
+  75% { transform: translateX(-3px); }
+}
+
+/* ─────────── jelly bounce ─────────── */
+@keyframes jelly {
+  0%, 100% { transform: scale(1, 1); }
+  28% { transform: scale(1.14, 0.86); }
+  52% { transform: scale(0.94, 1.08); }
+  72% { transform: scale(1.05, 0.96); }
+  86% { transform: scale(0.99, 1.01); }
+}
+
+/* ─────────── badge-pop (count changes) ─────────── */
+@keyframes badge-pop {
+  0% { transform: scale(0.5) rotate(-15deg); opacity: 0; }
+  55% { transform: scale(1.22) rotate(4deg); opacity: 1; }
+  75% { transform: scale(0.95) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* ─────────── float-up (empty state cleared) ─────────── */
+@keyframes float-up {
+  0% { opacity: 0; transform: translateY(24px) scale(0.88); }
+  60% { opacity: 1; transform: translateY(-6px) scale(1.04); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* standing watch: たまにロゴをくるりと回す (18 秒に 1 回、1.4 秒で 1 回転)

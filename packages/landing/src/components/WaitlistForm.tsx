@@ -6,15 +6,37 @@ import { submitWaitlist } from "@/lib/waitlist";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
-export function WaitlistForm({ lang, copy }: { lang: Lang; copy: Copy }) {
+export function WaitlistForm({
+  lang,
+  copy,
+  variant = "light",
+}: {
+  lang: Lang;
+  copy: Copy;
+  /** "light" = paper hero, "dark" = inverted (footer) */
+  variant?: "light" | "dark";
+}) {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const submitting = status === "submitting";
+  const success = status === "success";
+
+  // 全体が dark 化したので variant 間の差はほぼないが、footer は少し contrast を上げる
+  const inputStyle =
+    variant === "dark"
+      ? {
+          background: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.12)",
+        }
+      : undefined;
+  const buttonStyle = undefined;
 
   return (
     <form
+      className="h-form"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (status === "submitting") return;
+        if (submitting) return;
         const form = e.currentTarget;
         const fd = new FormData(form);
         fd.set("lang", lang);
@@ -30,9 +52,9 @@ export function WaitlistForm({ lang, copy }: { lang: Lang; copy: Copy }) {
           setErrorMsg(r.error ?? null);
         }
       }}
-      className="flex w-full flex-col gap-3"
+      style={{ flexDirection: "column", alignItems: "flex-start", gap: 10 }}
     >
-      <div className="flex w-full overflow-hidden rounded-full border border-(--color-border-strong) bg-(--color-bg-rise) focus-within:border-(--color-fg-mid)">
+      <div style={{ display: "flex", gap: 10, width: "100%", maxWidth: 460 }}>
         <input
           type="email"
           name="email"
@@ -40,30 +62,32 @@ export function WaitlistForm({ lang, copy }: { lang: Lang; copy: Copy }) {
           autoComplete="email"
           inputMode="email"
           placeholder={copy.heroWaitlistPlaceholder}
-          disabled={status === "submitting" || status === "success"}
-          className="flex-1 bg-transparent px-5 py-3 text-[14px] text-(--color-fg) placeholder:text-(--color-fg-dim) focus:outline-none"
+          disabled={submitting || success}
+          style={inputStyle}
         />
-        <button
-          type="submit"
-          disabled={status === "submitting" || status === "success"}
-          className="press shrink-0 px-5 py-3 text-[13px] font-semibold text-white"
-          style={{ background: "var(--color-accent)" }}
-        >
-          {status === "submitting"
-            ? copy.heroWaitlistSubmitting
-            : status === "success"
-              ? "✓"
-              : copy.heroWaitlistSubmit}
+        <button type="submit" disabled={submitting || success} style={buttonStyle}>
+          {submitting ? copy.heroWaitlistSubmitting : success ? "✓ On the list" : copy.heroWaitlistSubmit}
         </button>
       </div>
-
-      <p className="text-[11px] text-(--color-fg-dim)">
-        {status === "success"
+      <div className="h-meta meta">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+        {success
           ? copy.heroWaitlistSuccess
           : status === "error"
             ? `${copy.heroWaitlistError}${errorMsg ? ` (${errorMsg})` : ""}`
             : copy.heroFineprint}
-      </p>
+      </div>
     </form>
   );
 }

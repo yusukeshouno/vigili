@@ -124,15 +124,26 @@ final class MobileAppCoordinator: ObservableObject {
     wsClient.decide(id: id, decision: decision)
   }
 
+  /// "今後は自動で承認" ボタンから呼ばれる。
+  func decideAndPromote(id: String, request: ApprovalRequest) {
+    wsClient.decideWithPromote(id: id, promote: request.buildPromotePayload())
+  }
+
   /// MobileWelcomeView の CTA 押下で呼ばれる。以後 Welcome を出さないフラグを立てる。
   func dismissWelcome() {
     UserDefaults.standard.set(true, forKey: "vigili.welcomed")
     showWelcome = false
   }
 
-  /// `sentinel://setup?u=<host>&t=<token>` または
-  /// `vigili://pair?p=<pid>&u=<user_token>&r=<relay_url>` を受け取り、
-  /// それぞれ LAN / relay 経路として保存して reconnect する。
+  /// セットアップ URL を受け取って LAN / relay の credentials を保存し reconnect する。
+  ///
+  /// 対応スキーマ:
+  ///   - **unified (推奨)**: `vigili://setup?u=<host>&t=<token>&r=<relay>&p=<pid>&k=<user_token>`
+  ///     一つの QR で LAN と relay 両方を設定できる (`vigili-daemon qr` で生成)。
+  ///     u/t だけなら LAN、r/p/k だけなら relay、両方あれば両方保存。
+  ///   - **後方互換 (LAN-only)**: `sentinel://setup?u=<host>&t=<token>`
+  ///   - **後方互換 (relay-only)**: `vigili://pair?p=<pid>&u=<user_token>&r=<relay_url>`
+  ///
   /// 既存の他経路は消さない (両方並列に保てる)。
   func handleSetupURL(_ url: URL) {
     appLog("MobileAppCoordinator.handleSetupURL: \(url.absoluteString.prefix(80))")
@@ -142,14 +153,17 @@ final class MobileAppCoordinator: ObservableObject {
     let items = comps?.queryItems ?? []
     let host = url.host ?? ""
 
+    @inline(__always)
+    func q(_ key: String) -> String {
+      (items.first { $0.name == key }?.value ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // 後方互換: vigili://pair (relay-only) は u を user_token として扱う
     if host == "pair" || url.path.contains("pair") {
-      // vigili://pair?p=<pid>&u=<user_token>&r=<relay_url>
-      let p = items.first(where: { $0.name == "p" })?.value ?? ""
-      let u = items.first(where: { $0.name == "u" })?.value ?? ""
-      let r = items.first(where: { $0.name == "r" })?.value ?? ""
-      let pid = p.trimmingCharacters(in: .whitespacesAndNewlines)
-      let userToken = u.trimmingCharacters(in: .whitespacesAndNewlines)
-      let relay = r.trimmingCharacters(in: .whitespacesAndNewlines)
+      let pid = q("p")
+      let userToken = q("u")
+      let relay = q("r")
       guard !pid.isEmpty, !userToken.isEmpty, !relay.isEmpty else {
         appLog("MobileAppCoordinator.handleSetupURL: pair fields empty")
         return
@@ -161,19 +175,31 @@ final class MobileAppCoordinator: ObservableObject {
       return
     }
 
-    // sentinel://setup?u=<host>&t=<token>  (LAN/Tailscale 直結)
-    if host == "setup" || url.path.contains("setup") || host.isEmpty {
-      let u = items.first(where: { $0.name == "u" })?.value ?? ""
-      let t = items.first(where: { $0.name == "t" })?.value ?? ""
-      let trimmedU = u.trimmingCharacters(in: .whitespacesAndNewlines)
-      let trimmedT = t.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmedU.isEmpty, !trimmedT.isEmpty else {
-        appLog("MobileAppCoordinator.handleSetupURL: u or t empty")
-        return
-      }
-      MobileSettings.lanUrl = trimmedU
-      MobileSettings.lanToken = trimmedT
+    // unified: setup スキーマ
+    // u/t があれば LAN を保存、r/p/k があれば relay を保存。
+    var didSave = false
+    let lanUrl = q("u")
+    let lanToken = q("t")
+    if !lanUrl.isEmpty && !lanToken.isEmpty {
+      MobileSettings.lanUrl = lanUrl
+      MobileSettings.lanToken = lanToken
+      didSave = true
+    }
+
+    let relayUrl = q("r")
+    let relayPid = q("p")
+    let relayUserToken = q("k")
+    if !relayUrl.isEmpty && !relayPid.isEmpty && !relayUserToken.isEmpty {
+      MobileSettings.relayUrl = relayUrl
+      MobileSettings.relayPid = relayPid
+      MobileSettings.relayUserToken = relayUserToken
+      didSave = true
+    }
+
+    if didSave {
       reconfigureAndConnect()
+    } else {
+      appLog("MobileAppCoordinator.handleSetupURL: no fields recognized")
     }
   }
 

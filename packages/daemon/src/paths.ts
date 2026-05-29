@@ -32,6 +32,11 @@ export interface SentinelPaths {
   vapid: string;
   /** Web Push subscription 永続化先 (atomic JSON write)。 */
   pushSubs: string;
+  /**
+   * Relay user_token のキャッシュ (`vigili-cli pair` 時に書き出される)。
+   * `vigili-daemon qr` が unified QR を生成するために使う (0600)。
+   */
+  relayUserToken: string;
 }
 
 export function paths(home: string = sentinelHome()): SentinelPaths {
@@ -47,5 +52,6 @@ export function paths(home: string = sentinelHome()): SentinelPaths {
     log: join(home, "daemon.log"),
     vapid: join(home, "vapid.json"),
     pushSubs: join(home, "push-subs.json"),
+    relayUserToken: join(home, "relay-user-token"),
   };
 }

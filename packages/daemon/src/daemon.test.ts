@@ -472,8 +472,11 @@ describe("startDaemon — bootstrap", () => {
       // 個人プロジェクト名が紛れないことを保証する。
       expect(written).not.toContain("neort-wiki");
       expect(written).not.toContain("diptych");
-      // 最低限ルールが入っていることを確認。
-      expect(written).toContain("読み取り専用 bash");
+      // 初回は素のテンプレート: defaults だけで rules は空。
+      // ユーザーは Mac アプリのウィザードでルールを追加する。
+      expect(written).toContain("defaults:");
+      expect(written).toContain("unknown: ask");
+      expect(written).toMatch(/rules:\s*\[\]/);
     } finally {
       await fresh.close();
     }

@@ -1,138 +1,150 @@
 import type { Copy } from "@/lib/copy";
+import { Sparkle, VigiliMark } from "./Sparkle";
 
-/**
- * Hero と Showcase の間に置く「Vigili はこの 3 つの場所で動く」セクション。
- *
- * Mac app (menu bar)、Mac widget (デスクトップ)、iPhone app の 3 surfaces。
- * 同じキューを 3 つの面から覗ける、という設計思想を一目で伝える。
- *
- * 視覚的には: 各 surface に小さい SVG アイコン + ラベル + 1 行説明。
- */
 export function Surfaces({ copy }: { copy: Copy }) {
   return (
-    <section
-      id="surfaces"
-      className="mx-auto w-full max-w-6xl border-t border-(--color-border) px-6 py-16 sm:px-10 sm:py-20"
-    >
-      <header className="mb-10">
-        <span className="label block">{copy.surfacesEyebrow}</span>
-        <h2 className="mt-3 font-display text-[24px] leading-[1.15] tracking-tight sm:text-[30px]">
-          {copy.surfacesTitle}
-        </h2>
-      </header>
+    <section id="views">
+      <div className="wrap">
+        <div className="s-head">
+          <div className="l">
+            <span className="eyebrow">{copy.surfacesEyebrow}</span>
+            <h2 style={{ marginTop: 18 }}>{copy.surfacesTitle}</h2>
+          </div>
+          <div className="r">{copy.surfacesLead}</div>
+        </div>
 
-      <ul className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-8">
-        <SurfaceCard
-          icon={<MacAppIcon />}
-          name={copy.surfaceMacAppName}
-          body={copy.surfaceMacAppBody}
-        />
-        <SurfaceCard
-          icon={<WidgetIcon />}
-          name={copy.surfaceWidgetName}
-          body={copy.surfaceWidgetBody}
-        />
-        <SurfaceCard
-          icon={<PhoneIcon />}
-          name={copy.surfacePhoneName}
-          body={copy.surfacePhoneBody}
-        />
-      </ul>
-    </section>
-  );
-}
+        <div className="views">
+          {/* Mac app */}
+          <div className="view-card">
+            <div className="view-stage">
+              <Sparkle className="deco-sparkle" style={{ top: 18, left: 18, width: 30, height: 30 }} />
+              <Sparkle
+                className="deco-sparkle"
+                style={{ bottom: 14, right: 18, width: 20, height: 20, opacity: 0.2 }}
+              />
+              <div className="menubar-icon">
+                <Sparkle width={11} height={11} style={{ color: "var(--color-coral)" }} />
+                <span className="badge">4</span>
+              </div>
+              <div className="mini-menubar">
+                <div className="topbar">
+                  <div style={{ display: "flex", gap: 3 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E96D5C", display: "block" }} />
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E9C04A", display: "block" }} />
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#54C56C", display: "block" }} />
+                  </div>
+                  <span style={{ marginLeft: "auto" }}>vigili</span>
+                </div>
+                <div className="row">
+                  <div>
+                    <div className="pr">
+                      <b>vigili-core</b>
+                    </div>
+                    <div className="cmd">rm -rf ./.cache</div>
+                  </div>
+                  <span className="b">!</span>
+                </div>
+                <div className="row">
+                  <div>
+                    <div className="pr">
+                      <b>marketing-site</b>
+                    </div>
+                    <div className="cmd">git push origin</div>
+                  </div>
+                </div>
+                <div className="row">
+                  <div>
+                    <div className="pr">
+                      <b>api-gateway</b>
+                    </div>
+                    <div className="cmd">npm install …</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="view-body">
+              <div className="label">{copy.surfaceMacAppLabel}</div>
+              <h3>{copy.surfaceMacAppHeadline}</h3>
+              <p>{copy.surfaceMacAppBody}</p>
+            </div>
+          </div>
 
-function SurfaceCard({
-  icon,
-  name,
-  body,
-}: {
-  icon: React.ReactNode;
-  name: string;
-  body: string;
-}) {
-  return (
-    <li
-      className="flex flex-col gap-4 rounded-2xl border border-(--color-border) bg-(--color-bg-rise) px-6 py-6"
-    >
-      <div className="flex items-center gap-3">
-        <span className="text-(--color-accent)">{icon}</span>
-        <h3 className="font-display text-[16px] tracking-tight text-(--color-fg)">{name}</h3>
+          {/* Widget */}
+          <div className="view-card">
+            <div className="view-stage">
+              <Sparkle className="deco-sparkle" style={{ top: 24, right: 24, width: 24, height: 24 }} />
+              <Sparkle
+                className="deco-sparkle"
+                style={{ bottom: 18, left: 24, width: 36, height: 36, opacity: 0.18 }}
+              />
+              <div className="widget">
+                <div className="topbar">
+                  <VigiliMark size={22} />
+                  <span className="nm">Vigili</span>
+                </div>
+                <div>
+                  <div className="big">
+                    4<sub>waiting</sub>
+                  </div>
+                  <div className="lbl">across 3 sessions</div>
+                </div>
+                <div className="bar">
+                  <i />
+                </div>
+                <div className="auto">42 auto-approved today</div>
+              </div>
+            </div>
+            <div className="view-body">
+              <div className="label">{copy.surfaceWidgetLabel}</div>
+              <h3>{copy.surfaceWidgetHeadline}</h3>
+              <p>{copy.surfaceWidgetBody}</p>
+            </div>
+          </div>
+
+          {/* iPhone */}
+          <div className="view-card">
+            <div className="view-stage">
+              <Sparkle className="deco-sparkle" style={{ top: 16, left: 24, width: 22, height: 22 }} />
+              <Sparkle
+                className="deco-sparkle"
+                style={{ bottom: 18, right: 18, width: 32, height: 32, opacity: 0.2 }}
+              />
+              <div className="mini-phone">
+                <div className="scr">
+                  <div className="di">
+                    <div className="b">
+                      <Sparkle />
+                    </div>
+                    <div className="t">
+                      <b>Vigili</b>3 waiting
+                    </div>
+                    <span className="n">3</span>
+                  </div>
+                  <div className="li">
+                    <div className="it">
+                      <p>vigili-core</p>
+                      <span className="mc">rm -rf ./.cache</span>
+                    </div>
+                    <div className="it">
+                      <p>marketing-site</p>
+                      <span className="mc">git push origin</span>
+                    </div>
+                    <div className="it">
+                      <p>api-gateway</p>
+                      <span className="mc">npm install …</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="view-body">
+              <div className="label">{copy.surfacePhoneLabel}</div>
+              <h3>{copy.surfacePhoneHeadline}</h3>
+              <p>{copy.surfacePhoneBody}</p>
+            </div>
+          </div>
+        </div>
       </div>
-      <p className="text-[13px] leading-[1.6] text-(--color-fg-mid)">{body}</p>
-    </li>
-  );
-}
-
-// ---------- icons ----------
-
-/** Mac (menu bar). Laptop の輪郭 + 上端に menu bar 線を 1 本。 */
-function MacAppIcon({ size = 28 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 28 28"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {/* laptop screen */}
-      <rect x="4" y="6" width="20" height="13" rx="1.5" />
-      {/* menu bar line */}
-      <line x1="4" y1="9.5" x2="24" y2="9.5" />
-      {/* tiny menu bar dot (Vigili icon position hint) */}
-      <circle cx="20.5" cy="8" r="0.8" fill="currentColor" stroke="none" />
-      {/* laptop base */}
-      <path d="M2.5 21.5 L25.5 21.5" />
-      <path d="M11 23 L17 23" />
-    </svg>
-  );
-}
-
-/** Widget. シンプルな角丸 square + 数字風モチーフ。 */
-function WidgetIcon({ size = 28 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 28 28"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="4" y="4" width="20" height="20" rx="4" />
-      {/* small "1" / pending count hint */}
-      <path d="M11.5 17 V11" />
-      <path d="M11.5 11 L9.5 12.5" />
-      <line x1="6.5" y1="20.5" x2="14" y2="20.5" />
-    </svg>
-  );
-}
-
-/** iPhone. 縦長角丸 + Dynamic Island の楕円。 */
-function PhoneIcon({ size = 28 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 28 28"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="8" y="2.5" width="12" height="23" rx="3" />
-      {/* Dynamic Island */}
-      <rect x="11.5" y="4.7" width="5" height="1.7" rx="0.8" fill="currentColor" stroke="none" />
-    </svg>
+    </section>
   );
 }

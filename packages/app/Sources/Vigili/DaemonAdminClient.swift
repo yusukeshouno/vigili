@@ -69,6 +69,90 @@ actor DaemonAdminClient {
     return stats
   }
 
+  /// 現在ロード中のポリシールール一覧を取得する。
+  func fetchRules() async throws -> (rules: [PolicyRule], generatedRuleNames: Set<String>) {
+    let resp = try await send(request: ["kind": "admin", "action": "rules"])
+    guard
+      let action = resp["action"] as? String, action == "rules",
+      let ok = resp["ok"] as? Bool, ok,
+      let rulesArray = resp["rules"] as? [[String: Any]],
+      let genNamesArray = resp["generatedRuleNames"] as? [String]
+    else {
+      throw ClientError.responseInvalid("missing rules field")
+    }
+    let rules = rulesArray.compactMap(PolicyRule.init(dict:))
+    return (rules: rules, generatedRuleNames: Set(genNamesArray))
+  }
+
+  /// ポリシーが自動判定した直近の decisions を取得する。
+  func fetchHistory(limit: Int = 100) async throws -> [PolicyHistoryItem] {
+    var req: [String: Any] = ["kind": "admin", "action": "history"]
+    req["limit"] = limit
+    let resp = try await send(request: req)
+    guard
+      let action = resp["action"] as? String, action == "history",
+      let ok = resp["ok"] as? Bool, ok,
+      let itemsArray = resp["items"] as? [[String: Any]]
+    else {
+      throw ClientError.responseInvalid("missing history items")
+    }
+    return itemsArray.compactMap(PolicyHistoryItem.init(dict:))
+  }
+
+  /// policy.generated.yaml から指定名のルールを削除してリロードする。
+  func deleteGeneratedRule(name: String) async throws {
+    let resp = try await send(request: ["kind": "admin", "action": "rule-delete", "name": name])
+    guard let ok = resp["ok"] as? Bool, ok else {
+      let err = resp["error"] as? String ?? "unknown"
+      throw ClientError.responseError(err)
+    }
+  }
+
+  // MARK: - オンボーディング (ウィザード)
+
+  /// オンボーディングで表示するルール候補カタログ。daemon の POLICY_CATALOG と対応。
+  struct CatalogItem: Identifiable {
+    let id: String
+    let category: String  // "convenience" | "danger"
+    let label: String
+    let description: String
+  }
+
+  /// ルールカタログを取得する。
+  func fetchPolicyCatalog() async throws -> [CatalogItem] {
+    let resp = try await send(request: ["kind": "admin", "action": "policy-catalog"])
+    guard
+      let action = resp["action"] as? String, action == "policy-catalog",
+      let ok = resp["ok"] as? Bool, ok,
+      let itemsArray = resp["items"] as? [[String: Any]]
+    else {
+      throw ClientError.responseInvalid("missing catalog items")
+    }
+    return itemsArray.compactMap { dict in
+      guard
+        let id = dict["id"] as? String,
+        let category = dict["category"] as? String,
+        let label = dict["label"] as? String,
+        let description = dict["description"] as? String
+      else { return nil }
+      return CatalogItem(id: id, category: category, label: label, description: description)
+    }
+  }
+
+  /// 選択された ID 群からルールを policy.yaml に書き出す（既存は .bak に退避）。
+  func writePolicyFromCatalog(selectedIds: [String]) async throws -> Int {
+    let resp = try await send(request: [
+      "kind": "admin",
+      "action": "policy-write-from-catalog",
+      "selected_ids": selectedIds,
+    ])
+    guard let ok = resp["ok"] as? Bool, ok else {
+      let err = resp["error"] as? String ?? "unknown"
+      throw ClientError.responseError(err)
+    }
+    return (resp["written"] as? NSNumber)?.intValue ?? 0
+  }
+
   // MARK: - low level
 
   private func send(request: [String: Any]) async throws -> [String: Any] {

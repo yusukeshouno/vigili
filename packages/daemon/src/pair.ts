@@ -100,13 +100,36 @@ export async function pair(args: string[]): Promise<number> {
       console.error("(--no-config で続行できます)");
       return 1;
     }
+    // user_token はサーバ側にはハッシュしか残らない一方、 後で `vigili-daemon qr`
+    // から unified QR を出すために必要なので、ローカルにキャッシュしておく (0600)。
+    try {
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(paths().relayUserToken, pairing.user_token, { mode: 0o600 });
+    } catch (err) {
+      // ベストエフォート: 失敗しても pairing 自体は成功扱い
+      console.error(
+        `[vigili-cli] user_token cache 失敗 (続行可): ${(err as Error).message}`,
+      );
+    }
   }
 
-  // 5. iOS 用 URL + QR
-  const pairUrl =
-    `vigili://pair?p=${encodeURIComponent(pairing.id)}` +
-    `&u=${encodeURIComponent(pairing.user_token)}` +
-    `&r=${encodeURIComponent(baseUrl)}`;
+  // 5. iOS 用 URL + QR — 可能なら LAN 情報も同梱して unified QR にする
+  const lanInfo = await tryDetectLan().catch(() => null);
+  let pairUrl: string;
+  if (lanInfo) {
+    pairUrl =
+      `vigili://setup?u=${encodeURIComponent(lanInfo.url)}` +
+      `&t=${encodeURIComponent(lanInfo.token)}` +
+      `&r=${encodeURIComponent(baseUrl)}` +
+      `&p=${encodeURIComponent(pairing.id)}` +
+      `&k=${encodeURIComponent(pairing.user_token)}`;
+  } else {
+    // LAN 情報を拾えなかった場合は relay-only QR
+    pairUrl =
+      `vigili://pair?p=${encodeURIComponent(pairing.id)}` +
+      `&u=${encodeURIComponent(pairing.user_token)}` +
+      `&r=${encodeURIComponent(baseUrl)}`;
+  }
 
   if (plain) {
     console.log(pairUrl);
@@ -140,6 +163,30 @@ export async function pair(args: string[]): Promise<number> {
   }
   console.log("");
   return 0;
+}
+
+// ---------- LAN detection (for unified QR) ----------
+
+interface LanInfo {
+  url: string; // 例: "192.168.1.10:7878"
+  token: string;
+}
+
+async function tryDetectLan(): Promise<LanInfo | null> {
+  const p = paths();
+  // token がなければ daemon が一度も起動していない → LAN 情報なし
+  let token: string;
+  try {
+    const { readFileSync } = await import("node:fs");
+    token = readFileSync(p.token, "utf-8").trim();
+  } catch {
+    return null;
+  }
+  if (!token) return null;
+  const { detectPublicHost } = await import("./setup-qr.js");
+  const host = await detectPublicHost();
+  if (!host) return null;
+  return { url: host, token };
 }
 
 // ---------- HTTP helpers ----------

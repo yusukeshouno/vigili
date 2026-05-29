@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { createConnection } from "node:net";
 import { startDaemon } from "./daemon.js";
@@ -58,6 +59,28 @@ Files:
 }
 
 async function start(_args: string[]): Promise<number> {
+  const p = paths();
+
+  // PID file guard: 生きているプロセスが既にあれば再起動しない。
+  if (existsSync(p.pid)) {
+    const rawPid = readFileSync(p.pid, "utf-8").trim();
+    const pid = Number(rawPid);
+    if (Number.isFinite(pid) && pid > 0) {
+      try {
+        process.kill(pid, 0);
+        console.error(`[vigili-daemon] 既に動作中 (pid=${pid})。先に stop してください。`);
+        return 1;
+      } catch {
+        // PID が死んでいる → stale PID file を掃除して続行
+        console.error(`[vigili-daemon] stale PID ${pid} を削除して再起動します。`);
+        try { unlinkSync(p.pid); } catch { /* ignore */ }
+      }
+    }
+  }
+
+  // ゾンビプロセスが port 7878 を掴んでいたら kill してから起動する。
+  await killPortHolders(7878);
+
   try {
     const daemon = await startDaemon();
 
@@ -137,6 +160,28 @@ async function status(): Promise<number> {
   console.log(`pid file:          ${p.pid} (pid=${pid}, alive=${pidAlive})`);
   console.log(`socket:            ${p.socket} (reachable=${socketReachable})`);
   return pidAlive && socketReachable ? 0 : 3;
+}
+
+/** lsof で port を掴んでいる全プロセスを SIGKILL して、OS がポートを解放するまで待つ。 */
+async function killPortHolders(port: number): Promise<void> {
+  const result = spawnSync("lsof", ["-ti", `:${port}`], { encoding: "utf-8" });
+  if (result.status !== 0 || !result.stdout.trim()) return;
+  const pids = result.stdout
+    .trim()
+    .split("\n")
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0);
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGKILL");
+      console.error(`[vigili-daemon] killed zombie on port ${port} (pid=${pid})`);
+    } catch {
+      // already dead
+    }
+  }
+  if (pids.length > 0) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 200));
+  }
 }
 
 function pingSocket(path: string): Promise<boolean> {

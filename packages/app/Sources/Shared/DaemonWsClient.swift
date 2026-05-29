@@ -102,6 +102,23 @@ final class DaemonWsClient: ObservableObject {
     pending.removeAll { $0.id == id }
   }
 
+  /// "今後も自動で承認" ボタンから呼ばれる。
+  /// `decision: allow` と同時に `promote` を送り、daemon が policy.generated.yaml に追記する。
+  func decideWithPromote(id: String, promote: [String: Any]) {
+    guard let task = task, case .connected = state else {
+      appLog("ws.decideWithPromote: not connected, ignoring")
+      return
+    }
+    let msg: [String: Any] = [
+      "type": "decide",
+      "id": id,
+      "decision": "allow",
+      "promote": promote,
+    ]
+    sendJson(msg, on: task)
+    pending.removeAll { $0.id == id }
+  }
+
   /// Composer から呼ばれる: 指定 session_id 宛にメッセージを enqueue する。
   /// daemon が次回 gate fire 時に additionalContext として Claude に届ける。
   func sendMessage(sessionId: String, body: String) {

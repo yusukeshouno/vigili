@@ -10,10 +10,13 @@ import SwiftUI
 ///  2. iPhone との接続 QR を 1 画面で出して、Camera.app から取り込ませる
 ///  3. 「Got it」で marker file を書いて二度と出さない (AppCoordinator.dismissWelcome)
 ///
-/// QR の中身は `sentinel://setup?u=<lan_ip:7878>&t=<token>` 形式 (既存 iOS Setup と同じ)。
-/// 外出先用の relay ペアリングは別途 `vigili-cli pair` でやってもらう (CLI で完結)。
+/// QR は unified スキーマ:
+///   `vigili://setup?u=<lan>&t=<lan_token>[&r=<relay>&p=<pid>&k=<user_token>]`
+/// relay が設定済みなら r/p/k も同梱され、LAN + 外出先の両方に 1 QR で対応。
+/// 未設定なら「外出先でも使う」ボタンから `vigili-cli pair` を案内する。
 struct WelcomeView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
+  @State private var showPairInstructions = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -22,7 +25,9 @@ struct WelcomeView: View {
       intro
       Spacer(minLength: 22)
       qrSection
-      Spacer(minLength: 22)
+      Spacer(minLength: 14)
+      remoteSection
+      Spacer(minLength: 18)
       footer
     }
     .padding(.horizontal, 22)
@@ -35,7 +40,7 @@ struct WelcomeView: View {
 
   private var header: some View {
     HStack(spacing: 12) {
-      FlowerLogo(color: Theme.accent, size: 22)
+      FlowerLogo(color: Theme.accent, size: 18)
       Text("Welcome to Vigili")
         .font(.display(18, weight: .semibold))
         .foregroundStyle(Theme.fg)
@@ -127,9 +132,6 @@ struct WelcomeView: View {
 
   private var footer: some View {
     HStack {
-      Text("Out-of-LAN access? Run `vigili-cli pair` in your terminal.")
-        .font(.mono(9))
-        .foregroundStyle(Theme.fgDim)
       Spacer()
       Button(action: { coordinator.dismissWelcome() }) {
         Text("Got it")
@@ -140,6 +142,80 @@ struct WelcomeView: View {
           .foregroundStyle(.white)
       }
       .buttonStyle(.plain)
+    }
+  }
+
+  /// 外出先用 relay ペアリングのステータスとセットアップ案内。
+  @ViewBuilder
+  private var remoteSection: some View {
+    let hasRelay = SetupPayload.relayConfigured()
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: hasRelay ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right")
+        .font(.system(size: 13))
+        .foregroundStyle(hasRelay ? Theme.green : Theme.fgMid)
+        .padding(.top, 1)
+
+      VStack(alignment: .leading, spacing: 5) {
+        if hasRelay {
+          Text("外出先でも使えます")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Theme.fg)
+          Text("QR に LAN + relay 両方が入っています。iPhone を別のネットワークに移しても接続が維持されます。")
+            .font(.system(size: 10))
+            .foregroundStyle(Theme.fgDim)
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+          Text("外出先でも使う（任意）")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Theme.fg)
+          Text("relay 経由のセットアップを行うと、Wi-Fi 外でも接続できます。Terminal で 1 回ペアリングしてから QR を再表示してください。")
+            .font(.system(size: 10))
+            .foregroundStyle(Theme.fgDim)
+            .fixedSize(horizontal: false, vertical: true)
+          HStack(spacing: 8) {
+            Button(action: copyPairCommand) {
+              HStack(spacing: 4) {
+                Image(systemName: "doc.on.doc").font(.system(size: 9))
+                Text("コマンドをコピー").font(.mono(9))
+              }
+              .padding(.horizontal, 8)
+              .padding(.vertical, 4)
+              .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgRise))
+              .foregroundStyle(Theme.fgMid)
+            }
+            .buttonStyle(.plain)
+            Button(action: openTerminal) {
+              HStack(spacing: 4) {
+                Image(systemName: "terminal").font(.system(size: 9))
+                Text("Terminal を開く").font(.mono(9))
+              }
+              .padding(.horizontal, 8)
+              .padding(.vertical, 4)
+              .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgRise))
+              .foregroundStyle(Theme.fgMid)
+            }
+            .buttonStyle(.plain)
+          }
+          .padding(.top, 2)
+        }
+      }
+      Spacer()
+    }
+    .padding(10)
+    .background(RoundedRectangle(cornerRadius: 10).stroke(Theme.border, lineWidth: 1))
+  }
+
+  private func copyPairCommand() {
+    let pb = NSPasteboard.general
+    pb.clearContents()
+    pb.setString("vigili-cli pair --relay https://relay.vigili.io", forType: .string)
+  }
+
+  private func openTerminal() {
+    let script = "tell application \"Terminal\" to activate"
+    if let app = NSAppleScript(source: script) {
+      var err: NSDictionary?
+      app.executeAndReturnError(&err)
     }
   }
 }
@@ -167,17 +243,92 @@ func qrImage(for string: String, size: CGFloat) -> NSImage? {
 struct SetupPayload {
   let host: String      // 例: "192.168.1.5:7878"
   let token: String
-  let url: String       // "sentinel://setup?u=<host>&t=<token>"
+  let relay: RelayCreds?
+  let url: String       // unified: vigili://setup?u=&t=[&r=&p=&k=]
+
+  struct RelayCreds {
+    let url: String
+    let pairingId: String
+    let userToken: String
+  }
 
   /// 同期で叩いて返す。token / LAN IP が揃わなければ nil。
-  /// (起動直後は daemon が token を書く前のことがあるので呼び出し側でリトライする想定)
+  /// relay の credentials が ~/.vigili/config.yaml + ~/.vigili/relay-user-token に
+  /// あればそれも QR に同梱する (unified)。
   static func compute() -> SetupPayload? {
     let token = DaemonWsClient.macHomeToken()
     guard !token.isEmpty else { return nil }
     guard let ip = detectLanIp() else { return nil }
     let host = "\(ip):7878"
-    let url = "sentinel://setup?u=\(host.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) ?? host)&t=\(token.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? token)"
-    return SetupPayload(host: host, token: token, url: url)
+
+    var qAllowed = CharacterSet.urlQueryAllowed
+    qAllowed.remove(charactersIn: "+&=")
+    @inline(__always) func enc(_ s: String) -> String {
+      s.addingPercentEncoding(withAllowedCharacters: qAllowed) ?? s
+    }
+
+    let relay = readRelayCreds()
+    var qs = "u=\(enc(host))&t=\(enc(token))"
+    if let r = relay {
+      qs += "&r=\(enc(r.url))&p=\(enc(r.pairingId))&k=\(enc(r.userToken))"
+    }
+    let url = "vigili://setup?\(qs)"
+    return SetupPayload(host: host, token: token, relay: relay, url: url)
+  }
+
+  /// Welcome 画面で「外出先でも使えるか」を即時判定する軽量チェック。
+  static func relayConfigured() -> Bool {
+    return readRelayCreds() != nil
+  }
+
+  /// ~/.vigili/config.yaml の `relay:` 節と ~/.vigili/relay-user-token から
+  /// 完全な relay credentials を読み出す。3 点揃わない場合は nil。
+  static func readRelayCreds() -> RelayCreds? {
+    let home = ("~/.vigili" as NSString).expandingTildeInPath
+    let configPath = "\(home)/config.yaml"
+    let userTokenPath = "\(home)/relay-user-token"
+    guard let yaml = try? String(contentsOfFile: configPath, encoding: .utf8) else { return nil }
+    let url = matchYamlScalar(yaml, key: "url", under: "relay:") ?? ""
+    let pid = matchYamlScalar(yaml, key: "pairing_id", under: "relay:") ?? ""
+    let token = (try? String(contentsOfFile: userTokenPath, encoding: .utf8))?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !url.isEmpty, !pid.isEmpty, !token.isEmpty else { return nil }
+    return RelayCreds(url: url, pairingId: pid, userToken: token)
+  }
+
+  /// YAML から `<section>:\n  <key>: <value>` 形式の scalar を抜き出す簡易パーサ。
+  /// YAML ライブラリを Swift で持ち込まないために最低限の実装。
+  private static func matchYamlScalar(_ yaml: String, key: String, under section: String) -> String? {
+    let lines = yaml.split(separator: "\n", omittingEmptySubsequences: false)
+    var inSection = false
+    for raw in lines {
+      let line = String(raw)
+      if line.hasPrefix(section) {
+        inSection = true
+        continue
+      }
+      if inSection {
+        // セクション抜け検出 (新しい top-level 行)
+        if !line.hasPrefix(" ") && !line.hasPrefix("\t") && !line.isEmpty && !line.hasPrefix("#") {
+          inSection = false
+          continue
+        }
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("\(key):") {
+          let after = String(trimmed.dropFirst(key.count + 1))
+            .trimmingCharacters(in: .whitespaces)
+          // 引用符を剥がす
+          var value = after
+          if (value.hasPrefix("\"") && value.hasSuffix("\""))
+            || (value.hasPrefix("'") && value.hasSuffix("'"))
+          {
+            value = String(value.dropFirst().dropLast())
+          }
+          return value
+        }
+      }
+    }
+    return nil
   }
 
   /// `ipconfig getifaddr <iface>` を順に試して最初に取れた IP を返す。

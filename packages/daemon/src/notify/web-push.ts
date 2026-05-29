@@ -174,65 +174,80 @@ export function createWebPushNotifier(opts: WebPushNotifierOptions): Notifier {
         return;
       }
       const payload = buildPayload(input, opts.pwaBaseUrl);
-      const payloadJson = JSON.stringify(payload);
       const urgency = input.level === "critical" ? "high" : "normal";
-
-      const results = await Promise.allSettled(
-        subs.map(async (sub) => {
-          try {
-            const res = await send(
-              { endpoint: sub.endpoint, keys: sub.keys },
-              payloadJson,
-              {
-                vapidDetails: {
-                  subject: opts.vapid.subject,
-                  publicKey: opts.vapid.publicKey,
-                  privateKey: opts.vapid.privateKey,
-                },
-                TTL: 300, // 5 分。承認応答は短時間で意味を失う
-                urgency,
-                topic: input.request.id.slice(0, 32), // 同一 request の通知を coalesce
-              },
-            );
-            return { endpoint: sub.endpoint, statusCode: res.statusCode };
-          } catch (err) {
-            // web-push は WebPushError を throw する。statusCode を持つ。
-            const e = err as { statusCode?: number; body?: string; message?: string };
-            return {
-              endpoint: sub.endpoint,
-              statusCode: e.statusCode ?? 0,
-              error: e.message ?? "unknown",
-              body: e.body,
-            };
-          }
-        }),
-      );
-
-      for (const r of results) {
-        if (r.status === "rejected") {
-          log(`[vigili-push] 予期せぬ rejection: ${String(r.reason)}`);
-          continue;
-        }
-        const v = r.value as {
-          endpoint: string;
-          statusCode: number;
-          error?: string;
-          body?: string;
-        };
-        if (v.statusCode === 410 || v.statusCode === 404) {
-          // Gone / Not Found → 端末が unsubscribe 済み。store から除去。
-          opts.store.remove(v.endpoint);
-          log(`[vigili-push] subscription gone (${v.statusCode}) → 削除: ${truncEnd(v.endpoint)}`);
-        } else if (v.statusCode >= 200 && v.statusCode < 300) {
-          log(`[vigili-push] ok ${v.statusCode} → ${truncEnd(v.endpoint)}`);
-        } else {
-          log(
-            `[vigili-push] 失敗 ${v.statusCode} ${v.error ?? ""} body=${v.body ?? ""} → ${truncEnd(v.endpoint)}`,
-          );
-        }
-      }
+      await sendRaw(payload, urgency, input.request.id.slice(0, 32));
+    },
+    async send({ title, body, tag, urgency: urg }) {
+      const subs = opts.store.list();
+      if (subs.length === 0) return;
+      await sendRaw({ title, body, tag: tag ?? "digest" }, urg ?? "normal", tag);
     },
   };
+
+  async function sendRaw(
+    payload: object,
+    urg: string,
+    topic?: string,
+  ): Promise<void> {
+    const subs = opts.store.list();
+    if (subs.length === 0) return;
+    const payloadJson = JSON.stringify(payload);
+    const urgency = urg === "high" ? "high" : "normal";
+
+    const results = await Promise.allSettled(
+      subs.map(async (sub) => {
+        try {
+          const res = await send(
+            { endpoint: sub.endpoint, keys: sub.keys },
+            payloadJson,
+            {
+              vapidDetails: {
+                subject: opts.vapid.subject,
+                publicKey: opts.vapid.publicKey,
+                privateKey: opts.vapid.privateKey,
+              },
+              TTL: 300,
+              urgency,
+              ...(topic ? { topic: topic.slice(0, 32) } : {}),
+            },
+          );
+          return { endpoint: sub.endpoint, statusCode: res.statusCode };
+        } catch (err) {
+          // web-push は WebPushError を throw する。statusCode を持つ。
+          const e = err as { statusCode?: number; body?: string; message?: string };
+          return {
+            endpoint: sub.endpoint,
+            statusCode: e.statusCode ?? 0,
+            error: e.message ?? "unknown",
+            body: e.body,
+          };
+        }
+      }),
+    );
+
+    for (const r of results) {
+      if (r.status === "rejected") {
+        log(`[vigili-push] 予期せぬ rejection: ${String(r.reason)}`);
+        continue;
+      }
+      const v = r.value as {
+        endpoint: string;
+        statusCode: number;
+        error?: string;
+        body?: string;
+      };
+      if (v.statusCode === 410 || v.statusCode === 404) {
+        opts.store.remove(v.endpoint);
+        log(`[vigili-push] subscription gone (${v.statusCode}) → 削除: ${truncEnd(v.endpoint)}`);
+      } else if (v.statusCode >= 200 && v.statusCode < 300) {
+        log(`[vigili-push] ok ${v.statusCode} → ${truncEnd(v.endpoint)}`);
+      } else {
+        log(
+          `[vigili-push] 失敗 ${v.statusCode} ${v.error ?? ""} body=${v.body ?? ""} → ${truncEnd(v.endpoint)}`,
+        );
+      }
+    }
+  }
 }
 
 const defaultSender: WebPushSender = (subscription, payload, options) =>

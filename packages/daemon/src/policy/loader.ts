@@ -24,8 +24,14 @@ export class PolicyLoadError extends Error {
  * generated を catch-all の前に入れるのは、promote が「カオスの中で芽吹いた allow」だから。
  * catch-all を後ろに残すことで、未知のパターンは引き続き ask に流せる。
  */
-export async function loadPolicyFile(path: string): Promise<PolicyConfig> {
+export async function loadPolicyFile(
+  path: string,
+  log?: (msg: string) => void,
+): Promise<PolicyConfig> {
   const main = await loadOnePolicy(path);
+  // policy.yaml の正規表現は厳格に検証する (手書きなので修正できる)
+  validatePolicyRegexes(main);
+
   const generatedPath = path.replace(/\.yaml$/u, ".generated.yaml");
   let generatedRules: PolicyConfig["rules"] = [];
   try {
@@ -34,16 +40,23 @@ export async function loadPolicyFile(path: string): Promise<PolicyConfig> {
     throw new PolicyLoadError(`${generatedPath} のロード失敗: ${(err as Error).message}`, err);
   }
 
+  // generated ルールは自動生成のため、不正な正規表現が混入しても daemon をクラッシュさせず
+  // 該当ルールを warn + skip して degraded 動作を継続する。
+  const generatedConfig: PolicyConfig = { defaults: main.defaults, rules: generatedRules };
+  validatePolicyRegexes(generatedConfig, {
+    warnOnly: true,
+    onWarn: (msg) => log?.(`[vigili-policy] 警告: generated rule を skip — ${msg}`),
+  });
+
   const specific = main.rules.filter((r) => !isCatchAll(r));
   const catchAll = main.rules.filter((r) => isCatchAll(r));
 
   const merged: PolicyConfig = {
     defaults: main.defaults,
-    rules: [...specific, ...generatedRules, ...catchAll],
+    rules: [...specific, ...generatedConfig.rules, ...catchAll],
   };
 
   validatePolicyAgainstInvariants(merged);
-  validatePolicyRegexes(merged);
   return merged;
 }
 
@@ -155,8 +168,18 @@ function matchesProbeRule(when: PolicyConfig["rules"][number]["when"], req: Tool
   return true;
 }
 
-/** YAML に書かれた正規表現が壊れていないか起動時に検査。 */
-export function validatePolicyRegexes(policy: PolicyConfig): void {
+/**
+ * YAML に書かれた正規表現が壊れていないか起動時に検査。
+ *
+ * policy.yaml (手書き) の invalid regex は起動エラーにする。
+ * policy.generated.yaml (自動生成) の invalid regex は warn して
+ * そのルールを無効化する (daemon クラッシュより degraded 動作を優先)。
+ */
+export function validatePolicyRegexes(
+  policy: PolicyConfig,
+  opts: { warnOnly?: boolean; onWarn?: (msg: string) => void } = {},
+): void {
+  const bad: PolicyConfig["rules"][number][] = [];
   for (const rule of policy.rules) {
     for (const key of ["command_matches", "path_matches", "url_matches"] as const) {
       const src = rule.when[key];
@@ -164,10 +187,19 @@ export function validatePolicyRegexes(policy: PolicyConfig): void {
       try {
         new RegExp(src, "u");
       } catch (err) {
-        throw new PolicyLoadError(
-          `ルール "${rule.name}" の ${key} が不正な正規表現です: ${(err as Error).message}`,
-        );
+        const msg = `ルール "${rule.name}" の ${key} が不正な正規表現です: ${(err as Error).message}`;
+        if (opts.warnOnly) {
+          opts.onWarn?.(msg);
+          bad.push(rule);
+        } else {
+          throw new PolicyLoadError(msg);
+        }
       }
     }
+  }
+  // bad rules から除外 (in-place で rules を絞る)
+  if (bad.length > 0) {
+    const badSet = new Set(bad);
+    policy.rules = policy.rules.filter((r) => !badSet.has(r));
   }
 }

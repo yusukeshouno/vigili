@@ -1,153 +1,106 @@
 import type { Copy } from "@/lib/copy";
+import { Sparkle } from "./Sparkle";
 
 /**
- * Hero 下の Showcase section。
- *
- * 構成: 左に 3-step narrative (テキストのみ)、右に代表 1 画面 (iOS Queue) を大きく。
- * モバイル幅では縦に積む (テキスト上、画像下)。
- *
- * 「画像が入る意味性が無い」を避けつつ、画像枚数は 1 枚に絞る。
- * Queue 画面は「実際に Allow/Deny する瞬間」を語る最も product-defining なショット。
- *
- * 補助スクショ (mac-welcome.png / ios-dynamic-island.png) は public/screenshots/ に
- * 残してあるが、現状 LP では使わない (将来 Press Kit や docs で再利用予定)。
+ * "60-second tour" — 3 ステップを QR / Dynamic Island / ルールカード で図解する章。
  */
 export function Showcase({ copy }: { copy: Copy }) {
+  // QR ill: 49 マス (7x7) のパターン。元デザインの並びを保持。
+  // ` ` (space) = filled cream, `b` = blank (paper through). 7 columns x 7 rows.
+  const qrPattern = [
+    "    b  ",
+    " b    b",
+    "  bb   ",
+    "b b b b",
+    "   b   ",
+    "  b  b ",
+    "       ",
+  ];
+
   return (
-    <section
-      id="showcase"
-      className="mx-auto w-full max-w-6xl border-t border-(--color-border) px-6 py-20 sm:px-10 sm:py-24"
-    >
-      <header className="mb-12">
-        <span className="label block">{copy.showcaseEyebrow}</span>
-        <h2 className="mt-3 font-display text-[28px] leading-[1.1] tracking-tight sm:text-[36px]">
-          {copy.showcaseTitle}
-        </h2>
-        <p className="mt-4 max-w-xl text-[14px] text-(--color-fg-mid)">
-          {copy.showcaseLead}
-        </p>
-      </header>
+    <section className="tour" id="tour">
+      <div className="wrap">
+        <div className="s-head">
+          <div className="l">
+            <span className="eyebrow">{copy.tourEyebrow}</span>
+            <h2 style={{ marginTop: 18 }}>{copy.tourTitle}</h2>
+          </div>
+          <div className="r">{copy.tourLead}</div>
+        </div>
 
-      <div className="grid grid-cols-1 gap-12 md:grid-cols-12 md:gap-16 md:items-center">
-        {/* steps */}
-        <ol className="flex flex-col gap-10 md:col-span-7">
-          <Step
-            n="01"
-            headline={copy.showcaseStep1Title}
-            body={copy.showcaseStep1Body}
-          />
-          <Step
-            n="02"
-            headline={copy.showcaseStep2Title}
-            body={copy.showcaseStep2Body}
-          />
-          <Step
-            n="03"
-            headline={copy.showcaseStep3Title}
-            body={copy.showcaseStep3Body}
-            accent
-          />
-        </ol>
+        <div className="tour-grid">
+          {/* Step 1: QR pairing */}
+          <div className="step">
+            <div className="n">
+              STEP <b>01</b>
+            </div>
+            <div className="ill">
+              <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                <div className="qr">
+                  {qrPattern.flatMap((row, ri) =>
+                    row.split("").map((ch, ci) => (
+                      <i
+                        key={`${ri}-${ci}`}
+                        className={ch === "b" ? "b" : undefined}
+                      />
+                    )),
+                  )}
+                </div>
+                <div className="qr-side">
+                  <div>Pair this device</div>
+                  <div>
+                    <b>&lt; 5 sec</b>
+                  </div>
+                  <div>no account</div>
+                </div>
+              </div>
+            </div>
+            <h3>{copy.tourStep1Title}</h3>
+            <p>{copy.tourStep1Body}</p>
+          </div>
 
-        {/* phone — autoplay looping video of cards appearing + being approved */}
-        <figure className="flex justify-center md:col-span-5 md:justify-end">
-          <PhoneFrame
-            poster="/screenshots/ios-queue.png"
-            mp4="/screenshots/queue-loop.mp4"
-            webm="/screenshots/queue-loop.webm"
-            alt="Vigili iOS app: 3 pending cards appearing then being approved"
-          />
-        </figure>
+          {/* Step 2: phone takes over */}
+          <div className="step">
+            <div className="n">
+              STEP <b>02</b>
+            </div>
+            <div className="ill">
+              <div className="ill-di">
+                <div className="b">
+                  <Sparkle />
+                </div>
+                <div className="t">
+                  <b>Vigili waiting</b>
+                  <span>vigili-core · rm -rf</span>
+                </div>
+              </div>
+            </div>
+            <h3>{copy.tourStep2Title}</h3>
+            <p>{copy.tourStep2Body}</p>
+          </div>
+
+          {/* Step 3: rule card */}
+          <div className="step">
+            <div className="n">
+              STEP <b>03</b>
+            </div>
+            <div className="ill">
+              <div className="rule-card">
+                <div className="topbar">
+                  <span>NEW RULE</span>
+                  <span>✓ saved</span>
+                </div>
+                <div className="cmd">cat **/*.md</div>
+                <div className="ttl">
+                  expires in <b>24 h</b>
+                </div>
+              </div>
+            </div>
+            <h3>{copy.tourStep3Title}</h3>
+            <p>{copy.tourStep3Body}</p>
+          </div>
+        </div>
       </div>
     </section>
-  );
-}
-
-function Step({
-  n,
-  headline,
-  body,
-  accent = false,
-}: {
-  n: string;
-  headline: string;
-  body: string;
-  /** 最終ステップを少し強調 (突き当たり感)。 */
-  accent?: boolean;
-}) {
-  return (
-    <li className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2">
-      <span
-        className="font-mono text-[11px] tracking-[0.18em] pt-1"
-        style={{
-          color: accent ? "var(--color-accent)" : "var(--color-fg-dim)",
-        }}
-      >
-        {n}
-      </span>
-      <h3 className="font-display text-[18px] leading-tight tracking-tight text-(--color-fg)">
-        {headline}
-      </h3>
-      <span aria-hidden /> {/* spacer to align body under headline column */}
-      <p className="text-[14px] leading-[1.65] text-(--color-fg-mid)">{body}</p>
-    </li>
-  );
-}
-
-/**
- * iPhone デバイス枠 (黒 bezel + drop shadow) に動画を入れる。
- * autoplay + muted + loop + playsInline で iOS Safari でも自動再生される。
- * poster で video の load 前 / 初期表示に静止画を見せる。
- */
-function PhoneFrame({
-  poster,
-  mp4,
-  webm,
-  alt,
-}: {
-  poster: string;
-  mp4: string;
-  webm: string;
-  alt: string;
-}) {
-  return (
-    <div
-      className="relative"
-      style={{
-        width: "100%",
-        maxWidth: 280,
-        aspectRatio: "9 / 19.5",
-        borderRadius: 42,
-        padding: 9,
-        background: "linear-gradient(180deg, #1a1917 0%, #0e0d0c 100%)",
-        boxShadow:
-          "0 0 0 1px rgba(250,247,242,0.06), 0 40px 80px -20px rgba(0,0,0,0.7), 0 16px 32px -16px rgba(0,0,0,0.5)",
-      }}
-    >
-      <div
-        className="relative h-full w-full overflow-hidden bg-(--color-bg-rise)"
-        style={{ borderRadius: 33 }}
-      >
-        <video
-          poster={poster}
-          aria-label={alt}
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-          }}
-        >
-          <source src={webm} type="video/webm" />
-          <source src={mp4} type="video/mp4" />
-        </video>
-      </div>
-    </div>
   );
 }

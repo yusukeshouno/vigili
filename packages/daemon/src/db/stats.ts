@@ -21,7 +21,13 @@ export type DecisionSource =
 
 export interface StatsBuckets {
   total: number;
-  by_decision: { allow: number; deny: number; pending: number };
+  /**
+   * decision の集計。
+   * - allow/deny: Vigili が明示的に判定したもの (policy or human via Vigili)
+   * - cancelled: gate 切断 (Claude Code dialog で先に承認された等の外部要因) — deny にカウントしない
+   * - pending: まだ未決
+   */
+  by_decision: { allow: number; deny: number; cancelled: number; pending: number };
   by_source: Record<DecisionSource, number>;
   by_tool: Record<string, number>;
   by_tag: Record<string, number>;
@@ -83,7 +89,7 @@ export function computeStats(db: Database.Database, fromMs: number, toMs: number
 
   const stats: StatsBuckets = {
     total: rows.length,
-    by_decision: { allow: 0, deny: 0, pending: 0 },
+    by_decision: { allow: 0, deny: 0, cancelled: 0, pending: 0 },
     by_source: { ...EMPTY_SOURCES },
     by_tool: {},
     by_tag: {},
@@ -94,11 +100,14 @@ export function computeStats(db: Database.Database, fromMs: number, toMs: number
   const humanLatencies: number[] = [];
 
   for (const r of rows) {
-    if (r.decision === "allow") stats.by_decision.allow += 1;
+    const src = classifyDecisionSource(r.decided_by);
+
+    // 外部要因による cancellation は deny にカウントしない (Claude Code dialog 等)
+    if (src === "cancelled") stats.by_decision.cancelled += 1;
+    else if (r.decision === "allow") stats.by_decision.allow += 1;
     else if (r.decision === "deny") stats.by_decision.deny += 1;
     else stats.by_decision.pending += 1;
 
-    const src = classifyDecisionSource(r.decided_by);
     stats.by_source[src] += 1;
 
     stats.by_tool[r.tool_name] = (stats.by_tool[r.tool_name] ?? 0) + 1;

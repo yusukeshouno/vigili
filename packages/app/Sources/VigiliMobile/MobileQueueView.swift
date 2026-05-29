@@ -1,20 +1,47 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// pending 一覧 + 個別カードに対する Allow/Deny。
 /// Mac の PopoverContentView と思想は同じだが、iOS 用に縦長レイアウト + 大きめタップ領域。
 struct MobileQueueView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
   @State private var showSettings = false
+  @State private var promoteConfirmTarget: ApprovalRequest? = nil
   /// id → "allow" | "deny"  — tracks cards mid-exit for color flash + direction
   @State private var decidedIds: [String: String] = [:]
+  /// ロゴをバウンスさせるトリガー (pending が増えるたび)
+  @State private var logoPop = false
 
   private func decide(id: String, decision: String) {
-    withAnimation(.easeOut(duration: 0.12)) {
+    // ハプティクス
+    #if canImport(UIKit)
+    let gen = UIImpactFeedbackGenerator(style: decision == "allow" ? .medium : .rigid)
+    gen.impactOccurred()
+    #endif
+
+    withAnimation(.spring(response: 0.22, dampingFraction: 0.55)) {
       decidedIds[id] = decision
     }
     Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(90))
+      try? await Task.sleep(for: .milliseconds(80))
       coordinator.decide(id: id, decision: decision)
+    }
+  }
+
+  private func decideAndPromote(request: ApprovalRequest) {
+    #if canImport(UIKit)
+    let gen = UIImpactFeedbackGenerator(style: .medium)
+    gen.impactOccurred()
+    #endif
+
+    withAnimation(.spring(response: 0.22, dampingFraction: 0.55)) {
+      decidedIds[request.id] = "allow"
+    }
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(80))
+      coordinator.decideAndPromote(id: request.id, request: request)
     }
   }
 
@@ -45,8 +72,21 @@ struct MobileQueueView: View {
     HStack(spacing: 10) {
       FlowerLogo(
         color: coordinator.pendingCount > 0 ? Theme.accent : Theme.fgMid,
-        size: 26
+        size: 20
       )
+      // バウンス: pending が届くたびロゴが jump する
+      .scaleEffect(logoPop ? 1.45 : 1.0)
+      .rotationEffect(.degrees(logoPop ? -12 : 0))
+      .animation(
+        .spring(response: 0.24, dampingFraction: 0.38),
+        value: logoPop
+      )
+      .onChange(of: coordinator.pendingCount) { _, newVal in
+        guard newVal > 0 else { return }
+        logoPop = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) { logoPop = false }
+      }
+
       VStack(alignment: .leading, spacing: 2) {
         Text("Vigili")
           .font(.display(18, weight: .semibold))
@@ -56,8 +96,23 @@ struct MobileQueueView: View {
           .tracking(0.12 * 10)
           .textCase(.uppercase)
           .foregroundStyle(Theme.fgDim)
+          .contentTransition(.numericText())
+          .animation(.spring(response: 0.3, dampingFraction: 0.7), value: stateLabel)
       }
       Spacer()
+
+      // pending バッジ
+      if coordinator.pendingCount > 0 {
+        Text("\(coordinator.pendingCount)")
+          .font(.mono(11, weight: .bold))
+          .foregroundStyle(Theme.accent)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 3)
+          .background(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 1))
+          .transition(.scale(scale: 0.3, anchor: .trailing).combined(with: .opacity))
+          .id(coordinator.pendingCount) // key change triggers re-entrance animation
+      }
+
       Button {
         showSettings = true
       } label: {
@@ -68,6 +123,7 @@ struct MobileQueueView: View {
     }
     .padding(.horizontal, 18)
     .padding(.vertical, 14)
+    .animation(.spring(response: 0.32, dampingFraction: 0.65), value: coordinator.pendingCount)
   }
 
   private var cardList: some View {
@@ -76,22 +132,33 @@ struct MobileQueueView: View {
       VStack(spacing: 14) {
         ForEach(Array(sorted.enumerated()), id: \.element.id) { idx, req in
           ApprovalCard(request: req)
-            .opacity(idx == 0 ? 1.0 : 0.55)
-            .scaleEffect(idx == 0 ? 1.0 : 0.985)
+            // 上位カードをはっきり、後ろのカードを少し沈める
+            .opacity(idx == 0 ? 1.0 : 0.52)
+            .scaleEffect(
+              x: idx == 0 ? 1.0 : max(0.93, 1.0 - Double(idx) * 0.025),
+              y: idx == 0 ? 1.0 : max(0.93, 1.0 - Double(idx) * 0.025)
+            )
+            .offset(y: idx == 0 ? 0 : CGFloat(idx) * -6)
+            .zIndex(Double(sorted.count - idx))
+            // 決定フラッシュ
             .overlay {
               if let dec = decidedIds[req.id] {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                   .fill(
                     dec == "allow"
-                      ? Color(red: 0.15, green: 0.78, blue: 0.45).opacity(0.22)
-                      : Color(red: 0.9, green: 0.25, blue: 0.25).opacity(0.22)
+                      ? Color(red: 0.48, green: 0.78, blue: 0.55).opacity(0.28)
+                      : Color(red: 0.88, green: 0.35, blue: 0.30).opacity(0.28)
                   )
               }
             }
+            // 出現: 上から pop-in、消去: 決定方向に飛ぶ
             .transition(.asymmetric(
-              insertion: .scale(scale: 0.9, anchor: .top).combined(with: .opacity),
+              insertion: .scale(scale: 0.84, anchor: .top)
+                .combined(with: .opacity)
+                .animation(.spring(response: 0.4, dampingFraction: 0.6)),
               removal: .move(edge: decidedIds[req.id] == "deny" ? .leading : .trailing)
                 .combined(with: .opacity)
+                .animation(.spring(response: 0.32, dampingFraction: 0.78))
             ))
             .onDisappear {
               let id = req.id
@@ -104,25 +171,74 @@ struct MobileQueueView: View {
       }
       .padding(.horizontal, 18)
       .padding(.vertical, 14)
-      .animation(.spring(response: 0.32, dampingFraction: 0.75), value: coordinator.pending.count)
+      .animation(
+        .spring(response: 0.36, dampingFraction: 0.68),
+        value: coordinator.pending.count
+      )
     }
   }
 
   private var actionsBar: some View {
     let topCard = coordinator.pending.sorted(by: { $0.createdAt > $1.createdAt }).first
-    return HStack(spacing: 12) {
-      PillButton(
-        label: "Deny",
-        icon: "xmark",
-        style: .ghost,
-        action: { if let id = topCard?.id { decide(id: id, decision: "deny") } }
-      )
-      PillButton(
-        label: "Allow",
-        icon: "checkmark",
-        style: .primary,
-        action: { if let id = topCard?.id { decide(id: id, decision: "allow") } }
-      )
+    return VStack(spacing: 10) {
+      // 主操作: Deny / Allow
+      HStack(spacing: 12) {
+        PillButton(
+          label: "Deny",
+          icon: "xmark",
+          style: .ghost,
+          action: { if let id = topCard?.id { decide(id: id, decision: "deny") } }
+        )
+        PillButton(
+          label: "Allow",
+          icon: "checkmark",
+          style: .primary,
+          action: { if let id = topCard?.id { decide(id: id, decision: "allow") } }
+        )
+      }
+
+      // 副操作: 今後は自動で承認 (promote to rule) — 確認ダイアログ付き
+      Button {
+        if let card = topCard { promoteConfirmTarget = card }
+      } label: {
+        HStack(spacing: 6) {
+          Image(systemName: "arrow.up.circle")
+            .font(.system(size: 13))
+          Text("今後は自動で承認")
+            .font(.mono(12))
+        }
+        .foregroundStyle(Theme.fgDim)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(
+          RoundedRectangle(cornerRadius: 10)
+            .stroke(Theme.border, lineWidth: 1)
+        )
+      }
+      .buttonStyle(.plain)
+      .disabled(topCard == nil)
+      .alert(
+        "ルールを作成しますか？",
+        isPresented: Binding(
+          get: { promoteConfirmTarget != nil },
+          set: { if !$0 { promoteConfirmTarget = nil } }
+        ),
+        presenting: promoteConfirmTarget
+      ) { card in
+        Button("作成して承認") {
+          decideAndPromote(request: card)
+          promoteConfirmTarget = nil
+        }
+        Button("キャンセル", role: .cancel) {
+          promoteConfirmTarget = nil
+        }
+      } message: { card in
+        let payload = card.buildPromotePayload()
+        let match = payload["match"] as? [String: Any]
+        let scopeNote = (match?["repo_in"] as? [String])?.first.map { "プロジェクト「\($0)」限定" }
+          ?? "全プロジェクト共通"
+        Text("このパターンを今後は自動承認するルールを作成します。\n\n範囲: \(scopeNote)\n有効期間: 24時間")
+      }
     }
     .padding(.horizontal, 18)
     .padding(.bottom, 22)
