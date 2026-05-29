@@ -20,6 +20,39 @@ export const PromoteRuleSchema = z.object({
 
 export type PromoteRule = z.infer<typeof PromoteRuleSchema>;
 
+/**
+ * 観測可能性サマリー (daemon の `computeStats` / db/stats.ts と同形)。
+ *
+ * admin プロトコル (Unix socket) だけでなく WS でも配れるよう、ここ shared に
+ * 正準スキーマを置く。iOS は admin socket に届かないので、WS の `stats` メッセージ
+ * 経由で「今日の自動承認件数」等を受け取る (CLAUDE.md「観測可能性を最優先」)。
+ */
+export const StatsBucketsSchema = z.object({
+  total: z.number().int(),
+  by_decision: z.object({
+    allow: z.number().int(),
+    deny: z.number().int(),
+    cancelled: z.number().int(),
+    pending: z.number().int(),
+  }),
+  by_source: z.record(z.number().int()),
+  by_tool: z.record(z.number().int()),
+  by_tag: z.record(z.number().int()),
+  human_response_ms: z.object({
+    count: z.number().int(),
+    mean: z.number().nullable(),
+    p50: z.number().nullable(),
+    p95: z.number().nullable(),
+    max: z.number().nullable(),
+  }),
+  range: z.object({
+    from: z.number().int(),
+    to: z.number().int(),
+  }),
+});
+
+export type StatsBuckets = z.infer<typeof StatsBucketsSchema>;
+
 /** daemon → PWA */
 export const WsServerMessageSchema = z.discriminatedUnion("type", [
   z.object({
@@ -48,6 +81,15 @@ export const WsServerMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("message-delivered"),
     id: z.string().uuid(),
     delivered_at: z.number().int().nonnegative(),
+  }),
+  z.object({
+    /**
+     * 観測可能性サマリー (今日の自動承認/承認/ブロック件数等)。
+     * 接続直後 (snapshot の直後) と、決着 (resolved) / sweep のたびに push される。
+     * iOS の待機画面サマリーカードがこれを表示する。
+     */
+    type: z.literal("stats"),
+    stats: StatsBucketsSchema,
   }),
 ]);
 

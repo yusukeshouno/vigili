@@ -43,6 +43,19 @@ export const AskResolutionSchema = z.object({
 
 export type AskResolution = z.infer<typeof AskResolutionSchema>;
 
-/** 終局的な判定（DB に記録される値）。"ask" 中のものは null。 */
+/**
+ * 終局的な判定（gate / queue / PWA decide が扱う値）。
+ * gate に返せるのは allow / deny の二値のみ。"ask" 中のものは null。
+ */
 export const FinalDecisionSchema = z.enum(["allow", "deny"]);
 export type FinalDecision = z.infer<typeof FinalDecisionSchema>;
+
+/**
+ * DB の approval_requests.decision に保存され得る値域。
+ * FinalDecision に加えて `expired` を持つ:
+ *  - expired: TTL sweep が回収した zombie (gate は既に応答を諦めている)。
+ *             fail-safe の deny 相当で、gate へ allow として返してはいけない。
+ * "ask" 中のものは null。
+ */
+export const StoredDecisionSchema = z.enum(["allow", "deny", "expired"]);
+export type StoredDecision = z.infer<typeof StoredDecisionSchema>;
