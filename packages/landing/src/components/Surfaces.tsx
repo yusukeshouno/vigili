@@ -17,11 +17,6 @@ export function Surfaces({ copy }: { copy: Copy }) {
           {/* Mac app */}
           <div className="view-card">
             <div className="view-stage">
-              <Sparkle className="deco-sparkle" style={{ top: 18, left: 18, width: 30, height: 30 }} />
-              <Sparkle
-                className="deco-sparkle"
-                style={{ bottom: 14, right: 18, width: 20, height: 20, opacity: 0.2 }}
-              />
               <div className="menubar-icon">
                 <Sparkle width={11} height={11} style={{ color: "var(--color-coral)" }} />
                 <span className="badge">4</span>
@@ -72,11 +67,6 @@ export function Surfaces({ copy }: { copy: Copy }) {
           {/* Widget */}
           <div className="view-card">
             <div className="view-stage">
-              <Sparkle className="deco-sparkle" style={{ top: 24, right: 24, width: 24, height: 24 }} />
-              <Sparkle
-                className="deco-sparkle"
-                style={{ bottom: 18, left: 24, width: 36, height: 36, opacity: 0.18 }}
-              />
               <div className="widget">
                 <div className="topbar">
                   <VigiliMark size={22} />
@@ -104,11 +94,6 @@ export function Surfaces({ copy }: { copy: Copy }) {
           {/* iPhone */}
           <div className="view-card">
             <div className="view-stage">
-              <Sparkle className="deco-sparkle" style={{ top: 16, left: 24, width: 22, height: 22 }} />
-              <Sparkle
-                className="deco-sparkle"
-                style={{ bottom: 18, right: 18, width: 32, height: 32, opacity: 0.2 }}
-              />
               <div className="mini-phone">
                 <div className="scr">
                   <div className="di">

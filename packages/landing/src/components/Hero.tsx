@@ -1,5 +1,4 @@
 import type { Copy, Lang } from "@/lib/copy";
-import { Sparkle } from "./Sparkle";
 import { WaitlistForm } from "./WaitlistForm";
 
 /**
@@ -15,10 +14,6 @@ import { WaitlistForm } from "./WaitlistForm";
 export function Hero({ lang, copy }: { lang: Lang; copy: Copy }) {
   return (
     <section className="hero" id="top">
-      <Sparkle
-        className="bg-sparkle"
-        style={{ top: 80, right: "8%", width: 380, height: 380, transform: "rotate(8deg)" }}
-      />
       <div className="wrap">
         <div className="h-l">
           <span className="pill">
@@ -39,19 +34,7 @@ export function Hero({ lang, copy }: { lang: Lang; copy: Copy }) {
         </div>
 
         <div className="stage">
-          <Sparkle className="sp twinkle s1" />
-          <Sparkle className="sp s2" />
-          <Sparkle className="sp twinkle delay s3" />
-
           <div className="hero-video">
-            <Sparkle
-              className="deco-sparkle"
-              style={{ top: 30, left: -16, width: 30, height: 30, opacity: 0.4 }}
-            />
-            <Sparkle
-              className="deco-sparkle"
-              style={{ bottom: 60, right: -20, width: 22, height: 22, opacity: 0.32 }}
-            />
             <div className="hero-video-frame">
               {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <video

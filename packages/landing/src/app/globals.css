@@ -446,34 +446,6 @@ nav.top .wrap {
   position: relative;
   min-height: 540px;
 }
-.stage .sp {
-  position: absolute;
-  color: var(--color-coral-soft);
-  opacity: 0.38;
-}
-.stage .sp.s1 {
-  top: 20px;
-  right: 36px;
-  width: 90px;
-  height: 90px;
-  animation: twinkle 2.8s ease-in-out infinite;
-}
-.stage .sp.s2 {
-  bottom: 28px;
-  left: -8px;
-  width: 56px;
-  height: 56px;
-  opacity: 0.26;
-  animation: twinkle 3.6s ease-in-out infinite 1.2s;
-}
-.stage .sp.s3 {
-  top: 200px;
-  left: 40px;
-  width: 32px;
-  height: 32px;
-  opacity: 0.44;
-  animation: twinkle 2.4s ease-in-out infinite 0.6s;
-}
 
 /* hero video gentle float */
 @keyframes hero-float {
@@ -492,10 +464,6 @@ nav.top .wrap {
   display: grid;
   place-items: center;
   animation: hero-float 5s ease-in-out infinite;
-}
-.hero-video .deco-sparkle {
-  position: absolute;
-  color: var(--color-coral-soft);
 }
 .hero-video-frame {
   position: relative;
@@ -838,11 +806,6 @@ section + section {
   place-items: center;
   position: relative;
   overflow: hidden;
-}
-.view-stage .deco-sparkle {
-  position: absolute;
-  opacity: 0.2;
-  color: var(--color-coral-soft);
 }
 .view-body {
   padding: 28px 28px 32px;
@@ -1686,37 +1649,6 @@ footer.foot .wrap {
 }
 .foot-row a:hover {
   color: var(--color-coral-soft);
-}
-
-/* bg sparkle (大型・装飾) */
-.bg-sparkle {
-  position: absolute;
-  pointer-events: none;
-  opacity: 0.05;
-  color: var(--color-coral-soft);
-}
-
-/* sparkle twinkle — more energetic */
-@keyframes twinkle {
-  0%,
-  100% {
-    opacity: 0.25;
-    transform: scale(1) rotate(0deg);
-  }
-  30% {
-    opacity: 0.65;
-    transform: scale(1.22) rotate(15deg);
-  }
-  60% {
-    opacity: 0.35;
-    transform: scale(0.92) rotate(-8deg);
-  }
-}
-.sp.twinkle {
-  animation: twinkle 3.2s ease-in-out infinite;
-}
-.sp.twinkle.delay {
-  animation-delay: 1.4s;
 }
 
 /* fade-up entrance (for scroll-triggered sections) */
