@@ -26,6 +26,9 @@ final class DaemonWsClient: ObservableObject {
   @Published private(set) var state: State = .disconnected
   /// 直近 + 未配送のメッセージ (created_at 降順)。composer の history 表示用。
   @Published private(set) var messages: [Message] = []
+  /// 観測可能性サマリー (今日の自動承認/承認/ブロック件数等)。
+  /// daemon が接続直後と決着のたびに push する。未受信なら nil。
+  @Published private(set) var stats: StatsBuckets? = nil
 
   /// 接続先 (例: `ws://127.0.0.1:7878` または `wss://my-mac.tail-xxxx.ts.net`)。
   private var urlBase: URL
@@ -37,6 +40,10 @@ final class DaemonWsClient: ObservableObject {
   private var reconnectAttempts = 0
   private var reconnectWork: DispatchWorkItem?
   private var receiveTask: Task<Void, Never>?
+  /// keepalive 用の周期 ping ループ。half-open 接続 (網切替・スリープ後) を検知する。
+  private var pingTask: Task<Void, Never>?
+  /// ping 間隔 (秒)。relay/daemon 側の watchdog より短くして先に自分で気付く。
+  private let pingIntervalSeconds: UInt64 = 15
 
   init(urlBase: URL = URL(string: "ws://127.0.0.1:7878")!, token: String = "") {
     self.urlBase = urlBase
@@ -83,11 +90,43 @@ final class DaemonWsClient: ObservableObject {
   func stop() {
     reconnectWork?.cancel()
     reconnectWork = nil
+    stopPing()
     receiveTask?.cancel()
     receiveTask = nil
     task?.cancel(with: .goingAway, reason: nil)
     task = nil
     state = .disconnected
+  }
+
+  /// アプリ前面化 / 通知タップ時に即再接続させる。
+  ///
+  /// バックグラウンドで suspend されている間は ping タイマも止まるため、復帰直後の
+  /// 接続は half-open のまま放置されがち。バックオフ待ちを飛ばして health を確認し、
+  /// 死んでいれば即貼り直す。
+  ///   - .connected: ping を 1 発撃ち、失敗したら貼り直す
+  ///   - それ以外:    stop して即 connect
+  func reconnectNow() {
+    reconnectWork?.cancel()
+    reconnectWork = nil
+    reconnectAttempts = 0
+    guard case .connected = state, let task = task else {
+      stop()
+      connect()
+      return
+    }
+    task.sendPing { [weak self] error in
+      guard let error = error else { return }
+      Task { @MainActor [weak self] in
+        guard let self = self, case .connected = self.state else { return }
+        appLog("ws.reconnectNow: ping failed (\(error.localizedDescription)) — reconnect")
+        self.task?.cancel(with: .goingAway, reason: nil)
+        self.task = nil
+        self.receiveTask?.cancel()
+        self.receiveTask = nil
+        self.stopPing()
+        self.connect()
+      }
+    }
   }
 
   /// Allow / Deny ボタンから呼ばれる。
@@ -192,6 +231,38 @@ final class DaemonWsClient: ObservableObject {
     // 最初の receive 成功 or 失敗で connected / failed を確定する。
     state = .connected
     reconnectAttempts = 0
+    startPing()
+  }
+
+  /// 周期 ping で half-open 接続を検知する。URLSessionWebSocketTask は相手が黙って
+  /// 消えても receive() が即座には throw しない (スリープ・網切替・NAT 失効)。ping が
+  /// 失敗したら接続が死んでいるとみなし、明示的に貼り直す。
+  private func startPing() {
+    pingTask?.cancel()
+    pingTask = Task { @MainActor [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: (self?.pingIntervalSeconds ?? 15) * 1_000_000_000)
+        guard !Task.isCancelled, let self = self, let task = self.task else { return }
+        task.sendPing { [weak self] error in
+          guard let error = error else { return }
+          Task { @MainActor [weak self] in
+            guard let self = self, case .connected = self.state else { return }
+            appLog("ws.ping failed: \(error.localizedDescription) — reconnect")
+            self.state = .failed(error.localizedDescription)
+            self.task?.cancel(with: .goingAway, reason: nil)
+            self.task = nil
+            self.receiveTask?.cancel()
+            self.receiveTask = nil
+            self.scheduleReconnect()
+          }
+        }
+      }
+    }
+  }
+
+  private func stopPing() {
+    pingTask?.cancel()
+    pingTask = nil
   }
 
   private func receiveLoop() async {
@@ -212,6 +283,7 @@ final class DaemonWsClient: ObservableObject {
         appLog("ws.receive failed: \(error.localizedDescription)")
         state = .failed(error.localizedDescription)
         self.task = nil
+        stopPing()
         scheduleReconnect()
         return
       }
@@ -245,6 +317,11 @@ final class DaemonWsClient: ObservableObject {
       if let id = obj["id"] as? String {
         pending.removeAll { $0.id == id }
         appLog("ws.resolved -1 total=\(pending.count)")
+      }
+    case "stats":
+      if let s = obj["stats"] as? [String: Any], let parsed = StatsBuckets(dict: s) {
+        stats = parsed
+        appLog("ws.stats total=\(parsed.total) allow=\(parsed.byDecision.allow)")
       }
     case "message-added":
       if let m = obj["message"] as? [String: Any], let msg = Message(dict: m) {

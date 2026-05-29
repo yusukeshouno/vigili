@@ -14,8 +14,11 @@ struct ApprovalCard: View {
   let request: ApprovalRequest
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      header
+    let risk = RiskAssessment.evaluate(request)
+    return VStack(alignment: .leading, spacing: 0) {
+      // 危険/要注意は最初に目に入るよう、アバターアイコンより上に置く。
+      if risk.isFlagged { riskBanner(risk) }
+      header(topPadding: risk.isFlagged ? 12 : 14)
       summary
       bodyBlock
       footer
@@ -24,15 +27,50 @@ struct ApprovalCard: View {
       RoundedRectangle(cornerRadius: 16, style: .continuous)
         .fill(Theme.bgRise)
     )
+    // 危険操作は背景にもごく薄いティントを敷いて目立たせる
+    .background(
+      RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .fill(risk.level == .danger ? risk.tint : .clear)
+    )
+    // risk バナーをカード上端いっぱい (フルブリード) に敷くため、コンテンツごと
+    // カード形状でクリップする。これで帯の上 2 角だけがカードの丸みに揃い、
+    // 下側はカード幅いっぱいの直線で切れる。
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     .overlay(
       RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .stroke(Theme.borderStrong, lineWidth: 1)
+        .stroke(
+          risk.isFlagged ? risk.color : Theme.borderStrong,
+          lineWidth: risk.isFlagged ? 1.5 : 1
+        )
     )
   }
 
   // MARK: - sections
 
-  private var header: some View {
+  /// 危険 / 要注意 を 1 行で喚起するバナー (カード最上部のフルブリード帯)。
+  ///
+  /// 角丸は付けず、左右はカード端いっぱいまで地を伸ばす。上 2 角の丸みは
+  /// カード全体の `clipShape` が担い、下端はカード幅いっぱいの直線で切れる。
+  private func riskBanner(_ risk: RiskAssessment) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .font(.system(size: 9, weight: .bold))
+      Text(risk.label)
+        .font(.mono(8, weight: .bold))
+        .tracking(0.14 * 8)
+      Text(risk.reason ?? "")
+        .font(.mono(9))
+        .lineLimit(1)
+        .truncationMode(.tail)
+    }
+    .foregroundStyle(risk.color)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 18)
+    .padding(.vertical, 6)
+    .background(risk.tint)
+  }
+
+  private func header(topPadding: CGFloat) -> some View {
     HStack(spacing: 12) {
       // Avatar: tag のハッシュから色を取り、tag の頭文字を入れる
       ZStack {
@@ -75,7 +113,7 @@ struct ApprovalCard: View {
         Capsule().stroke(Theme.border, lineWidth: 1)
       )
     }
-    .padding(.top, 14)
+    .padding(.top, topPadding)
     .padding(.horizontal, 18)
     .padding(.bottom, 8)
   }

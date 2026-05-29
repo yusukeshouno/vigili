@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import Network
 import SwiftUI
+import UIKit
 
 /// iOS 側のアプリ全体状態 (Mac の AppCoordinator の縮小版)。
 ///
@@ -28,6 +29,8 @@ final class MobileAppCoordinator: ObservableObject {
   @Published var pending: [ApprovalRequest] = []
   @Published var pendingCount: Int = 0
   @Published var messages: [Message] = []
+  /// 観測可能性サマリー (今日の自動承認/承認/ブロック件数等)。待機画面カードが表示する。
+  @Published var stats: StatsBuckets? = nil
   @Published var wsState: DaemonWsClient.State = .disconnected
   @Published var isConfigured: Bool = MobileSettings.isConfigured
   /// 現在どの経路で繋がっているか (UI 表示用)。
@@ -67,6 +70,9 @@ final class MobileAppCoordinator: ObservableObject {
     wsClient.$messages
       .receive(on: DispatchQueue.main)
       .assign(to: &$messages)
+    wsClient.$stats
+      .receive(on: DispatchQueue.main)
+      .assign(to: &$stats)
 
     // Bonjour 発見状況が変わるたびに戦略を再評価
     bonjour.$services
@@ -83,6 +89,20 @@ final class MobileAppCoordinator: ObservableObject {
       }
     }
     pathMonitor.start(queue: .global(qos: .utility))
+
+    // 前面化 (suspend からの復帰) と APNs 通知タップで即再接続する。
+    // バックグラウンド中は WS が suspend され ping タイマも止まるため、
+    // 復帰直後に明示的に health 確認 → 必要なら貼り直す。
+    NotificationCenter.default.addObserver(
+      forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main,
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in self?.handleForeground() }
+    }
+    NotificationCenter.default.addObserver(
+      forName: .vigiliPushTapped, object: nil, queue: .main,
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in self?.handleForeground() }
+    }
 
     if isConfigured {
       bonjour.start()
@@ -103,6 +123,18 @@ final class MobileAppCoordinator: ObservableObject {
       bonjour.start()
     }
     reevaluateRoute()
+    // QR で relay を後付けした直後など、既に取得済みの APNs token を relay に再登録する。
+    RelayDeviceRegistrar.reregisterIfPossible()
+  }
+
+  /// 前面化 / 通知タップ時: 網が変わっていれば経路を選び直し、変わっていなければ
+  /// 既存接続の health を確認して必要なら即貼り直す。
+  private func handleForeground() {
+    let before = currentUrl
+    reevaluateRoute()
+    if currentUrl == before {
+      wsClient.reconnectNow()
+    }
   }
 
   func disconnect() {

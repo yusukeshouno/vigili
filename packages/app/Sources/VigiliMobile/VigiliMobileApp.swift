@@ -9,6 +9,8 @@ import SwiftUI
 /// Live Activity は Phase 13-C で追加予定。今は通常の Queue / Detail / Settings のみ。
 @main
 struct VigiliMobileApp: App {
+  // APNs 登録 + リモート通知ハンドリングのために UIApplicationDelegate を差し込む。
+  @UIApplicationDelegateAdaptor(MobileAppDelegate.self) private var appDelegate
   @StateObject private var coordinator = MobileAppCoordinator()
 
   init() {

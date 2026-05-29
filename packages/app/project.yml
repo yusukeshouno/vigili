@@ -160,6 +160,9 @@ targets:
         UIStatusBarStyle: UIStatusBarStyleLightContent
         UIViewControllerBasedStatusBarAppearance: false
         NSSupportsLiveActivities: true
+        # APNs push で起きてバックグラウンドでも WS を貼り直せるように。
+        UIBackgroundModes:
+          - remote-notification
         # QR スキャンでカメラを使うために必須の usage description。
         NSCameraUsageDescription: "Scan the QR code shown on your Mac to connect."
         # Local Network 探索の許可 (Bonjour で同 LAN 上の Mac を見つけるため必須)。
@@ -195,6 +198,12 @@ targets:
         CODE_SIGNING_ALLOWED: "YES"
         # Free Provisioning / Personal Team でも entitlements 最低限で動くように
         ENABLE_BITCODE: "NO"
+    # APNs push を受けるための aps-environment entitlement。
+    # 有償 Apple Developer Program + App ID の Push capability 有効化が前提。
+    entitlements:
+      path: Resources/VigiliMobile.entitlements
+      properties:
+        aps-environment: development
 
   # ============================================================
   # iOS: Widget Extension (Live Activity 用)

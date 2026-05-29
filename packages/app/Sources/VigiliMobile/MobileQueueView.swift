@@ -8,7 +8,6 @@ import UIKit
 struct MobileQueueView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
   @State private var showSettings = false
-  @State private var promoteConfirmTarget: ApprovalRequest? = nil
   /// id → "allow" | "deny"  — tracks cards mid-exit for color flash + direction
   @State private var decidedIds: [String: String] = [:]
   /// ロゴをバウンスさせるトリガー (pending が増えるたび)
@@ -50,14 +49,23 @@ struct MobileQueueView: View {
       topBar
       Divider().background(Theme.border)
 
-      if coordinator.pending.isEmpty {
-        Spacer()
-        StandingWatchView(wsState: coordinator.wsState)
-        Spacer()
-      } else {
-        cardList
-        actionsBar
+      // pending ↔ idle(レーダー) の切り替え。コンテナはフェードのみとし、
+      // 「浮かび上がる」演出は StandingWatchView 内部の段階的 intro
+      // (ライン→星→レーダー→文字) に任せる。
+      Group {
+        if coordinator.pending.isEmpty {
+          idleView
+            .transition(.opacity)
+        } else {
+          VStack(spacing: 0) {
+            cardList
+            actionsBar
+          }
+          .transition(.opacity)
+        }
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .animation(.easeOut(duration: 0.7), value: coordinator.pending.isEmpty)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(Theme.bg.ignoresSafeArea())
@@ -65,6 +73,18 @@ struct MobileQueueView: View {
       MobileSettingsSheet(showSettings: $showSettings)
         .environmentObject(coordinator)
         .presentationDetents([.medium])
+    }
+  }
+
+  /// pending が無いときの待機画面。
+  /// design "Vigili — standing watch (Footer B)" 準拠: レーダーを主役として上半分の
+  /// 余白に縦中央寄せし、静かな 3 カラム台帳フッターを画面下端にピン留めする。
+  private var idleView: some View {
+    VStack(spacing: 0) {
+      Spacer(minLength: 0)
+      StandingWatchView(wsState: coordinator.wsState)
+      Spacer(minLength: 0)
+      StandingWatchLedger()
     }
   }
 
@@ -81,7 +101,7 @@ struct MobileQueueView: View {
         .spring(response: 0.24, dampingFraction: 0.38),
         value: logoPop
       )
-      .onChange(of: coordinator.pendingCount) { _, newVal in
+      .onChange(of: coordinator.pendingCount) { newVal in
         guard newVal > 0 else { return }
         logoPop = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) { logoPop = false }
@@ -197,47 +217,41 @@ struct MobileQueueView: View {
         )
       }
 
-      // 副操作: 今後は自動で承認 (promote to rule) — 確認ダイアログ付き
-      Button {
-        if let card = topCard { promoteConfirmTarget = card }
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "arrow.up.circle")
-            .font(.system(size: 13))
-          Text("今後は自動で承認")
-            .font(.mono(12))
+      // 副操作: 今後は自動で承認 (promote to rule) — 確認ダイアログ付き。
+      // 危険操作 (.danger) は自動承認させない (常時 allow 化は取り返しがつかない)。
+      if let card = topCard, RiskAssessment.evaluate(card).level == .danger {
+        HStack(spacing: 5) {
+          Image(systemName: "lock.fill")
+            .font(.system(size: 11))
+          Text("危険操作のため自動承認は無効")
+            .font(.mono(11))
         }
         .foregroundStyle(Theme.fgDim)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(
-          RoundedRectangle(cornerRadius: 10)
-            .stroke(Theme.border, lineWidth: 1)
-        )
-      }
-      .buttonStyle(.plain)
-      .disabled(topCard == nil)
-      .alert(
-        "ルールを作成しますか？",
-        isPresented: Binding(
-          get: { promoteConfirmTarget != nil },
-          set: { if !$0 { promoteConfirmTarget = nil } }
-        ),
-        presenting: promoteConfirmTarget
-      ) { card in
-        Button("作成して承認") {
-          decideAndPromote(request: card)
-          promoteConfirmTarget = nil
+      } else {
+        // Mac (PopoverContentView) と同じく確認ダイアログは出さない。誤爆しても
+        // ルールは 24h で失効し、ポリシー画面から即削除できるので直接実行する。
+        Button {
+          if let card = topCard { decideAndPromote(request: card) }
+        } label: {
+          HStack(spacing: 7) {
+            Image(systemName: "arrow.up.circle.fill")
+              .font(.system(size: 16))
+            Text("今後は自動で承認")
+              .font(.mono(14, weight: .medium))
+          }
+          .foregroundStyle(Theme.fgMid)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 16)
+          .background(
+            RoundedRectangle(cornerRadius: 12)
+              .stroke(Theme.borderStrong, lineWidth: 1)
+          )
+          .contentShape(RoundedRectangle(cornerRadius: 12))
         }
-        Button("キャンセル", role: .cancel) {
-          promoteConfirmTarget = nil
-        }
-      } message: { card in
-        let payload = card.buildPromotePayload()
-        let match = payload["match"] as? [String: Any]
-        let scopeNote = (match?["repo_in"] as? [String])?.first.map { "プロジェクト「\($0)」限定" }
-          ?? "全プロジェクト共通"
-        Text("このパターンを今後は自動承認するルールを作成します。\n\n範囲: \(scopeNote)\n有効期間: 24時間")
+        .buttonStyle(.plain)
+        .disabled(topCard == nil)
       }
     }
     .padding(.horizontal, 18)

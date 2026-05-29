@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- APNs 環境。Xcode の development build は "development" (sandbox APNs)、
+       TestFlight / App Store 配布は "production"。relay 側の APNS_ENV と必ず揃える
+       (dev build → APNS_ENV=sandbox)。
+       注意: aps-environment を有効にするには App ID (io.vigili.mobile.shono) で
+       Push Notifications capability を有効化した有償 Apple Developer Program 必須。 -->
+  <key>aps-environment</key>
+  <string>development</string>
+</dict>
+</plist>

@@ -10,7 +10,7 @@ import AppKit
 /// - primary: coral 塗りつぶし、白文字 (Allow 用)
 /// - ghost:   transparent、border (Deny 用)
 ///
-/// スプリングバウンス: 押下で 0.88 → リリース時に 1.06 → 1.0 のオーバーシュート。
+/// スプリングバウンス (派手版): 押下で 0.82 まで沈み、リリース時に大きくオーバーシュートして 1.0 へ。
 struct PillButton: View {
   enum Style {
     case primary
@@ -32,13 +32,13 @@ struct PillButton: View {
     }) {
       HStack(spacing: 8) {
         Image(systemName: icon)
-          .font(.system(size: 12, weight: .semibold))
+          .font(.system(size: iconSize, weight: .semibold))
         Text(label)
-          .font(.display(14, weight: .medium))
+          .font(.display(labelSize, weight: .medium))
       }
       .foregroundStyle(foreground)
       .frame(maxWidth: .infinity)
-      .padding(.vertical, 13)
+      .padding(.vertical, verticalPadding)
       .padding(.horizontal, 20)
       .background(
         Capsule().fill(background)
@@ -46,19 +46,19 @@ struct PillButton: View {
       .overlay(
         Capsule().stroke(stroke, lineWidth: 1.5)
       )
-      // 押下: 0.88 まで縮む。リリース: spring でオーバーシュートしながら 1.0 に戻る
-      .scaleEffect(pressed ? 0.88 : 1.0)
+      // 押下: 0.82 まで深く縮む。リリース: 低 damping の spring で大きくオーバーシュートしながら 1.0 へ
+      .scaleEffect(pressed ? 0.82 : 1.0)
       .animation(
         pressed
-          ? .easeIn(duration: 0.06)
-          : .spring(response: 0.25, dampingFraction: 0.44, blendDuration: 0),
+          ? .easeIn(duration: 0.05)
+          : .spring(response: 0.34, dampingFraction: 0.38, blendDuration: 0),
         value: pressed
       )
-      // shadow (primary only)
+      // shadow (primary only) — 押下で潰れ、リリースで大きく浮き上がる
       .shadow(
-        color: style == .primary ? Theme.accent.opacity(0.35) : .clear,
-        radius: pressed ? 2 : 8,
-        y: pressed ? 1 : 4
+        color: style == .primary ? Theme.accent.opacity(pressed ? 0.2 : 0.45) : .clear,
+        radius: pressed ? 1 : 13,
+        y: pressed ? 0 : 6
       )
     }
     .buttonStyle(.plain)
@@ -80,6 +80,32 @@ struct PillButton: View {
       .alignment,
       performanceTime: .default
     )
+    #endif
+  }
+
+  // タッチが主操作の iOS では一回り大きく取り、HIG の 44pt 以上を満たす。
+  // Mac (click) は従来サイズのまま。
+  private var verticalPadding: CGFloat {
+    #if os(iOS)
+    return 17
+    #else
+    return 13
+    #endif
+  }
+
+  private var labelSize: CGFloat {
+    #if os(iOS)
+    return 16
+    #else
+    return 14
+    #endif
+  }
+
+  private var iconSize: CGFloat {
+    #if os(iOS)
+    return 14
+    #else
+    return 12
     #endif
   }
 

@@ -11,11 +11,12 @@ struct PopoverContentView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
   @State private var showPairingQR = false
   @State private var showPolicy = false
-  @State private var promoteConfirmTarget: ApprovalRequest? = nil
   /// pending バッジを叩くためのフラグ
   @State private var badgePop = false
-  /// 接続ドット波紋
-  @State private var dotRipple = false
+  /// 決定時のカード飛び出し (PWA SwipeStack 風)。allow=右 / deny=左へ真っ直ぐ。
+  @State private var flyingOut: FlyOut? = nil
+  /// 多重発火ガード (飛び出しアニメ中は次の決定を受け付けない)。
+  @State private var deciding = false
 
   /// 初回起動時にウィザードを 1 度だけ表示するためのフラグ。
   @AppStorage("vigili.onboardingComplete") private var onboardingComplete = false
@@ -76,8 +77,8 @@ struct PopoverContentView: View {
           icon: "xmark",
           style: .ghost,
           action: {
-            if let id = topCard?.id {
-              coordinator.decide(id: id, decision: "deny")
+            if let card = topCard {
+              performDecision(card: card, verdict: "deny")
             }
           }
         )
@@ -86,55 +87,51 @@ struct PopoverContentView: View {
           icon: "checkmark",
           style: .primary,
           action: {
-            if let id = topCard?.id {
-              coordinator.decide(id: id, decision: "allow")
+            if let card = topCard {
+              performDecision(card: card, verdict: "allow")
             }
           }
         )
       }
 
       // 副操作: 今後は自動で承認 (promote to rule)
-      Button {
-        if let card = topCard {
-          promoteConfirmTarget = card
-        }
-      } label: {
+      // 危険操作 (.danger) は自動承認させない: 誤って常時 allow ルール化すると
+      // 取り返しがつかないため。ボタンを消し、理由を 1 行で示す。
+      if let card = topCard, RiskAssessment.evaluate(card).level == .danger {
         HStack(spacing: 5) {
-          Image(systemName: "arrow.up.circle")
-            .font(.system(size: 10))
-          Text("今後は自動で承認")
-            .font(.mono(10))
+          Image(systemName: "lock.fill")
+            .font(.system(size: 9))
+          Text("危険操作のため自動承認は無効")
+            .font(.mono(9))
         }
         .foregroundStyle(Theme.fgDim)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .background(
-          RoundedRectangle(cornerRadius: 8)
-            .stroke(Theme.border, lineWidth: 1)
-        )
-      }
-      .buttonStyle(.plain)
-      .alert(
-        "ルールを作成しますか？",
-        isPresented: Binding(
-          get: { promoteConfirmTarget != nil },
-          set: { if !$0 { promoteConfirmTarget = nil } }
-        ),
-        presenting: promoteConfirmTarget
-      ) { card in
-        Button("作成して承認", role: .none) {
-          coordinator.decideAndPromote(id: card.id, request: card)
-          promoteConfirmTarget = nil
+        .padding(.vertical, 11)
+      } else {
+        // 確認ダイアログは出さない: MenuBarExtra(.window) の popover では alert を出すと
+        // popover がフォーカスを失って閉じてしまい、ダイアログに気づけない。
+        // 誤爆してもルールは 24h で失効し「ポリシー」画面から即削除できるので直接実行する。
+        Button {
+          if let card = topCard {
+            performDecision(card: card, verdict: "allow", promote: true)
+          }
+        } label: {
+          HStack(spacing: 7) {
+            Image(systemName: "arrow.up.circle.fill")
+              .font(.system(size: 14))
+            Text("今後は自動で承認")
+              .font(.mono(12, weight: .medium))
+          }
+          .foregroundStyle(Theme.fgMid)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 13)
+          .background(
+            RoundedRectangle(cornerRadius: 10)
+              .stroke(Theme.borderStrong, lineWidth: 1)
+          )
+          .contentShape(RoundedRectangle(cornerRadius: 10))
         }
-        Button("キャンセル", role: .cancel) {
-          promoteConfirmTarget = nil
-        }
-      } message: { card in
-        let payload = card.buildPromotePayload()
-        let match = payload["match"] as? [String: Any]
-        let scopeNote = (match?["repo_in"] as? [String])?.first.map { "プロジェクト「\($0)」限定" }
-          ?? "全プロジェクト共通"
-        Text("このリクエストと同じパターンを今後は自動で承認するルールを作成します。\n\n範囲: \(scopeNote)\n有効期間: 24時間\n\n不要になったら「ポリシー」画面から削除できます。")
+        .buttonStyle(.plain)
       }
     }
     .padding(.vertical, 12)
@@ -172,14 +169,14 @@ struct PopoverContentView: View {
                 .fill(Theme.accent.opacity(0.1))
                 .overlay(Capsule().stroke(Theme.accent.opacity(0.5), lineWidth: 0.5))
             )
-            // バッジが出るとき / 数字が変わるとき: pop アニメーション
-            .scaleEffect(badgePop ? 1.0 : 0.4)
-            .rotationEffect(.degrees(badgePop ? 0 : -15))
+            // バッジが出るとき / 数字が変わるとき: 大きく弾ける pop アニメーション
+            .scaleEffect(badgePop ? 1.0 : 0.2)
+            .rotationEffect(.degrees(badgePop ? 0 : -28))
             .animation(
-              .spring(response: 0.26, dampingFraction: 0.46),
+              .spring(response: 0.32, dampingFraction: 0.38),
               value: badgePop
             )
-            .onChange(of: coordinator.pendingCount) { _, _ in
+            .onChange(of: coordinator.pendingCount) { _ in
               badgePop = false
               withAnimation { badgePop = true }
             }
@@ -197,20 +194,8 @@ struct PopoverContentView: View {
   @ViewBuilder
   private var daemonStatusBadge: some View {
     if case .connected = coordinator.wsState {
-      // 接続中: 緑ドット + 波紋リング
-      ZStack {
-        Circle()
-          .stroke(Theme.green.opacity(dotRipple ? 0 : 0.6), lineWidth: 1.5)
-          .frame(width: dotRipple ? 22 : 7, height: dotRipple ? 22 : 7)
-          .animation(
-            .easeOut(duration: 1.6).repeatForever(autoreverses: false),
-            value: dotRipple
-          )
-        Circle()
-          .fill(Theme.green)
-          .frame(width: 7, height: 7)
-      }
-      .onAppear { dotRipple = true }
+      // 接続中: 脈動する緑ドット + 大きく広がる波紋リング (timer 駆動)
+      ConnectedPulseDot()
     } else if case .crashed(_, _) = coordinator.daemonStatus {
       // クラッシュ: 赤ドット + テキスト
       HStack(spacing: 4) {
@@ -240,11 +225,18 @@ struct PopoverContentView: View {
     }
     .frame(maxWidth: .infinity)
     .padding(.top, 8)
+    // 急に切り替わると違和感があるので、ゆっくりした ease-out で浮かび上がらせる。
+    .animation(.easeOut(duration: 0.6), value: coordinator.pending.isEmpty)
   }
 
   private var emptyState: some View {
-    StandingWatchView(wsState: coordinator.wsState)
-      .padding(.vertical, 24)
+    // popover は縦が限られるため、ヘッダー + レーダー + フッターが全部収まる
+    // ように小さめ (200) にする。これより大きいとフッターが画面外に押し出される。
+    StandingWatchView(wsState: coordinator.wsState, radarSize: 200)
+      .padding(.vertical, 16)
+      // コンテナ自体は素直にフェードのみ。浮かび上がる演出は StandingWatchView
+      // 内部の段階的 intro (ライン→星→レーダー→文字) に任せる。
+      .transition(.opacity)
   }
 
   private var cardList: some View {
@@ -255,27 +247,27 @@ struct PopoverContentView: View {
       VStack(spacing: 12) {
         ForEach(Array(sorted.enumerated()), id: \.element.id) { idx, req in
           ApprovalCard(request: req)
-            .opacity(idx == 0 ? 1.0 : 0.50)
-            .scaleEffect(
-              x: idx == 0 ? 1.0 : max(0.92, 1.0 - Double(idx) * 0.03),
-              y: idx == 0 ? 1.0 : max(0.92, 1.0 - Double(idx) * 0.03)
+            .opacity(cardOpacity(idx: idx, id: req.id))
+            .scaleEffect(cardScale(idx: idx, id: req.id))
+            .offset(
+              x: cardOffsetX(idx: idx, id: req.id),
+              y: cardOffsetY(idx: idx, id: req.id)
             )
-            .offset(y: idx == 0 ? 0 : CGFloat(idx) * -5)
             .zIndex(Double(sorted.count - idx))
             .transition(
               .asymmetric(
-                insertion: .scale(scale: 0.82, anchor: .top)
+                insertion: .scale(scale: 0.62, anchor: .top)
                   .combined(with: .opacity)
-                  .animation(.spring(response: 0.42, dampingFraction: 0.58)),
-                removal: .scale(scale: 0.88)
-                  .combined(with: .opacity)
-                  .animation(.spring(response: 0.28, dampingFraction: 0.7))
+                  .combined(with: .offset(y: -14))
+                  .animation(.spring(response: 0.46, dampingFraction: 0.52)),
+                // 飛び出しは state 駆動で済ませているので、除去自体は素早いフェードのみ。
+                removal: .opacity.animation(.easeOut(duration: 0.12))
               )
             )
         }
       }
       .padding(.vertical, 4)
-      .animation(.spring(response: 0.38, dampingFraction: 0.68), value: coordinator.pending.count)
+      .animation(.spring(response: 0.42, dampingFraction: 0.56), value: coordinator.pending.count)
     }
     .frame(maxHeight: 380)
   }
@@ -349,6 +341,58 @@ struct PopoverContentView: View {
     .padding(.top, 12)
   }
 
+  // MARK: - decision fly-out (PWA SwipeStack 風)
+
+  /// PWA の SwipeStack と同じ要領で、top カードを承認=右 / 拒否=左へ飛ばしてから
+  /// 実際の decision をコミットする。データ削除より先にカード view 自体を
+  /// アニメさせるので、**最後の 1 枚でも必ず exit アニメが出る**
+  /// (空状態への切り替えで transition が飛ばされる問題を回避)。
+  private func performDecision(card: ApprovalRequest, verdict: String, promote: Bool = false) {
+    guard !deciding else { return }
+    deciding = true
+
+    // allow=右 / deny=左へ真っ直ぐ飛ばす (バウンス付き spring で launch)
+    withAnimation(.spring(response: 0.40, dampingFraction: 0.58)) {
+      flyingOut = FlyOut(id: card.id, verdict: verdict)
+    }
+    // 飛び切ったら実データを削除。残カード / 空状態はバウンスで繰り上げる。
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+      withAnimation(.spring(response: 0.50, dampingFraction: 0.56)) {
+        if promote {
+          coordinator.decideAndPromote(id: card.id, request: card)
+        } else {
+          coordinator.decide(id: card.id, decision: verdict)
+        }
+      }
+      flyingOut = nil
+      deciding = false
+    }
+  }
+
+  /// 各カードの transform 値。`flyingOut` 対象なら横へ真っ直ぐ画面外、それ以外は深度スタック。
+  private func cardOffsetX(idx: Int, id: String) -> CGFloat {
+    if let f = flyingOut, f.id == id {
+      return f.verdict == "allow" ? 560 : -560
+    }
+    return 0
+  }
+
+  private func cardOffsetY(idx: Int, id: String) -> CGFloat {
+    // 飛び出し中は縦オフセットなし (真っ直ぐ横へ)。それ以外は深度スタック。
+    if flyingOut?.id == id { return 0 }
+    return idx == 0 ? 0 : CGFloat(idx) * -5
+  }
+
+  private func cardScale(idx: Int, id: String) -> CGFloat {
+    if flyingOut?.id == id { return 0.82 }
+    return idx == 0 ? 1.0 : max(0.92, 1.0 - CGFloat(idx) * 0.03)
+  }
+
+  private func cardOpacity(idx: Int, id: String) -> Double {
+    if flyingOut?.id == id { return 0 }
+    return idx == 0 ? 1.0 : 0.50
+  }
+
   // MARK: - helpers
 
   private func openLogs() {
@@ -358,5 +402,51 @@ struct PopoverContentView: View {
     let sentinel = home.appendingPathComponent(".sentinel/daemon.log")
     let url = FileManager.default.fileExists(atPath: vigili.path) ? vigili : sentinel
     NSWorkspace.shared.open(url)
+  }
+}
+
+/// 決定時に飛んでいくカードの識別子と方向。
+private struct FlyOut: Equatable {
+  let id: String
+  /// "allow" → 右へ / "deny" → 左へ。
+  let verdict: String
+}
+
+/// 接続中インジケータ: 脈動する緑コアドット + 外へ広がる波紋リング。
+///
+/// `MenuBarExtra(.window)` のポップオーバー内では `.repeatForever()` が tick しないため、
+/// `Timer.publish(... in: .common)` を main run loop に流して毎フレーム再評価する。
+private struct ConnectedPulseDot: View {
+  private let ticker = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
+  @State private var now = Date()
+
+  var body: some View {
+    let t = now.timeIntervalSinceReferenceDate
+
+    // 波紋: 1.5s 周期で 7 → 30pt に広がりながらフェード
+    let ripplePeriod = 1.5
+    let rp = t.truncatingRemainder(dividingBy: ripplePeriod) / ripplePeriod  // 0..1
+    let rippleSize = 7 + 23 * rp
+    let rippleOpacity = 0.75 * (1 - rp)
+
+    // コアドット: 0.9s 周期で sin 脈動
+    let pulsePeriod = 0.9
+    let pp = t.truncatingRemainder(dividingBy: pulsePeriod) / pulsePeriod
+    let s = sin(pp * .pi * 2)            // -1..1
+    let coreScale = 1.05 + 0.25 * s      // 0.8..1.3
+    let glow = 0.3 + 0.3 * (0.5 + 0.5 * s)
+
+    return ZStack {
+      Circle()
+        .stroke(Theme.green.opacity(rippleOpacity), lineWidth: 2)
+        .frame(width: rippleSize, height: rippleSize)
+      Circle()
+        .fill(Theme.green)
+        .frame(width: 7, height: 7)
+        .scaleEffect(coreScale)
+        .shadow(color: Theme.green.opacity(glow), radius: 4)
+    }
+    .frame(width: 30, height: 30)
+    .onReceive(ticker) { now = $0 }
   }
 }
