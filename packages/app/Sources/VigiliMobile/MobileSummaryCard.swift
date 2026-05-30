@@ -14,7 +14,7 @@ import SwiftUI
 ///    05      │ 08      │ 03
 ///    AUTO    │ BY YOU  │ BLOCKED
 ///   ────────────────────────────
-///   ● WATCHING · LAN        TODAY
+///   ● WATCHING · LOCAL      TODAY
 /// ```
 ///
 /// **なぜ pending ではなく今日の集計か:** この台帳が出るのは pending が空の待機画面
@@ -114,13 +114,14 @@ struct StandingWatchLedger: View {
     Rectangle().fill(Theme.border).frame(height: 1)
   }
 
-  /// design の `watching · lan` (route 反映)。pending 空が前提なので接続状態を表す。
+  /// 接続状態 (pending 空が前提なので route を反映)。
+  /// `.lan` = Mac に直結 (同一 LAN / Tailscale) → "local"、`.relay` = クラウド relay 経由 → "remote"。
   private var statusLabel: String {
     switch coordinator.wsState {
     case .connected:
       switch coordinator.activeRoute {
-      case .lan: return "watching · lan"
-      case .relay: return "watching · relay"
+      case .lan: return "watching · local"
+      case .relay: return "watching · remote"
       case .none: return "watching"
       }
     case .connecting: return "connecting…"

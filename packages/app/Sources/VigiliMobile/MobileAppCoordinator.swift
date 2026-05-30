@@ -11,15 +11,16 @@ import UIKit
 /// - admin Unix socket は使えない (Sandbox + ネットワーク経路の制約)
 /// - WS のみで pending / resolved を購読
 ///
-/// 接続戦略 (シームレス LAN ↔ relay):
+/// 接続戦略 (シームレス local ↔ remote):
 ///   1. Bonjour で同 LAN の daemon を常時 browse
-///   2. 見つかれば LAN 経路 (lanToken と組み合わせて直結 WS)
-///   3. 見つからなければ relay 経路 (relayUrl/relayPid/relayUserToken)
+///   2. 見つかれば local 経路 (lanToken と組み合わせて直結 WS) — 最優先・低レイテンシ
+///   3. 見つからなければ (= off-LAN) relay 経路 (relayUrl/relayPid/relayUserToken) を使う。
+///      relay は agent→client の pending を WS で転送するので、どこからでも承認が届く。
 ///   4. NWPathMonitor が network 変化を検知したら再評価
 ///
-/// `lanUrl` (Tailscale ホスト名等、Bonjour で見えない静的ホスト) は今のところ
-/// 補助的に使う: Bonjour が空 + lanUrl が在る場合は LAN を先に試して、失敗時に
-/// relay へフォールバック — というところまでは現状実装しない (MVP)。
+/// 静的 `lanUrl` (Tailscale ホスト名等、Bonjour で見えない手動ホスト) は relay 未設定時の
+/// フォールバックとしてのみ使う。relay があれば off-LAN は必ず relay を選ぶ — 静的 lanUrl が
+/// LAN IP だと off-LAN で到達できず「繋がっているのに承認が来ない」状態になるのを防ぐ。
 @MainActor
 final class MobileAppCoordinator: ObservableObject {
   let wsClient: DaemonWsClient
@@ -240,7 +241,8 @@ final class MobileAppCoordinator: ObservableObject {
   /// 現状の Bonjour 発見状況 + 保存済み credentials を見て、いま最適な経路を
   /// 選び直す。既に同じ URL に繋がっていれば何もしない。
   private func reevaluateRoute() {
-    // (1) LAN を優先: Bonjour で見つかった + lanToken がある
+    // (1) 物理的に同一 LAN: Bonjour で daemon を発見 + lanToken がある → 直結 (local)。
+    //     低レイテンシなのでこれが最優先。
     if MobileSettings.hasLan,
       let svc = bonjour.services.first(where: { $0.resolvedURL != nil }),
       let resolved = svc.resolvedURL,
@@ -250,28 +252,30 @@ final class MobileAppCoordinator: ObservableObject {
       return
     }
 
-    // (2) Bonjour 不在で lanUrl が手で設定されている (Tailscale 等)
-    //     こちらも LAN とみなす。Bonjour で見つかれば step 1 で上書きされる。
-    if MobileSettings.hasLan,
-      let url = MobileSettings.lanWsUrlBase,
-      let token = MobileSettings.lanToken,
-      // ただし Bonjour が active で「探したけど無かった」と判明したケースでは
-      // LAN を試して即失敗する可能性が高いので relay があるならそっちを優先する。
-      // ここでは「Bonjour に何も見つかっていない + 静的 lanUrl がある」場合に
-      // 限定して LAN を試す。
-      !bonjour.isBrowsing || !bonjour.services.isEmpty || !MobileSettings.hasRelay
-    {
-      switchTo(url: url, token: token, route: .lan(host: url.host ?? "lan"))
-      return
-    }
-
-    // (3) Relay
+    // (2) Relay (remote) を優先: Bonjour で同一 LAN の daemon が見つからない =
+    //     off-LAN とみなして relay を使う。relay は agent→client の pending を WS で
+    //     転送するので、どこからでも承認カードが届く。
+    //
+    //     静的 lanUrl (下の (3)) より必ず先に試すのが要点。静的 lanUrl が LAN IP の
+    //     場合 off-LAN では到達できず、掴んでしまうと「繋がっているのに承認が来ない」
+    //     状態 (= 旧挙動: watching local のまま無音) になっていた。relay を持っているなら
+    //     それを使う。Bonjour で LAN daemon が見つかれば (1) が即座に上書きする。
     if MobileSettings.hasRelay,
       let url = MobileSettings.relayWsUrl,
       let token = MobileSettings.relayUserToken
     {
       let host = MobileSettings.relayUrl.flatMap { URL(string: $0)?.host } ?? "relay"
       switchTo(url: url, token: token, route: .relay(host: host))
+      return
+    }
+
+    // (3) 静的 lanUrl (Tailscale 等、Bonjour で見えない手動ホスト) —
+    //     relay 未設定時のフォールバックとしてのみ使う。relay があるなら (2) で確定済み。
+    if MobileSettings.hasLan,
+      let url = MobileSettings.lanWsUrlBase,
+      let token = MobileSettings.lanToken
+    {
+      switchTo(url: url, token: token, route: .lan(host: url.host ?? "lan"))
       return
     }
 

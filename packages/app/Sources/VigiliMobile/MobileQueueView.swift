@@ -354,8 +354,8 @@ struct MobileSettingsSheet: View {
   private var routeString: String {
     switch coordinator.activeRoute {
     case .none: return "—"
-    case .lan(let h): return "LAN · \(h)"
-    case .relay(let h): return "relay · \(h)"
+    case .lan(let h): return "local · \(h)"
+    case .relay(let h): return "remote · \(h)"
     }
   }
 }
