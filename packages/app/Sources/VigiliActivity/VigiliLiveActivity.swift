@@ -16,8 +16,8 @@ struct VigiliLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: SentinelActivityAttributes.self) { context in
       LockScreenView(state: context.state)
-        .activityBackgroundTint(Color(red: 38 / 255, green: 38 / 255, blue: 36 / 255))
-        .activitySystemActionForegroundColor(Color(red: 201 / 255, green: 100 / 255, blue: 66 / 255))
+        .activityBackgroundTint(Theme.bg)
+        .activitySystemActionForegroundColor(Theme.accent)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
@@ -49,12 +49,10 @@ struct VigiliLiveActivity: Widget {
   }
 }
 
-// MARK: - 共通色
+// MARK: - 共通色 (共有 Theme を参照)
 
-/// 共有 Theme と同じ coral (#c96442)。
-private let activityAccent = Color(red: 201 / 255, green: 100 / 255, blue: 66 / 255)
-private let bgRise = Color(red: 45 / 255, green: 43 / 255, blue: 41 / 255)
-private let fgMid = Color.white.opacity(0.62)
+private let activityAccent = Theme.accent
+private let fgMid = Theme.fgMid
 
 // MARK: - Lock screen / Banner
 

@@ -66,8 +66,8 @@ struct VigiliWidgetEntryView: View {
 
 // MARK: - Sub views
 
-private let accent = Color(red: 0xc1 / 255.0, green: 0x61 / 255.0, blue: 0x41 / 255.0)
-private let dim = Color.secondary
+private let accent = Theme.accent
+private let dim = Color.secondary  // システム適応色 (widget 背景に合わせて自動調整)
 
 /// 8 突点星 (Vigili brand mark)。Sources/Shared/StarPath.swift と同じ path。
 private struct PetalMark: View {

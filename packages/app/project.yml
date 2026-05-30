@@ -215,6 +215,9 @@ targets:
     sources:
       - path: Sources/VigiliActivity
       - path: Sources/SharedMobile
+      # 共有カラーパレット (Theme.accent / Theme.bg など) を Live Activity でも使う。
+      # StarPath と同じく Shared から個別ファイルだけ取り込む。
+      - path: Sources/Shared/Theme.swift
     info:
       path: Resources/InfoActivity.plist
       properties:
@@ -247,6 +250,8 @@ targets:
       - path: Sources/Shared/WidgetState.swift
       # 星型 path も main app と共有 (Brand.swift と同じ図形)
       - path: Sources/Shared/StarPath.swift
+      # 共有カラーパレット (Theme.accent など) を widget でも使う。
+      - path: Sources/Shared/Theme.swift
       # widget 自身にも Asset Catalog を埋め込む (chronod が picker で icon を解決するため)
       - path: Assets.xcassets
         buildPhase: resources
