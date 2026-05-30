@@ -5,7 +5,7 @@ import SwiftUI
 /// PWA の Claude Stack デザインに揃えてある:
 ///  - 背景: `Theme.bg` (#262624)
 ///  - サーフェス: `Theme.bgRise` (#2d2b29) + warm cream ボーダー
-///  - アクセント: `Theme.accent` (#c96442)
+///  - アクセント: `Theme.accent` (#c16141)
 ///  - 見出し: Bricolage Grotesque、コードは JetBrains Mono
 struct PopoverContentView: View {
   @EnvironmentObject private var coordinator: AppCoordinator
