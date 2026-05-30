@@ -13,33 +13,32 @@ struct MobileQueueView: View {
   /// ロゴをバウンスさせるトリガー (pending が増えるたび)
   @State private var logoPop = false
 
-  private func decide(id: String, decision: String) {
-    // ハプティクス
+  /// 決定の共通処理: ハプティクス → フラッシュ色をセット → 80ms 見せてから commit。
+  /// 80ms はカード退場アニメの前に決定フラッシュを一瞬見せるための間。
+  /// deny だけ強めの `.rigid`、allow / promote は `.medium`。
+  private func flashAndDecide(id: String, flash: String, commit: @escaping () -> Void) {
     #if canImport(UIKit)
-    let gen = UIImpactFeedbackGenerator(style: decision == "allow" ? .medium : .rigid)
-    gen.impactOccurred()
+    let style: UIImpactFeedbackGenerator.FeedbackStyle = flash == "deny" ? .rigid : .medium
+    UIImpactFeedbackGenerator(style: style).impactOccurred()
     #endif
 
     withAnimation(.spring(response: 0.22, dampingFraction: 0.55)) {
-      decidedIds[id] = decision
+      decidedIds[id] = flash
     }
     Task { @MainActor in
       try? await Task.sleep(for: .milliseconds(80))
+      commit()
+    }
+  }
+
+  private func decide(id: String, decision: String) {
+    flashAndDecide(id: id, flash: decision) {
       coordinator.decide(id: id, decision: decision)
     }
   }
 
   private func decideAndPromote(request: ApprovalRequest) {
-    #if canImport(UIKit)
-    let gen = UIImpactFeedbackGenerator(style: .medium)
-    gen.impactOccurred()
-    #endif
-
-    withAnimation(.spring(response: 0.22, dampingFraction: 0.55)) {
-      decidedIds[request.id] = "allow"
-    }
-    Task { @MainActor in
-      try? await Task.sleep(for: .milliseconds(80))
+    flashAndDecide(id: request.id, flash: "allow") {
       coordinator.decideAndPromote(id: request.id, request: request)
     }
   }
@@ -112,9 +111,7 @@ struct MobileQueueView: View {
           .font(.display(18, weight: .semibold))
           .foregroundStyle(Theme.fg)
         Text(stateLabel)
-          .font(.mono(10))
-          .tracking(0.12 * 10)
-          .textCase(.uppercase)
+          .monoLabel(10)
           .foregroundStyle(Theme.fgDim)
           .contentTransition(.numericText())
           .animation(.spring(response: 0.3, dampingFraction: 0.7), value: stateLabel)
@@ -164,11 +161,7 @@ struct MobileQueueView: View {
             .overlay {
               if let dec = decidedIds[req.id] {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                  .fill(
-                    dec == "allow"
-                      ? Color(red: 0.48, green: 0.78, blue: 0.55).opacity(0.28)
-                      : Color(red: 0.88, green: 0.35, blue: 0.30).opacity(0.28)
-                  )
+                  .fill((dec == "allow" ? Theme.green : Theme.red).opacity(0.28))
               }
             }
             // 出現: 上から pop-in、消去: 決定方向に飛ぶ
@@ -217,7 +210,7 @@ struct MobileQueueView: View {
         )
       }
 
-      // 副操作: 今後は自動で承認 (promote to rule) — 確認ダイアログ付き。
+      // 副操作: 今後は自動で承認 (promote to rule)。
       // 危険操作 (.danger) は自動承認させない (常時 allow 化は取り返しがつかない)。
       if let card = topCard, RiskAssessment.evaluate(card).level == .danger {
         HStack(spacing: 5) {
@@ -329,9 +322,7 @@ struct MobileSettingsSheet: View {
   private func row(label: String, value: String) -> some View {
     VStack(alignment: .leading, spacing: 4) {
       Text(label)
-        .font(.mono(10, weight: .medium))
-        .tracking(0.12 * 10)
-        .textCase(.uppercase)
+        .monoLabel(10, weight: .medium)
         .foregroundStyle(Theme.fgMid)
       Text(value)
         .font(.mono(12))

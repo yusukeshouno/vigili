@@ -57,6 +57,27 @@ extension Font {
   }
 }
 
+// MARK: - ラベル装飾ヘルパ
+
+extension Text {
+  /// 等幅 + tracking + uppercase の「マイクロラベル」。
+  ///
+  /// 各 View に散在していた
+  /// `.font(.mono(size, weight:)).tracking(factor * size).textCase(.uppercase)`
+  /// を 1 箇所に集約する。`tracking` は字間係数 (実トラッキング = factor × size) で、
+  /// 元コードの 0.12〜0.18 をそのまま渡せるようにしている。色は呼び出し側で
+  /// `.foregroundStyle(...)` を続けて指定する。
+  func monoLabel(
+    _ size: CGFloat,
+    weight: Font.Weight = .regular,
+    tracking factor: CGFloat = 0.12,
+  ) -> some View {
+    self.font(.mono(size, weight: weight))
+      .tracking(factor * size)
+      .textCase(.uppercase)
+  }
+}
+
 // MARK: - Color(hex:) ヘルパ
 
 extension Color {
