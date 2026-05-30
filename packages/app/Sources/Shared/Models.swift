@@ -150,6 +150,14 @@ struct ApprovalRequest: Identifiable, Hashable {
   }
 }
 
+extension Sequence where Element == ApprovalRequest {
+  /// pending スタックの並び順 = 新しい順 (createdAt 降順)。最上段が最新の ask。
+  /// Mac popover / iOS queue の cardList・actionsBar で同じ並びを使うため共有に置く。
+  var newestFirst: [ApprovalRequest] {
+    sorted { $0.createdAt > $1.createdAt }
+  }
+}
+
 /// daemon の `StatsBuckets` (db/stats.ts) と対応する Swift モデル。
 struct StatsBuckets {
   struct ByDecision {

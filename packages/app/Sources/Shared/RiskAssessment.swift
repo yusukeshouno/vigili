@@ -25,6 +25,11 @@ struct RiskAssessment {
 
   var isFlagged: Bool { level != .normal }
 
+  /// この操作を「今後は自動で承認」(ルール昇格) してよいか。
+  /// `.danger` を常時 allow 化すると取り返しがつかないため自動承認を禁じる
+  /// (CLAUDE.md「危険な操作は必ず人間に問う」)。Mac/iOS の actionsBar で共用。
+  var allowsAutoApprove: Bool { level != .danger }
+
   var color: Color {
     switch level {
     case .danger: return Theme.red

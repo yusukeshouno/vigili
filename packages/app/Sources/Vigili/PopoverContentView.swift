@@ -68,7 +68,7 @@ struct PopoverContentView: View {
   /// 必ず一番上のカード (最新の ask) に対して効く。
   /// SwipeStack の "top card のみ操作可" メタファを継承。
   private var actionsBar: some View {
-    let topCard = coordinator.pending.sorted(by: { $0.createdAt > $1.createdAt }).first
+    let topCard = coordinator.pending.newestFirst.first
     return VStack(spacing: 8) {
       // 主操作: Deny / Allow
       HStack(spacing: 10) {
@@ -97,7 +97,7 @@ struct PopoverContentView: View {
       // 副操作: 今後は自動で承認 (promote to rule)
       // 危険操作 (.danger) は自動承認させない: 誤って常時 allow ルール化すると
       // 取り返しがつかないため。ボタンを消し、理由を 1 行で示す。
-      if let card = topCard, RiskAssessment.evaluate(card).level == .danger {
+      if let card = topCard, !RiskAssessment.evaluate(card).allowsAutoApprove {
         HStack(spacing: 5) {
           Image(systemName: "lock.fill")
             .font(.system(size: 9))
@@ -242,7 +242,7 @@ struct PopoverContentView: View {
   private var cardList: some View {
     // ボタンは popover 底の actionsBar に統一。
     // top card (最新) を強調、それ以下は沈めてスタック感を演出。
-    let sorted = coordinator.pending.sorted(by: { $0.createdAt > $1.createdAt })
+    let sorted = coordinator.pending.newestFirst
     return ScrollView {
       VStack(spacing: 12) {
         ForEach(Array(sorted.enumerated()), id: \.element.id) { idx, req in

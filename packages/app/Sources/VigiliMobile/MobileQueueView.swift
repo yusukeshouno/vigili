@@ -144,7 +144,7 @@ struct MobileQueueView: View {
   }
 
   private var cardList: some View {
-    let sorted = coordinator.pending.sorted(by: { $0.createdAt > $1.createdAt })
+    let sorted = coordinator.pending.newestFirst
     return ScrollView {
       VStack(spacing: 14) {
         ForEach(Array(sorted.enumerated()), id: \.element.id) { idx, req in
@@ -192,7 +192,7 @@ struct MobileQueueView: View {
   }
 
   private var actionsBar: some View {
-    let topCard = coordinator.pending.sorted(by: { $0.createdAt > $1.createdAt }).first
+    let topCard = coordinator.pending.newestFirst.first
     return VStack(spacing: 10) {
       // 主操作: Deny / Allow
       HStack(spacing: 12) {
@@ -212,7 +212,7 @@ struct MobileQueueView: View {
 
       // 副操作: 今後は自動で承認 (promote to rule)。
       // 危険操作 (.danger) は自動承認させない (常時 allow 化は取り返しがつかない)。
-      if let card = topCard, RiskAssessment.evaluate(card).level == .danger {
+      if let card = topCard, !RiskAssessment.evaluate(card).allowsAutoApprove {
         HStack(spacing: 5) {
           Image(systemName: "lock.fill")
             .font(.system(size: 11))
