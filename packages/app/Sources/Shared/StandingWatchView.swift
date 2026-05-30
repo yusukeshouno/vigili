@@ -67,10 +67,8 @@ struct StandingWatchView: View {
         .frame(width: radarSize, height: radarSize)
 
       Text("standing watch")
-        .font(.mono(10, weight: .medium))
-        .tracking(0.20 * 10)
+        .monoLabel(10, weight: .medium, tracking: 0.20)
         .foregroundStyle(Theme.fgMid)
-        .textCase(.uppercase)
         .opacity(textP)
         .offset(y: (1 - textP) * 6)
 

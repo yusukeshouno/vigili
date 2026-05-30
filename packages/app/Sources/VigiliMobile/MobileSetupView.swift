@@ -27,9 +27,7 @@ struct MobileSetupView: View {
               .font(.display(28, weight: .semibold))
               .foregroundStyle(Theme.fg)
             Text("Connect to your Mac daemon")
-              .font(.mono(11))
-              .tracking(0.15 * 11)
-              .textCase(.uppercase)
+              .monoLabel(11, tracking: 0.15)
               .foregroundStyle(Theme.fgDim)
           }
           .padding(.top, 60)
@@ -113,9 +111,7 @@ struct MobileSetupView: View {
           macCommandsCard
 
           Text("Token stored locally on this device")
-            .font(.mono(9))
-            .tracking(0.18 * 9)
-            .textCase(.uppercase)
+            .monoLabel(9, tracking: 0.18)
             .foregroundStyle(Theme.fgFaint)
             .padding(.top, 4)
 
@@ -321,9 +317,7 @@ struct MobileSetupView: View {
   ) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       Text(title)
-        .font(.mono(10, weight: .medium))
-        .tracking(0.12 * 10)
-        .textCase(.uppercase)
+        .monoLabel(10, weight: .medium)
         .foregroundStyle(Theme.fgMid)
       HStack(spacing: 8) {
         Group {
