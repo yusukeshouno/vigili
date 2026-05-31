@@ -3,5 +3,6 @@ export * from "./decision.js";
 export * from "./message.js";
 export * from "./policy.js";
 export * from "./push.js";
+export * from "./session.js";
 export * from "./tool-request.js";
 export * from "./ws.js";

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ApprovalRequestSchema } from "./approval-request.js";
 import { FinalDecisionSchema } from "./decision.js";
 import { MessageSchema } from "./message.js";
+import { HostedSessionSchema, QuestionSchema, TranscriptLineSchema } from "./session.js";
 
 /**
  * PWA がルール昇格 (Allow & promote to rule) を送るときの提案。
@@ -60,6 +61,8 @@ export const WsServerMessageSchema = z.discriminatedUnion("type", [
     pending: z.array(ApprovalRequestSchema),
     /** 接続時点で未配送 / 直近配送済みのメッセージ (composer の history 用)。 */
     messages: z.array(MessageSchema).optional(),
+    /** 接続時点で稼働中のホスト型セッション (L4)。後から繋いだ client 用。 */
+    sessions: z.array(HostedSessionSchema).optional(),
   }),
   z.object({
     type: z.literal("pending"),
@@ -91,6 +94,38 @@ export const WsServerMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("stats"),
     stats: StatsBucketsSchema,
   }),
+  // --- L4 ホスト型セッション (vigili run) ---
+  z.object({
+    /** 新しいホスト型セッションが起動した。 */
+    type: z.literal("session-started"),
+    session: HostedSessionSchema,
+  }),
+  z.object({
+    /** セッションが終了した (runner 切断 or session-end)。 */
+    type: z.literal("session-ended"),
+    session_id: z.string().min(1),
+    reason: z.string().optional(),
+  }),
+  z.object({
+    /** transcript に 1 行追加された (チャット UI への append)。 */
+    type: z.literal("transcript-append"),
+    session_id: z.string().min(1),
+    line: TranscriptLineSchema,
+  }),
+  z.object({
+    /** AskUserQuestion: 選択肢質問。client は answer-question で返す。 */
+    type: z.literal("question"),
+    session_id: z.string().min(1),
+    request_id: z.string().uuid(),
+    questions: z.array(QuestionSchema),
+  }),
+  z.object({
+    /** plan 承認: ExitPlanMode。client は decide-plan で返す。 */
+    type: z.literal("plan"),
+    session_id: z.string().min(1),
+    request_id: z.string().uuid(),
+    plan: z.string(),
+  }),
 ]);
 
 export type WsServerMessage = z.infer<typeof WsServerMessageSchema>;
@@ -106,6 +141,26 @@ export const WsClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     /** session 宛に新しいメッセージを enqueue する。 */
     type: z.literal("send-message"),
+    session_id: z.string().min(1),
+    body: z.string().min(1).max(2000),
+  }),
+  // --- L4 ホスト型セッション (vigili run) ---
+  z.object({
+    /** AskUserQuestion への回答。{<question>: <label>} 形。 */
+    type: z.literal("answer-question"),
+    request_id: z.string().uuid(),
+    answers: z.record(z.string()),
+  }),
+  z.object({
+    /** plan 承認 / 却下。 */
+    type: z.literal("decide-plan"),
+    request_id: z.string().uuid(),
+    decision: z.enum(["approve", "reject"]),
+    reason: z.string().optional(),
+  }),
+  z.object({
+    /** ホスト型セッションへの自由文返信 (次の user turn になる)。 */
+    type: z.literal("session-reply"),
     session_id: z.string().min(1),
     body: z.string().min(1).max(2000),
   }),
