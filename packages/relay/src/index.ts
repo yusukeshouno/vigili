@@ -367,7 +367,10 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
   }
 
   /**
-   * agent → relay の生メッセージを覗き、`type:"pending"` なら登録済み端末へ APNs push する。
+   * agent → relay の生メッセージを覗き、注意喚起イベントなら登録済み端末へ APNs push する。
+   * 対象は `type:"pending"`（ツール許可。ホスト型セッションの permission もキュー経由でここに来る）、
+   * `type:"question"`（AskUserQuestion）、`type:"plan"`（ExitPlanMode）。後者 2 つはキューを
+   * 通らず WS で直接届くため、wake もここで個別に発火させる (SPEC §8.7)。
    * relay は本来 payload を opaque に転送するだけだが、push のためにここだけ中身を読む
    * (内容は title/body の組み立てにしか使わず、転送自体は forwardAgentToClients が別に行う)。
    */
@@ -379,26 +382,68 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
     } catch {
       return;
     }
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      (parsed as { type?: unknown }).type !== "pending"
-    ) {
-      return;
+    if (typeof parsed !== "object" || parsed === null) return;
+    const type = (parsed as { type?: unknown }).type;
+
+    const truncate = (s: string, max: number): string =>
+      s.length > max ? `${s.slice(0, max - 1)}…` : s;
+
+    let notice: { title: string; body: string } | null = null;
+
+    if (type === "pending") {
+      const request = (parsed as { request?: unknown }).request;
+      if (typeof request === "object" && request !== null) {
+        const r = request as { tool_name?: unknown; session_tag?: unknown };
+        const toolName = typeof r.tool_name === "string" && r.tool_name ? r.tool_name : "操作";
+        const tag = typeof r.session_tag === "string" && r.session_tag ? r.session_tag : null;
+        notice = {
+          title: tag ? `承認待ち · ${tag}` : "承認待ち",
+          body: `${toolName} の実行許可を求めています`,
+        };
+      }
+    } else if (type === "question") {
+      // AskUserQuestion: キューを通らず WS で直接届く選択肢質問。
+      const questions = (parsed as { questions?: unknown }).questions;
+      const arr = Array.isArray(questions) ? questions : [];
+      const first = arr[0];
+      const qText =
+        first !== null &&
+        typeof first === "object" &&
+        typeof (first as { question?: unknown }).question === "string"
+          ? (first as { question: string }).question
+          : "選択肢の回答を求めています";
+      notice = {
+        title: arr.length > 1 ? `質問 ${arr.length} 件が届いています` : "質問が届いています",
+        body: truncate(qText, 120),
+      };
+    } else if (type === "plan") {
+      // ExitPlanMode: plan 承認待ち。
+      const plan = (parsed as { plan?: unknown }).plan;
+      const planText = typeof plan === "string" ? plan : "";
+      const firstLine =
+        planText
+          .split("\n")
+          .find((l) => l.trim().length > 0)
+          ?.trim() ?? "Plan の承認を求めています";
+      notice = {
+        title: "Plan の承認待ち",
+        body: truncate(firstLine, 120),
+      };
     }
-    const request = (parsed as { request?: unknown }).request;
-    if (typeof request !== "object" || request === null) return;
-    const r = request as { tool_name?: unknown; session_tag?: unknown };
-    const toolName = typeof r.tool_name === "string" && r.tool_name ? r.tool_name : "操作";
-    const tag = typeof r.session_tag === "string" && r.session_tag ? r.session_tag : null;
-    const title = tag ? `承認待ち · ${tag}` : "承認待ち";
-    const body = `${toolName} の実行許可を求めています`;
+
+    if (notice === null) return;
+    const n = notice;
+
     const devices = store.listDevicesForPairing(pid);
     if (devices.length === 0) return;
     await Promise.all(
       devices.map(async (d) => {
         try {
-          const result = await apns.send(d.apns_token, { title, body, threadId: pid });
+          const result = await apns.send(d.apns_token, {
+            title: n.title,
+            body: n.body,
+            threadId: pid,
+          });
           if (result.unregistered) {
             store.deleteDeviceByToken(d.apns_token);
             log(`[relay] APNs token 失効のため削除 (pairing=${pid})`);

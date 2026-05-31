@@ -98,13 +98,18 @@ async function createPairing(token: string, name = "mac"): Promise<Pairing> {
   return r.json as Pairing;
 }
 
-function connectWs(path: string, token: string): Promise<{
+function connectWs(
+  path: string,
+  token: string,
+): Promise<{
   ws: WebSocket;
   next: () => Promise<string>;
   close: () => void;
 }> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${relay.port}${path}?token=${encodeURIComponent(token)}`);
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${relay.port}${path}?token=${encodeURIComponent(token)}`,
+    );
     const queue: string[] = [];
     const waiters: Array<(v: string) => void> = [];
     ws.on("message", (raw: Buffer) => {

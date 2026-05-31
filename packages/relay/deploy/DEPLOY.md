@@ -211,7 +211,85 @@ sudo userdel vigili
 
 ---
 
-## 5. ハマりどころ
+## 5. APNs Push 設定 (LAN 外 wake の有効化)
+
+relay は pairing ごとに iOS device token を保持し、Mac daemon から `pending` /
+`question` (AskUserQuestion) / `plan` (ExitPlanMode) が来た瞬間に APNs push して
+バックグラウンドのスマホを起こす。これが LAN 外で承認 / 質問 / plan に気づく唯一の経路
+(iOS は WS をバックグラウンドでサスペンドするため)。
+
+APNs env が 1 つでも欠けると relay は `[apns] 未設定 … push 無効` で起動する
+(WS fan-out は動くが push は飛ばない)。
+
+### 5-1. Apple Developer で APNs Auth Key を作る
+
+1. <https://developer.apple.com/account> → Certificates, IDs & Profiles → **Keys** → ＋
+2. 「Apple Push Notifications service (APNs)」にチェック → Continue → Register
+3. `AuthKey_XXXXXXXXXX.p8` を **ダウンロード (1 回きり。再DLは不可、無くしたら作り直し)**。
+   表示される **Key ID** (10 文字) を控える
+4. 既に分かっている値:
+   - **Team ID** = `2DG598WNT9`
+   - **Topic** = iOS アプリの bundle id = `io.vigili.mobile.shono`
+   - **Env** = `sandbox` (アプリ entitlement が `aps-environment: development` のため。
+     TestFlight / App Store 配布に切り替えたら `production`)
+
+### 5-2. VPS に秘密を設置 (.p8 は repo に置かない)
+
+```bash
+# 1) .p8 を vigili が読める場所へ (ReadWritePaths=/var/lib/vigili の配下)
+sudo mkdir -p /var/lib/vigili/apns
+sudo cp AuthKey_XXXXXXXXXX.p8 /var/lib/vigili/apns/
+sudo chown -R vigili:vigili /var/lib/vigili/apns
+sudo chmod 600 /var/lib/vigili/apns/AuthKey_XXXXXXXXXX.p8
+
+# 2) env ファイル (systemd EnvironmentFile 用、root 所有 / vigili 読取)
+sudo mkdir -p /etc/vigili
+sudo tee /etc/vigili/relay.env >/dev/null <<'EOF'
+APNS_KEY_PATH=/var/lib/vigili/apns/AuthKey_XXXXXXXXXX.p8
+APNS_KEY_ID=XXXXXXXXXX
+APNS_TEAM_ID=2DG598WNT9
+APNS_TOPIC=io.vigili.mobile.shono
+APNS_ENV=sandbox
+EOF
+sudo chown root:vigili /etc/vigili/relay.env
+sudo chmod 640 /etc/vigili/relay.env
+```
+
+### 5-3. unit に EnvironmentFile を追加
+
+`/etc/systemd/system/vigili-relay.service` の `[Service]` セクションに 1 行足す:
+
+```ini
+EnvironmentFile=/etc/vigili/relay.env
+```
+
+反映 (sudoers で NOPASSWD 許可済みのコマンド):
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart vigili-relay
+sudo systemctl --no-pager status vigili-relay | head -20
+```
+
+### 5-4. 確認
+
+status の起動ログが次のようになっていれば有効化成功 (`未設定` が消える):
+
+```
+[apns] enabled env=sandbox topic=io.vigili.mobile.shono keyId=XXXXXXXXXX
+```
+
+あとは iOS アプリがペアリング済みなら、LAN 外 (Wi-Fi を切る等) で Mac セッションが
+pending / question / plan を出すとロック画面に通知が届く。届かない場合:
+
+- アプリで APNs 登録が済んでいるか (`POST /v1/clients/:pid/devices` が 201 で通ったか)。
+- `APNS_ENV` がビルド種別と一致しているか (development build なら `sandbox`)。production に
+  すると `BadDeviceToken` で弾かれる (逆も同様)。
+- `Topic` が iOS アプリの bundle id と一致しているか。
+
+---
+
+## 6. ハマりどころ
 
 - **better-sqlite3 が pnpm install で失敗する**
   → リモートに `build-essential` と `python3` が必要 (上記 0-2)。Node のバージョンが

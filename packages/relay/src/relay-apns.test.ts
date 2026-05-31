@@ -202,3 +202,61 @@ describe("APNs push on pending", () => {
     agent.close();
   });
 });
+
+describe("APNs push on question / plan (L4 hosted session)", () => {
+  it("pushes for a question (AskUserQuestion) with the question text", async () => {
+    const pair = await makePairing("q@x.co");
+    await postJson(
+      `/v1/clients/${pair.id}/devices`,
+      { apns_token: "qtoken123", platform: "ios" },
+      pair.user_token,
+    );
+    const agent = await connectAgent(relay.port, pair.id, pair.agent_key);
+    agent.send(
+      JSON.stringify({
+        type: "question",
+        session_id: "s1",
+        request_id: "11111111-1111-1111-1111-111111111111",
+        questions: [
+          {
+            question: "Which database should we use?",
+            header: "DB",
+            options: [{ label: "Postgres", description: "" }],
+            multiSelect: false,
+          },
+        ],
+      }),
+    );
+
+    await new Promise((r) => setTimeout(r, 150));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.token).toBe("qtoken123");
+    expect(sent[0]?.note.title).toContain("質問");
+    expect(sent[0]?.note.body).toContain("Which database");
+    agent.close();
+  });
+
+  it("pushes for a plan (ExitPlanMode) with the first line", async () => {
+    const pair = await makePairing("plan@x.co");
+    await postJson(
+      `/v1/clients/${pair.id}/devices`,
+      { apns_token: "plantoken123", platform: "ios" },
+      pair.user_token,
+    );
+    const agent = await connectAgent(relay.port, pair.id, pair.agent_key);
+    agent.send(
+      JSON.stringify({
+        type: "plan",
+        session_id: "s1",
+        request_id: "22222222-2222-2222-2222-222222222222",
+        plan: "Step 1: refactor the parser\nStep 2: add tests",
+      }),
+    );
+
+    await new Promise((r) => setTimeout(r, 150));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.note.title).toContain("Plan");
+    expect(sent[0]?.note.body).toContain("Step 1");
+    agent.close();
+  });
+});

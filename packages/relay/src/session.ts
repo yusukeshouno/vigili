@@ -14,7 +14,11 @@ export interface IssuedSession {
   expires_at: number;
 }
 
-export function issueSession(store: RelayStore, accountId: string, now = Date.now()): IssuedSession {
+export function issueSession(
+  store: RelayStore,
+  accountId: string,
+  now = Date.now(),
+): IssuedSession {
   const token = generateToken();
   const expires_at = now + SESSION_TTL_MS;
   store.insertSession({

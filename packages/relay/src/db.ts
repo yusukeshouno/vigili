@@ -120,12 +120,8 @@ export function openRelayStore(dbPath: string): RelayStore {
   const insertAccountStmt = db.prepare<[string, string, string, number]>(
     `INSERT INTO accounts (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)`,
   );
-  const findAccountByEmailStmt = db.prepare<[string]>(
-    `SELECT * FROM accounts WHERE email = ?`,
-  );
-  const findAccountByIdStmt = db.prepare<[string]>(
-    `SELECT * FROM accounts WHERE id = ?`,
-  );
+  const findAccountByEmailStmt = db.prepare<[string]>(`SELECT * FROM accounts WHERE email = ?`);
+  const findAccountByIdStmt = db.prepare<[string]>(`SELECT * FROM accounts WHERE id = ?`);
 
   // sessions
   const insertSessionStmt = db.prepare<[string, string, number, number, number]>(
@@ -140,9 +136,7 @@ export function openRelayStore(dbPath: string): RelayStore {
   const deleteExpiredStmt = db.prepare<[number]>(`DELETE FROM sessions WHERE expires_at < ?`);
 
   // pairings
-  const insertPairingStmt = db.prepare<
-    [string, string, string | null, string, string, number]
-  >(
+  const insertPairingStmt = db.prepare<[string, string, string | null, string, string, number]>(
     `INSERT INTO pairings (id, account_id, name, agent_key_hash, user_token_hash, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
   );
