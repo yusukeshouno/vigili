@@ -382,3 +382,167 @@ sentinel-cli stats [--today]           # 統計（自動許可 N 件、人間判
 - daemon の常駐メモリは 100MB 以下
 - SQLite DB は 100MB を超えたら自動で 30 日以前のレコードを削除（監査ログは別ファイルにアーカイブ）
 - ポリシー reload はゼロダウンタイム（gate の進行中リクエストには旧ポリシーが適用される）
+
+---
+
+## 8. L4: ホスト型セッション (`vigili run`) — 対話型リモート応答
+
+### 8.1 動機と前提
+
+L1 gate（`PreToolUse` hook）はツール承認しか奪取できない。実測の結果、Claude Code の **対話型ツール `AskUserQuestion` と `ExitPlanMode` は `PreToolUse` hook を発火せず**、TUI 内部で処理されフック経路を完全にバイパスすることが分かった（daemon 監査ログ 4172 件・21 ツール種に両者が 0 件である一方、生トランスクリプトには AskUserQuestion 168 回 / ExitPlanMode 4 回の実使用が存在）。
+
+したがって「対話型の問い合わせ（選択肢質問・plan 承認・自由文の質問）でセッションが止まる」問題を手元のスマホで解くには、フックの背後に座るのではなく **セッション自体を Vigili がホストする**しかない。これを担うのが新コマンド `vigili run`。
+
+### 8.2 スコープと UX 方針
+
+- **オプトイン併用**: 普段は素の `claude` TUI をそのまま使う。スマホ応答したいセッションだけ `vigili run` で起動する 2 経路構成。`vigili run` で起動したセッションでは素の Claude Code TUI は使えず、Vigili が薄い stdout 表示を出す（端末でもスマホでも応答可能）。
+- **会話も全部**: permission 承認・`AskUserQuestion` の選択肢回答・plan 承認に加え、**自由文の返信**もスマホから可能。transcript もスマホへ配信しチャット UI 化する。
+
+### 8.3 アーキテクチャ
+
+```
+端末: vigili run [--tag <t>] [prompt]
+  └ @anthropic-ai/claude-agent-sdk (セッションを所有・streaming 入力)
+        │  unix socket (kind:"session", 双方向・多重 write)
+        ▼
+   daemon: ★セッションレジストリ(新規) + 既存 queue/fan-out/messageStore
+        │  既存 broadcastAll → LAN WS + relay(透過バイトパイプ、改修不要)
+        ▼
+   iOS/Mac/PWA: transcript 描画 + 回答 UI(選択肢/permission/plan/自由文)
+```
+
+Claude Code SDK 側の対応（**P0 スパイクで実測確定**）:
+- **permission**: `canUseTool(toolName, input)` → `{behavior:"allow", updatedInput?}` / `{behavior:"deny", message}`。
+- **AskUserQuestion**: `canUseTool` に `toolName==="AskUserQuestion"`, `input.questions[]`（各要素 `{question, header, multiSelect, options:[{label, description}]}`）として現れ、`{behavior:"allow", updatedInput:{...input, answers:{<question>:<label>}}}` で回答できる（実測 OK）。
+- **plan 承認**: 当初の想定に反し、`ExitPlanMode` も `canUseTool` に `toolName==="ExitPlanMode"`, `input.plan`(full markdown) として現れる。`allow`=承認 / `deny`=却下。plan 起草の `~/.claude/plans/*.md` への Write は内部処理で canUseTool を通らない（実測 OK）。
+- **自由文の質問**: streaming 入力（async-generator prompt）で `{type:"user", message:{role:"user", content}}` を yield＝次の user turn を送る＝返信。
+- **zod peer 注意**: SDK は `zod@^4` を要求。リポジトリの `@vigili/shared` は zod@3。runtime は警告のみで動作するため、SDK は runner パッケージに隔離し daemon/shared は zod@3 据え置き。
+
+### 8.4 `vigili run` CLI（新パッケージ `packages/runner`）
+
+セッション駆動は **新パッケージ `@vigili/runner`** が担う。理由: ①常駐 daemon を軽量に保つ（SDK は重く、Claude プロセスを spawn する短命〜中命プロセスは常駐 daemon と性質が違う）／②SDK の `zod@4` peer を daemon/shared(zod@3) から物理隔離する／③SPEC §8.6 の「runner↔daemon は socket」をプロセス境界＝パッケージ境界に一致させる。bin は `vigili`：
+
+```
+vigili run [--tag <tag>] [--cwd <dir>] [--permission-mode <plan|default|...>] [初期prompt]
+```
+
+- daemon が起動していなければ fail-safe（接続不可なら起動を促す）。
+- `~/.vigili/{socket,token}` を読み、unix socket に `kind:"session"` で接続。
+- transcript を stdout に薄く表示し、ローカル stdin からの入力も受ける（端末フォールバック）。
+- runner は短命〜中命（セッション起動時のみ）。Agent SDK 依存はこのパッケージに閉じる。
+
+### 8.5 セッションレジストリ（daemon）
+
+現状 session は `session_id` 文字列タグでしかなく first-class な実体が無い。`vigili run` のために daemon に追加する：
+
+```
+HostedSession = {
+  session_id: string,        // SDK の session_id を採用
+  tag: string | null,
+  cwd: string,
+  status: "running" | "awaiting" | "ended",
+  started_at: int,
+}
+```
+
+- レジストリは in-memory（再起動で揮発）。transcript は直近 N 行のみ保持（永続化は将来課題）。
+- runner との socket は長命・双方向（既存 `socket.ts` の多重 write 対応を利用）。
+
+### 8.6 プロトコル拡張
+
+#### runner ↔ daemon（unix socket, `kind:"session"`）
+
+- runner→daemon: `session-start` / `transcript-append` / `question` / `permission-request` / `plan` / `session-end`
+- daemon→runner: `answer` / `permission-decision` / `reply`(自由文) / `plan-decision`
+
+#### daemon → client（`WsServerMessage` に追加。既存クライアントは未知 type を `default: break` で無害化）
+
+```
+"session-started"   { session: HostedSession }
+"session-ended"     { session_id, reason? }
+"transcript-append" { session_id, line: TranscriptLine }
+"question"          { session_id, request_id, questions: Question[] }   // AskUserQuestion
+"plan"              { session_id, request_id, plan: string }            // plan 承認
+```
+permission 承認は既存 `"pending"`/`ApprovalRequest`（allow/deny）を流用し `decided_by`/source で hosted 由来を区別。
+
+#### client → daemon（`WsClientMessage` に追加）
+
+```
+"answer-question"   { request_id, answers: Record<string,string> }
+"decide-plan"       { request_id, decision: "approve"|"reject", reason? }
+"session-reply"     { session_id, body }                                // 自由文返信
+```
+permission 決定は既存 `"decide"` を流用。自由文は既存 `send-message`/`messageStore` を再利用してもよい。
+
+#### 新規 shared zod 型
+
+```
+TranscriptLine = { role: "assistant"|"user"|"tool"|"system", text: string, at: int, tool_name?: string }
+Question        = { question: string, header: string, options: {label, description}[], multiSelect: boolean }
+```
+
+### 8.7 relay / APNs
+
+relay は payload を透過転送するため**新 variant でも改修不要**。ただしバックグラウンドのスマホを起こす APNs wake は現状 `type:"pending"` のみ。`question` / `plan` / hosted permission でも `maybePushApns` を発火させ、注意喚起イベントで端末を起こす。
+
+### 8.8 段階的実装（フェーズ）
+
+- **P0 スパイク（完了）**: SDK 挙動を実測確定（§8.3）。AskUserQuestion / ExitPlanMode とも `canUseTool` で奪取・回答可能と判明。
+- **P0.5 パッケージ整備（完了）**: `@vigili/runner` 新設。SDK 依存を daemon→runner へ移設。bin `vigili`。最小 `vigili run`（transcript を stdout、permission/AskUserQuestion/plan をローカル端末で処理）。
+- **P1（完了）**: セッションレジストリ + socket プロトコル（`kind:"session"`）+ WS 新 variant fan-out。
+  - shared: `session.ts`（`HostedSession` / `TranscriptLine` / `Question` / `SessionRunnerMessage` / `SessionDaemonMessage`）+ ws.ts に `session-started`/`session-ended`/`transcript-append`/`question`/`plan` server variant と `answer-question`/`decide-plan`/`session-reply` client variant、snapshot に `sessions[]`。
+  - daemon: `sessions.ts`（in-memory `SessionRegistry`、request_id↔conn 対応づけ）。`handleLine` が `kind:"session"` を session 経路へ。permission は既存 policy engine + queue を再利用（§8.6: 自動許可/自動拒否/スマホ承認）。WS/relay の snapshot と sweep 再送に稼働セッションを同梱。
+  - 検証: `sessions.test.ts`（レジストリ単体 8 件）+ `daemon.test.ts` の hosted-session 統合 5 件（auto-allow/auto-deny/invariant-deny/ask→admin approve/malformed→session-error）。`pnpm --filter @vigili/daemon test` green。
+- **P1b（完了）**: runner を daemon socket（`kind:"session"`）へ接続し、ローカル Io/permission を daemon 経由に置換（真の end-to-end）。
+  - runner: `paths.ts`（daemon socket パス解決、`$VIGILI_HOME`/`$SENTINEL_HOME` 上書き対応）+ `daemon-conn.ts`（`DaemonConn`：行区切り JSON、`request_id` 単位の pending 解決、socket 断で全 in-flight を fail-safe＝permission deny / plan reject / question null）。
+  - runner: `permission.ts` に `makeDaemonCanUseTool(conn)` 追加（AskUserQuestion→`question`、ExitPlanMode→`plan`、その他ツール→`permission-request`。read-only も daemon の policy engine 経由で全可観測化）。`render.ts` に `toTranscriptLines()` 追加（SDK message → `TranscriptLine[]`）。
+  - runner: `session.ts` が起動時に `connectDaemon()` を試行。接続できれば daemon-backed セッション（transcript fan-out + リモート回答 + ローカル stdin 併用）、不可なら従来のローカル端末フォールバック。`--local` で daemon を明示スキップ。
+  - 検証: `daemon-conn.test.ts`（fake unix server で round-trip 9 件：permission allow/deny+reason・question・plan・reply・接続失敗 null・socket 断 fail-safe・close 後即時 fail-safe）。`pnpm --filter @vigili/runner test` green、typecheck/build/format clean。
+- **P2（完了）**: iOS/Mac に transcript 描画 + 回答 UI。
+  - shared (Swift): `HostedSession` / `TranscriptLine` / `QuestionOption` / `Question` / `PendingQuestion` / `PendingPlan` モデル（`Models.swift`）。`DaemonWsClient` が `snapshot.sessions` / `session-started` / `session-ended` / `transcript-append` / `question` / `plan` を受信し、`answerQuestion` / `decidePlan` / `sendSessionReply` を送信。`AppCoordinator` / `MobileAppCoordinator` に mirror + 委譲メソッド。チャット吹き出し・質問/plan 回答・返信欄は `Shared/SessionChatViews.swift`（`TranscriptScroll` / `TranscriptBubble` / `QuestionAnswerView` / `PlanAnswerView` / `ReplyComposer`）に集約し Mac/iOS 共用。
+  - Mac: `SessionsWindow` + `SessionsView`（独立ウィンドウ）。左にセッション一覧、右に transcript チャット（assistant/user/tool/system 吹き出し・自動スクロール）+ 未回答の質問（AskUserQuestion・選択肢ボタン single/multi）+ plan 承認/却下（ExitPlanMode）+ 自由文返信。popover フッターに 💬 エントリ（未回答ありで赤バッジ）。
+  - iOS: `MobileSessionsView`。topBar の 💬（未回答で赤バッジ）→ sheet → NavigationStack（セッション一覧 → タップで詳細：transcript + 回答 + 返信）。共通サブビューを使用。
+  - ホスト型セッションの「ツール許可」は既存の承認キュー（Mac popover / iOS カード）にそのまま出るので本 UI では扱わない。
+  - multiSelect 質問は protocol が `answers: record(string)`（質問あたり 1 文字列）なので、選択 label を `", "` 連結して 1 文字列で返す簡易対応。
+  - 検証: macOS（`-scheme Vigili`）+ iOS（`-scheme VigiliMobile`, generic iOS Simulator）両 CLI ビルド green。
+- **P3（完了・要デプロイ）**: relay/APNs wake 拡張。`maybePushApns`（`packages/relay/src/index.ts`）を `pending` だけでなく `question`（質問が届いています + 質問文）/ `plan`（Plan の承認待ち + 先頭行）でも発火。ホスト型 permission はキュー経由で `pending` になるため既存経路でカバー済み。検証: `relay-apns.test.ts` に question/plan の push を 2 件追加（relay 42 tests green、typecheck/format clean）。VPS へデプロイ済み（`deploy.sh` → `systemctl restart vigili-relay` active、`/healthz` ok、Mac daemon 再接続確認）。ただし VPS の APNs は `未設定`（`APNS_KEY_PATH/KEY_ID/TEAM_ID/TOPIC` 欠如）のため、push の実発火は #64 の資格情報投入後に有効化される。
+- **P4（完了）**: PWA パリティ。`queue-context.tsx` を L4 対応に拡張（`snapshot.sessions` / `session-started` / `session-ended` / `transcript-append` / `question` / `plan` 受信、`sessions`/`transcripts`/`pendingQuestions`/`pendingPlans` 保持、`answerQuestion`/`decidePlan`/`sendReply` 送信）。ルート `/sessions`（稼働セッション一覧・status ドット・要回答チップ）+ `/sessions/[id]`（transcript チャット自動スクロール + 質問/plan 回答 + 返信欄）。`components/SessionViews.tsx`（`TranscriptBubble`/`QuestionAnswer`/`PlanAnswer`/`ReplyComposer`、既存 `.a-*` クラス + CSS 変数で配色統一）。ホーム top bar に 💬 リンク（未回答で赤バッジ）。multiSelect は iOS/Mac と同じく `", "` 連結。検証: `pnpm --filter @vigili/pwa typecheck` + `build`（全6ルート生成）green、Biome 整形済み。
+
+## 9. macOS Widget（Notification Center / Desktop）
+
+### 9.1 責務
+
+メニューバーアプリ本体を開かなくても、保留中の承認件数・本日の allow/deny・接続状態・直近 pending を一目で見られる observability サーフェス。`packages/app` の `VigiliWidget` ターゲット（macOS app-extension、`com.apple.widgetkit-extension`）。small/medium/large の 3 サイズ対応。
+
+### 9.2 データ共有（widget 自身のサンドボックスコンテナ）
+
+Widget extension は本体アプリのメモリにアクセスできない（別プロセス）。本体 → widget は **単方向の JSON ファイル** `widget-state.json`（`WidgetState` を JSON 直列化）で受け渡す。
+
+**不変条件: macOS の WidgetKit 拡張は App Sandbox 必須**。サンドボックス無効の widget extension は chronod / pkd が登録も読み込みもせず、ウィジェットギャラリーに現れない（ビルド・署名・埋め込みが正常でも、再起動でも、`pluginkit -a` でも登録されない）。一方、サンドボックス化した widget は `~/.vigili/` を直読みできない（ホームディレクトリはコンテナ外）。
+
+当初は **App Group 共有コンテナ** を使う計画だったが、Personal/個人開発チームの **automatic signing が App Groups を含む provisioning profile を発行せず**（常に wildcard `Mac Team Provisioning Profile: *` が選ばれる）、サンドボックスが `~/Library/Group Containers/...` への読み取りを `deny(1) file-read-data` で拒否する。手動ポータル provisioning なしには成立しないため、**App Group を使わずに済む方式**に切り替えた:
+
+**widget は「自分のサンドボックスコンテナ」を読み、host がそこへ書く。** サンドボックスアプリは自分のコンテナを entitlement / profile なしで常に読み書きでき、非サンドボックスの host は任意のユーザ所有パスに書けるので、provisioning に一切依存しない。
+
+- 共有ファイル: `~/Library/Containers/io.vigili.app.shono.widget/Data/widget-state.json`（widget の sandbox コンテナ直下）。
+- writer: 本体 `AppCoordinator.refreshWidget()` が pending/stats/wsState 変化時に `WidgetState.writeAtomically()` → `WidgetCenter.reloadTimelines(ofKind:)`。host は非サンドボックスなので上記絶対パスへ直接書き込む。
+- reader: widget の `TimelineProvider` が `WidgetState.read()`。widget では `NSHomeDirectory()` が自分のコンテナ `Data` を指すので自然に同じファイルを読む。
+- パス解決 `WidgetState.fileURL`（`Sources/Shared/WidgetState.swift`、両ターゲットで共有）の優先順位: ①`$VIGILI_HOME`/`$SENTINEL_HOME` 上書き（テスト・CLI 用）→ ②widget のサンドボックスコンテナ（`Bundle.main.bundleIdentifier` で widget/host を判別し、widget は `NSHomeDirectory()/widget-state.json`、host は `<実ホーム>/Library/Containers/io.vigili.app.shono.widget/Data/widget-state.json`）。
+
+entitlements:
+
+- 本体 `Vigili`: `app-sandbox=false`（node spawn / unix socket / `~/.vigili` 直読みのため意図的）。
+- widget `VigiliWidget`: `app-sandbox=true`（必須）。
+- `application-groups` entitlement は上記事情で**不使用**（残置しても無害だが、データ経路には関与しない）。
+
+配布は Developer ID + notarization（App Store 対象外）。widget は自分のコンテナを読むだけなので追加 capability は不要。
+
+### 9.3 widget からの Allow/Deny（インタラクティブ widget）
+
+macOS 14+ の interactive widget（`Button(intent:)` + App Intents）で、large widget の直近 pending 各行に Allow/Deny ボタンを置く。サンドボックスの widget は daemon socket に届かないため、決定は **widget→host の逆方向コンテナ IPC** で流す（§9.2 の状態受け渡しと対称）。
+
+- widget: タップで `DecideRequestIntent`（`VigiliPendingWidget.swift`）が発火し、`WidgetState.writeDecision(id:decision:)` で widget コンテナ下 `decisions/<request_id>.json` を書く。
+- host: `AppCoordinator` が毎 tick（1s）で `WidgetState.drainDecisions { id, decision in decide(...) }`。decisions/ の各ファイルを読み、`allow`/`deny` のみ受理して daemon に適用（`decide(id:decision:)` → WS `decide`）、ファイルを削除。適用後は resolved → `refreshWidget()` で widget も自動更新。
+- パス解決 `WidgetState.decisionsDir` は `fileURL` と同じ要領で widget/host どちらの process でも同じ絶対パスを返す（widget は `NSHomeDirectory()`、host は実ホーム配下の widget コンテナ）。
+- 検証: macOS（`-scheme Vigili`）CLI ビルド green。
