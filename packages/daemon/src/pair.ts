@@ -52,15 +52,19 @@ export async function pair(args: string[]): Promise<number> {
   let session: SessionResponse;
   try {
     session = forceSignup
-      ? await callRelay<SessionResponse>("POST", `${baseUrl}/v1/signup`, undefined, { email, password })
-      : await callRelay<SessionResponse>("POST", `${baseUrl}/v1/signin`, undefined, { email, password });
+      ? await callRelay<SessionResponse>("POST", `${baseUrl}/v1/signup`, undefined, {
+          email,
+          password,
+        })
+      : await callRelay<SessionResponse>("POST", `${baseUrl}/v1/signin`, undefined, {
+          email,
+          password,
+        });
   } catch (err) {
     const e = err as RelayError;
     if (!forceSignup && e.status === 401) {
       // 「アカウント無さそう?」を聞いて signup を試す
-      const confirm = await prompt(
-        "アカウントが見つかりません。新規作成しますか? [y/N]: ",
-      );
+      const confirm = await prompt("アカウントが見つかりません。新規作成しますか? [y/N]: ");
       if (!/^y/iu.test(confirm)) return 1;
       try {
         session = await callRelay<SessionResponse>("POST", `${baseUrl}/v1/signup`, undefined, {
@@ -94,7 +98,9 @@ export async function pair(args: string[]): Promise<number> {
   // 4. config.yaml を更新
   if (!skipConfig) {
     try {
-      writeRelayConfig({ relay: { url: baseUrl, pairing_id: pairing.id, agent_key: pairing.agent_key } });
+      writeRelayConfig({
+        relay: { url: baseUrl, pairing_id: pairing.id, agent_key: pairing.agent_key },
+      });
     } catch (err) {
       console.error(`[vigili-cli] config.yaml の書き込みに失敗: ${(err as Error).message}`);
       console.error("(--no-config で続行できます)");
@@ -107,9 +113,7 @@ export async function pair(args: string[]): Promise<number> {
       writeFileSync(paths().relayUserToken, pairing.user_token, { mode: 0o600 });
     } catch (err) {
       // ベストエフォート: 失敗しても pairing 自体は成功扱い
-      console.error(
-        `[vigili-cli] user_token cache 失敗 (続行可): ${(err as Error).message}`,
-      );
+      console.error(`[vigili-cli] user_token cache 失敗 (続行可): ${(err as Error).message}`);
     }
   }
 
@@ -141,11 +145,7 @@ export async function pair(args: string[]): Promise<number> {
   console.log("");
   const mod = await import("qrcode-terminal");
   const qr = (mod.default ?? mod) as {
-    generate: (
-      text: string,
-      opts?: { small?: boolean },
-      cb?: (output: string) => void,
-    ) => void;
+    generate: (text: string, opts?: { small?: boolean }, cb?: (output: string) => void) => void;
   };
   qr.generate(pairUrl, { small: true }, (output) => {
     console.log(output);
@@ -217,8 +217,7 @@ async function callRelay<T>(
     }
   }
   if (!res.ok) {
-    const detail =
-      (parsed as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
+    const detail = (parsed as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
     const err: RelayError = Object.assign(new Error(detail), {
       status: res.status,
       body: parsed,

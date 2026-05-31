@@ -30,9 +30,7 @@ import WebSocket from "ws";
 const PID = process.env.VIGILI_TEST_PID;
 const TOKEN = process.env.VIGILI_TEST_TOKEN;
 if (!PID || !TOKEN) {
-  console.error(
-    "ERROR: set VIGILI_TEST_PID and VIGILI_TEST_TOKEN (from `vigili-cli pair`)",
-  );
+  console.error("ERROR: set VIGILI_TEST_PID and VIGILI_TEST_TOKEN (from `vigili-cli pair`)");
   process.exit(2);
 }
 const RELAY = (process.env.VIGILI_TEST_RELAY ?? "https://relay.vigili.io").replace(/\/$/, "");
@@ -42,7 +40,8 @@ const URL = `${RELAY.replace(/^http/, "ws")}/v1/clients/${PID}?token=${TOKEN}`;
 
 function log(s, ...args) {
   process.stderr.write(`[test] ${s}\n`);
-  for (const a of args) process.stderr.write(`       ${typeof a === "string" ? a : JSON.stringify(a)}\n`);
+  for (const a of args)
+    process.stderr.write(`       ${typeof a === "string" ? a : JSON.stringify(a)}\n`);
 }
 
 async function main() {
@@ -85,7 +84,10 @@ async function main() {
         waiters.push((m) => {
           clearTimeout(timer);
           if (filter(m)) resolve(m);
-          else { pending.unshift(m); resolve(undefined); }
+          else {
+            pending.unshift(m);
+            resolve(undefined);
+          }
         });
       });
       if (found !== undefined) return found;
@@ -163,15 +165,14 @@ async function main() {
 
   // 5b. wait for "pending" on relay (filter on real id)
   log("waiting for relay→client pending…");
-  const pendingMsg = await nextMessage(
-    (m) => {
-      const isPending = m.type === "pending";
-      const idMatch = m.request?.id === realId;
-      log(`  filter probe: type=${m.type} reqId=${m.request?.id} expectedId=${realId} → match=${isPending && idMatch}`);
-      return isPending && idMatch;
-    },
-    15_000,
-  );
+  const pendingMsg = await nextMessage((m) => {
+    const isPending = m.type === "pending";
+    const idMatch = m.request?.id === realId;
+    log(
+      `  filter probe: type=${m.type} reqId=${m.request?.id} expectedId=${realId} → match=${isPending && idMatch}`,
+    );
+    return isPending && idMatch;
+  }, 15_000);
   log(`✓ pending arrived via relay: ${pendingMsg.request.id}`);
 
   // 6. send decide allow via relay (use real id)
@@ -185,14 +186,13 @@ async function main() {
   log(`✓ daemon → gate: ${JSON.stringify(decision)}`);
 
   // 8. also expect "resolved" to come back via relay
-  const resolvedMsg = await nextMessage(
-    (m) => m.type === "resolved" && m.id === realId,
-    5_000,
-  );
+  const resolvedMsg = await nextMessage((m) => m.type === "resolved" && m.id === realId, 5_000);
   log(`✓ resolved via relay: ${JSON.stringify(resolvedMsg)}`);
 
   const passed = decision.decision === "allow";
-  log(passed ? "\nPASS: end-to-end remote approval works" : `\nFAIL: decision=${decision.decision}`);
+  log(
+    passed ? "\nPASS: end-to-end remote approval works" : `\nFAIL: decision=${decision.decision}`,
+  );
 
   ws.close();
   sock.end();

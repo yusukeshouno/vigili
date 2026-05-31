@@ -184,11 +184,7 @@ export function createWebPushNotifier(opts: WebPushNotifierOptions): Notifier {
     },
   };
 
-  async function sendRaw(
-    payload: object,
-    urg: string,
-    topic?: string,
-  ): Promise<void> {
+  async function sendRaw(payload: object, urg: string, topic?: string): Promise<void> {
     const subs = opts.store.list();
     if (subs.length === 0) return;
     const payloadJson = JSON.stringify(payload);
@@ -197,20 +193,16 @@ export function createWebPushNotifier(opts: WebPushNotifierOptions): Notifier {
     const results = await Promise.allSettled(
       subs.map(async (sub) => {
         try {
-          const res = await send(
-            { endpoint: sub.endpoint, keys: sub.keys },
-            payloadJson,
-            {
-              vapidDetails: {
-                subject: opts.vapid.subject,
-                publicKey: opts.vapid.publicKey,
-                privateKey: opts.vapid.privateKey,
-              },
-              TTL: 300,
-              urgency,
-              ...(topic ? { topic: topic.slice(0, 32) } : {}),
+          const res = await send({ endpoint: sub.endpoint, keys: sub.keys }, payloadJson, {
+            vapidDetails: {
+              subject: opts.vapid.subject,
+              publicKey: opts.vapid.publicKey,
+              privateKey: opts.vapid.privateKey,
             },
-          );
+            TTL: 300,
+            urgency,
+            ...(topic ? { topic: topic.slice(0, 32) } : {}),
+          });
           return { endpoint: sub.endpoint, statusCode: res.statusCode };
         } catch (err) {
           // web-push は WebPushError を throw する。statusCode を持つ。

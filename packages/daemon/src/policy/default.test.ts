@@ -22,7 +22,15 @@ describe("MINIMAL_POLICY_YAML", () => {
   });
 
   it("does not contain project-specific repo names", () => {
-    const banned = ["neort-wiki", "diptych", "pluris", "passage", "eizo100", "neort-archive", "sentinel"];
+    const banned = [
+      "neort-wiki",
+      "diptych",
+      "pluris",
+      "passage",
+      "eizo100",
+      "neort-archive",
+      "sentinel",
+    ];
     for (const word of banned) {
       expect(MINIMAL_POLICY_YAML).not.toContain(word);
     }

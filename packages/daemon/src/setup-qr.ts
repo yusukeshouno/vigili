@@ -155,19 +155,29 @@ function detectTailscaleHost(): Promise<string | null> {
     ];
     let idx = 0;
     const tryNext = (): void => {
-      if (idx >= candidates.length) { resolve(null); return; }
+      if (idx >= candidates.length) {
+        resolve(null);
+        return;
+      }
       const bin = candidates[idx++] as string;
       const child = spawn(bin, ["status", "--json"], { stdio: ["ignore", "pipe", "pipe"] });
       let out = "";
-      child.stdout.on("data", (d: Buffer) => { out += d.toString("utf-8"); });
+      child.stdout.on("data", (d: Buffer) => {
+        out += d.toString("utf-8");
+      });
       child.on("error", () => tryNext());
       child.on("exit", (code) => {
-        if (code !== 0) { tryNext(); return; }
+        if (code !== 0) {
+          tryNext();
+          return;
+        }
         try {
           const parsed = JSON.parse(out) as { Self?: { DNSName?: string } };
           const dns = (parsed.Self?.DNSName ?? "").replace(/\.$/u, "");
           resolve(dns.length > 0 ? dns : null);
-        } catch { resolve(null); }
+        } catch {
+          resolve(null);
+        }
       });
     };
     tryNext();

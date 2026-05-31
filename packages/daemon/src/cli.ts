@@ -73,7 +73,11 @@ async function start(_args: string[]): Promise<number> {
       } catch {
         // PID が死んでいる → stale PID file を掃除して続行
         console.error(`[vigili-daemon] stale PID ${pid} を削除して再起動します。`);
-        try { unlinkSync(p.pid); } catch { /* ignore */ }
+        try {
+          unlinkSync(p.pid);
+        } catch {
+          /* ignore */
+        }
       }
     }
   }

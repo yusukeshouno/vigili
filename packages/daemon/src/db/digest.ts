@@ -74,11 +74,7 @@ interface Row {
 const MIN_GROUP_COUNT = 2;
 const MIN_CANDIDATE_COUNT = 3;
 
-export function computeDigest(
-  db: Database.Database,
-  fromMs: number,
-  toMs: number,
-): DigestReport {
+export function computeDigest(db: Database.Database, fromMs: number, toMs: number): DigestReport {
   const rows = db
     .prepare<[number, number]>(
       `SELECT decision, decided_by, created_at, tool_name, tool_input

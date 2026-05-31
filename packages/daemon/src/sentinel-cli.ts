@@ -237,9 +237,7 @@ function printDigest(r: DigestReport, label: string): void {
         : g.unanimous === "deny"
           ? "all deny"
           : `${g.by_decision.allow}a/${g.by_decision.deny}d`;
-    console.log(
-      `  ${mark} ${pad(g.count)}  ${g.tool.padEnd(8)} ${g.label.padEnd(28)}  ${verdict}`,
-    );
+    console.log(`  ${mark} ${pad(g.count)}  ${g.tool.padEnd(8)} ${g.label.padEnd(28)}  ${verdict}`);
   }
 
   if (r.candidates.length === 0) {
@@ -270,8 +268,7 @@ function parseDuration(s: string): number | null {
 }
 
 function printStats(s: StatsBuckets, label: string): void {
-  const pct = (n: number): string =>
-    s.total > 0 ? `${((n / s.total) * 100).toFixed(1)}%` : "—";
+  const pct = (n: number): string => (s.total > 0 ? `${((n / s.total) * 100).toFixed(1)}%` : "—");
   const pad = (n: number | string, w = 6): string => String(n).padStart(w, " ");
 
   console.log(`\nsentinel stats — ${label}`);
@@ -310,7 +307,9 @@ function printStats(s: StatsBuckets, label: string): void {
     console.log(`  samples               ${pad(h.count)}`);
   }
 
-  const topTools = Object.entries(s.by_tool).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const topTools = Object.entries(s.by_tool)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
   if (topTools.length > 0) {
     console.log("\nTop tools:");
     for (const [tool, n] of topTools) {
@@ -318,7 +317,9 @@ function printStats(s: StatsBuckets, label: string): void {
     }
   }
 
-  const topTags = Object.entries(s.by_tag).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const topTags = Object.entries(s.by_tag)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
   if (topTags.length > 0) {
     console.log("\nTop sessions:");
     for (const [tag, n] of topTags) {
@@ -408,8 +409,7 @@ async function setupLink(args: string[]): Promise<number> {
     url = detected;
   }
 
-  const link =
-    `sentinel://setup?u=${encodeURIComponent(url)}&t=${encodeURIComponent(token)}`;
+  const link = `sentinel://setup?u=${encodeURIComponent(url)}&t=${encodeURIComponent(token)}`;
 
   console.log(link);
 

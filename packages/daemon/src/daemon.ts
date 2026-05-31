@@ -6,10 +6,16 @@ import {
   type ApprovalRequest,
   type AskResolution,
   type Decision,
+  type HostedSession,
   type PolicyConfig,
   type PromoteRule,
+  type SessionDaemonMessage,
+  type SessionRunnerMessage,
+  SessionRunnerMessageSchema,
   type ToolRequest,
   ToolRequestSchema,
+  type WsClientMessage,
+  type WsServerMessage,
 } from "@vigili/shared";
 import { type SentinelConfig, loadConfigFile } from "./config.js";
 import { type MessageStore, createMessageStore } from "./db/messages.js";
@@ -34,6 +40,7 @@ import { AdminRequestSchema, type AdminResponse } from "./server/admin.js";
 import { type RelayClient, createRelayClient } from "./server/relay-client.js";
 import { type ConnContext, type SocketServer, startSocketServer } from "./server/socket.js";
 import { type RunningWsServer, startWsServer } from "./server/ws.js";
+import { type SessionRegistry, createSessionRegistry } from "./sessions.js";
 import { sweepStalePending } from "./sweep.js";
 import { loadOrCreateToken } from "./token.js";
 
@@ -91,6 +98,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   // messages テーブルは queue.db に同居する (small, single DB で OK)
   const messageStore = createMessageStore(store.raw().db);
   const queue = createPendingQueue();
+  const sessions = createSessionRegistry();
   const token = loadOrCreateToken(p.token);
 
   // 待機画面サマリー用の「今日 (ローカル 00:00 〜 現在 +60s)」集計。
@@ -120,11 +128,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     store,
     messageStore,
     queue,
+    sessions,
     sessionTags,
     notifier,
     log,
     policyPath: p.policy,
     generatedPolicyPath: p.policyGenerated,
+    broadcast: () => {},
     onMessageAdded: () => {},
     onMessageDelivered: () => {},
   };
@@ -134,7 +144,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   // PWA/iOS から飛んでくる client メッセージ (decide / send-message) を捌くロジックは
   // LAN WS と Relay の両方から呼ぶので関数化しておく。
-  const handleClientMessage = (msg: import("@vigili/shared").WsClientMessage): void => {
+  const handleClientMessage = (msg: WsClientMessage): void => {
     if (msg.type === "decide") {
       if (msg.promote) void handlePromote(msg.promote, ctx);
       const ok = queue.resolve(msg.id, msg.decision, "human:relay", null);
@@ -148,6 +158,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         created_at: Date.now(),
       });
       ctx.onMessageAdded(stored);
+    } else {
+      // answer-question / decide-plan / session-reply (L4 ホスト型セッション)
+      handleSessionClientMessage(msg, ctx);
     }
   };
 
@@ -173,7 +186,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         });
       },
       recentMessages: () => ctx.messageStore.listRecent(50),
+      currentSessions: () => ctx.sessions.list(),
       currentStats: todayStats,
+      onSessionClient: (msg) => handleSessionClientMessage(msg, ctx),
       ...(pushVapid && pushStore ? { push: { vapid: pushVapid, store: pushStore } } : {}),
     });
   }
@@ -204,6 +219,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         type: "snapshot",
         pending: queue.list(),
         messages: messageStore.listRecent(50),
+        sessions: sessions.list(),
       });
       relayRef.send({ type: "stats", stats: todayStats() });
     };
@@ -212,10 +228,12 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   }
 
   // pending / resolved / messages は LAN WS と Relay の両方に同時 broadcast する。
-  const broadcastAll = (msg: import("@vigili/shared").WsServerMessage): void => {
+  const broadcastAll = (msg: WsServerMessage): void => {
     ws?.broadcast(msg);
     relay?.send(msg);
   };
+  // セッションハンドラ (handleSessionMessage) からも broadcast できるよう ctx に載せる。
+  ctx.broadcast = broadcastAll;
 
   // 決着のたびに今日の集計を作り直して push する (待機画面サマリーを最新に保つ)。
   // allow/deny カウントが動くのは resolve の瞬間なので、ここが主要な更新点。
@@ -250,6 +268,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         type: "snapshot",
         pending,
         messages: messageStore.listRecent(50),
+        sessions: sessions.list(),
       });
     }, RELAY_SNAPSHOT_INTERVAL_MS);
   }
@@ -272,6 +291,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         type: "snapshot",
         pending: queue.list(),
         messages: messageStore.listRecent(50),
+        sessions: sessions.list(),
       });
       broadcastAll({ type: "stats", stats: todayStats() });
       log(`[vigili-daemon] sweep: expired ${swept.length} stale pending request(s)`);
@@ -455,11 +475,15 @@ interface DaemonContext {
   store: RequestStore;
   messageStore: MessageStore;
   queue: PendingQueue;
+  /** L4 ホスト型セッション (vigili run) のレジストリ。 */
+  sessions: SessionRegistry;
   sessionTags: Record<string, string>;
   notifier: Notifier;
   log: (msg: string) => void;
   policyPath: string;
   generatedPolicyPath: string;
+  /** WS + relay に WsServerMessage を同時 broadcast する。WS/relay 構築後に差し替える。 */
+  broadcast: (msg: WsServerMessage) => void;
   /** WS から PWA に message-added / message-delivered を broadcast するコールバック。
    *  WS server が起動後に差し替える。startDaemon の構築時点では noop。 */
   onMessageAdded: (m: import("@vigili/shared").Message) => void;
@@ -480,12 +504,23 @@ async function handleLine(line: string, conn: ConnContext, ctx: DaemonContext): 
     return;
   }
 
+  if (isSession(parsed)) {
+    await handleSessionMessage(parsed, conn, ctx);
+    return;
+  }
+
   await handleToolRequest(parsed, conn, ctx);
 }
 
 function isAdmin(value: unknown): value is { kind: "admin" } {
   return (
     typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "admin"
+  );
+}
+
+function isSession(value: unknown): value is { kind: "session" } {
+  return (
+    typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "session"
   );
 }
 
@@ -715,6 +750,242 @@ async function handleAdmin(value: unknown, conn: ConnContext, ctx: DaemonContext
         error: `id ${req.id} は pending にありません (既に決着 / タイムアウト / 未知)`,
       };
   conn.send(resp);
+}
+
+/**
+ * L4 ホスト型セッション (`vigili run`) からの socket メッセージを捌く。
+ * 同じ conn 上の双方向通信で、回答 (answer / permission-decision / plan-decision /
+ * reply) を書き戻す。
+ */
+async function handleSessionMessage(
+  parsed: unknown,
+  conn: ConnContext,
+  ctx: DaemonContext,
+): Promise<void> {
+  const result = SessionRunnerMessageSchema.safeParse(parsed);
+  if (!result.success) {
+    conn.send({
+      type: "session-error",
+      error: `invalid session message: ${result.error.issues.map((i) => i.message).join("; ")}`,
+    } satisfies SessionDaemonMessage);
+    return;
+  }
+  const msg = result.data;
+
+  switch (msg.type) {
+    case "session-start": {
+      const session: HostedSession = {
+        session_id: msg.session_id,
+        tag: msg.tag,
+        cwd: msg.cwd,
+        status: "running",
+        started_at: Date.now(),
+      };
+      ctx.sessions.register(session, conn);
+      // runner conn が切れたらセッションを終了して client に伝える。
+      conn.onClose(() => {
+        const ended = ctx.sessions.endByConn(conn);
+        if (ended) {
+          ctx.broadcast({
+            type: "session-ended",
+            session_id: ended.session_id,
+            reason: "runner disconnected",
+          });
+          ctx.log(`[vigili-daemon] session ended (disconnect): ${ended.session_id}`);
+        }
+      });
+      ctx.broadcast({ type: "session-started", session });
+      ctx.log(`[vigili-daemon] session started: ${session.session_id} (tag=${session.tag ?? "-"})`);
+      return;
+    }
+    case "transcript-append": {
+      ctx.broadcast({ type: "transcript-append", session_id: msg.session_id, line: msg.line });
+      return;
+    }
+    case "question": {
+      ctx.sessions.trackRequest(msg.request_id, msg.session_id, "question");
+      ctx.sessions.setStatus(msg.session_id, "awaiting");
+      ctx.broadcast({
+        type: "question",
+        session_id: msg.session_id,
+        request_id: msg.request_id,
+        questions: msg.questions,
+      });
+      return;
+    }
+    case "plan": {
+      ctx.sessions.trackRequest(msg.request_id, msg.session_id, "plan");
+      ctx.sessions.setStatus(msg.session_id, "awaiting");
+      ctx.broadcast({
+        type: "plan",
+        session_id: msg.session_id,
+        request_id: msg.request_id,
+        plan: msg.plan,
+      });
+      return;
+    }
+    case "permission-request": {
+      await handleSessionPermission(msg, conn, ctx);
+      return;
+    }
+    case "session-end": {
+      const ended = ctx.sessions.end(msg.session_id);
+      if (ended) {
+        ctx.broadcast({
+          type: "session-ended",
+          session_id: ended.session_id,
+          ...(msg.reason !== undefined ? { reason: msg.reason } : {}),
+        });
+        ctx.log(`[vigili-daemon] session ended: ${ended.session_id}`);
+      }
+      return;
+    }
+  }
+}
+
+/**
+ * ホスト型セッションの permission を、既存の policy engine + queue を再利用して判定する。
+ * これにより `vigili run` のツール承認も自動許可/自動拒否/スマホ承認の恩恵を受ける
+ * (SPEC §8.6: permission は既存 pending/ApprovalRequest を流用)。
+ */
+async function handleSessionPermission(
+  msg: Extract<SessionRunnerMessage, { type: "permission-request" }>,
+  conn: ConnContext,
+  ctx: DaemonContext,
+): Promise<void> {
+  const sess = ctx.sessions.get(msg.session_id);
+  const cwd = msg.cwd ?? sess?.cwd ?? ".";
+  const tag = sess?.tag ?? null;
+
+  const id = randomUUID();
+  ctx.store.insert({
+    id,
+    created_at: Date.now(),
+    session_id: msg.session_id,
+    session_tag: tag,
+    tool_name: msg.tool_name,
+    tool_input: msg.tool_input,
+    cwd,
+  });
+
+  const toolReq: ToolRequest = {
+    tool_name: msg.tool_name,
+    tool_input: msg.tool_input,
+    cwd,
+    session_id: msg.session_id,
+    ...(tag !== null ? { session_tag: tag } : {}),
+  };
+  const decision = decide(toolReq, ctx.policy, { sessionTags: ctx.sessionTags });
+
+  if (decision.action !== "ask") {
+    finalizeImmediate(id, decision, ctx);
+    conn.send({
+      type: "permission-decision",
+      request_id: msg.request_id,
+      decision: decision.action === "allow" ? "allow" : "deny",
+      ...(decision.reason !== undefined ? { reason: decision.reason } : {}),
+    } satisfies SessionDaemonMessage);
+    return;
+  }
+
+  const approvalRow = ctx.store.get(id);
+  if (!approvalRow) {
+    ctx.store.resolve({
+      id,
+      resolved_at: Date.now(),
+      decision: "deny",
+      decided_by: "internal:store-miss",
+      reason: "session permission 処理中に DB から消えました",
+    });
+    conn.send({
+      type: "permission-decision",
+      request_id: msg.request_id,
+      decision: "deny",
+      reason: "internal store miss",
+    } satisfies SessionDaemonMessage);
+    return;
+  }
+
+  if (conn.isClosed()) {
+    ctx.store.resolve({
+      id,
+      resolved_at: Date.now(),
+      decision: "deny",
+      decided_by: "cancelled:runner-pre-disconnected",
+      reason: "runner が enroll 前に既に切断していた",
+    });
+    return;
+  }
+
+  // runner が応答待ち中に切断したら queue から消す。
+  conn.onClose(() => {
+    if (ctx.queue.has(id)) {
+      ctx.queue.resolve(id, "deny", "cancelled:runner-disconnected", "runner が応答待ち中に切断");
+    }
+  });
+
+  ctx.sessions.setStatus(msg.session_id, "awaiting");
+  void ctx.notifier.notify({
+    request: approvalRow,
+    level: decision.notify ?? "normal",
+    ruleSource: decision.source,
+  });
+
+  const timeoutMs = ctx.policy.defaults.timeout_seconds * 1000;
+  const resolution = await ctx.queue.enroll(approvalRow, timeoutMs);
+  persistResolution(id, resolution, decision, ctx);
+  ctx.sessions.setStatus(msg.session_id, "running");
+
+  if (!conn.isClosed()) {
+    conn.send({
+      type: "permission-decision",
+      request_id: msg.request_id,
+      decision: resolution.decision,
+      ...(resolution.reason !== null ? { reason: resolution.reason } : {}),
+    } satisfies SessionDaemonMessage);
+  }
+}
+
+/**
+ * client (iOS/Mac/PWA) からの session 系メッセージを、対応する runner の conn に
+ * 書き戻す。answer-question / decide-plan は request_id、session-reply は session_id で引く。
+ */
+function handleSessionClientMessage(msg: WsClientMessage, ctx: DaemonContext): void {
+  if (msg.type === "answer-question") {
+    const rec = ctx.sessions.takeRequest(msg.request_id);
+    if (!rec) {
+      ctx.log(`[vigili-daemon] answer-question: request ${msg.request_id} 不明 / 既に回答済み`);
+      return;
+    }
+    ctx.sessions.sendToSession(rec.sessionId, {
+      type: "answer",
+      request_id: msg.request_id,
+      answers: msg.answers,
+    });
+    ctx.sessions.setStatus(rec.sessionId, "running");
+    return;
+  }
+  if (msg.type === "decide-plan") {
+    const rec = ctx.sessions.takeRequest(msg.request_id);
+    if (!rec) {
+      ctx.log(`[vigili-daemon] decide-plan: request ${msg.request_id} 不明 / 既に決着済み`);
+      return;
+    }
+    ctx.sessions.sendToSession(rec.sessionId, {
+      type: "plan-decision",
+      request_id: msg.request_id,
+      decision: msg.decision,
+      ...(msg.reason !== undefined ? { reason: msg.reason } : {}),
+    });
+    ctx.sessions.setStatus(rec.sessionId, "running");
+    return;
+  }
+  if (msg.type === "session-reply") {
+    const ok = ctx.sessions.sendToSession(msg.session_id, { type: "reply", body: msg.body });
+    if (!ok) ctx.log(`[vigili-daemon] session-reply: session ${msg.session_id} 不明 / 切断済み`);
+    return;
+  }
+  // decide / send-message はこの経路に来ない (呼び出し側で振り分け済み)。
 }
 
 async function handleToolRequest(

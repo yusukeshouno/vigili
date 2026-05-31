@@ -135,9 +135,27 @@ describe("computeDigest", () => {
   it("excludes groups with auto-rule decisions from candidates", () => {
     const { db } = store.raw();
     const t = Date.now();
-    insert({ tool: "Bash", input: { command: "ls /tmp" }, decided_by: "rule:read-only", decision: "allow", created_at: t });
-    insert({ tool: "Bash", input: { command: "ls /var" }, decided_by: "rule:read-only", decision: "allow", created_at: t + 1 });
-    insert({ tool: "Bash", input: { command: "ls /etc" }, decided_by: "rule:read-only", decision: "allow", created_at: t + 2 });
+    insert({
+      tool: "Bash",
+      input: { command: "ls /tmp" },
+      decided_by: "rule:read-only",
+      decision: "allow",
+      created_at: t,
+    });
+    insert({
+      tool: "Bash",
+      input: { command: "ls /var" },
+      decided_by: "rule:read-only",
+      decision: "allow",
+      created_at: t + 1,
+    });
+    insert({
+      tool: "Bash",
+      input: { command: "ls /etc" },
+      decided_by: "rule:read-only",
+      decision: "allow",
+      created_at: t + 2,
+    });
     const r = computeDigest(db, t - 1000, t + 10_000);
     const g = r.groups.find((x) => x.key === "Bash:ls")!;
     expect(g.count).toBe(3);
@@ -148,9 +166,27 @@ describe("computeDigest", () => {
   it("excludes mixed allow/deny groups from candidates", () => {
     const { db } = store.raw();
     const t = Date.now();
-    insert({ tool: "Bash", input: { command: "curl https://x.com" }, decided_by: "human:ws", decision: "allow", created_at: t });
-    insert({ tool: "Bash", input: { command: "curl https://y.com" }, decided_by: "human:ws", decision: "allow", created_at: t + 1 });
-    insert({ tool: "Bash", input: { command: "curl https://z.com" }, decided_by: "human:ws", decision: "deny", created_at: t + 2 });
+    insert({
+      tool: "Bash",
+      input: { command: "curl https://x.com" },
+      decided_by: "human:ws",
+      decision: "allow",
+      created_at: t,
+    });
+    insert({
+      tool: "Bash",
+      input: { command: "curl https://y.com" },
+      decided_by: "human:ws",
+      decision: "allow",
+      created_at: t + 1,
+    });
+    insert({
+      tool: "Bash",
+      input: { command: "curl https://z.com" },
+      decided_by: "human:ws",
+      decision: "deny",
+      created_at: t + 2,
+    });
     const r = computeDigest(db, t - 1000, t + 10_000);
     const g = r.groups.find((x) => x.key === "Bash:curl")!;
     expect(g.unanimous).toBeNull();
@@ -160,8 +196,20 @@ describe("computeDigest", () => {
   it("requires count >= 3 for candidates", () => {
     const { db } = store.raw();
     const t = Date.now();
-    insert({ tool: "Bash", input: { command: "yarn install" }, decided_by: "human:ws", decision: "allow", created_at: t });
-    insert({ tool: "Bash", input: { command: "yarn install" }, decided_by: "human:ws", decision: "allow", created_at: t + 1 });
+    insert({
+      tool: "Bash",
+      input: { command: "yarn install" },
+      decided_by: "human:ws",
+      decision: "allow",
+      created_at: t,
+    });
+    insert({
+      tool: "Bash",
+      input: { command: "yarn install" },
+      decided_by: "human:ws",
+      decision: "allow",
+      created_at: t + 1,
+    });
     const r = computeDigest(db, t - 1000, t + 10_000);
     expect(r.groups.length).toBe(1);
     expect(r.candidates.length).toBe(0);

@@ -1,5 +1,6 @@
 import fastifyWebsocket from "@fastify/websocket";
 import {
+  type HostedSession,
   type Message,
   type StatsBuckets,
   type WsClientMessage,
@@ -32,6 +33,14 @@ export interface WsServerOptions {
    * daemon 側から `broadcast({ type: "stats", ... })` で更新を push する。
    */
   currentStats?: () => StatsBuckets;
+  /** snapshot に同梱する稼働中ホスト型セッション (L4) を取得するコールバック (省略時は送らない)。 */
+  currentSessions?: () => HostedSession[];
+  /**
+   * L4 ホスト型セッション宛の client message (answer-question / decide-plan /
+   * session-reply) を daemon 側へ渡す hook。daemon は request_id / session_id を
+   * 頼りに対応する runner socket へ書き戻す。
+   */
+  onSessionClient?: (msg: WsClientMessage) => void;
   log?: (msg: string) => void;
   /** Web Push のエンドポイントも同じ Fastify インスタンスに乗せる場合に渡す。 */
   push?: { vapid: VapidKeys; store: SubscriptionStore };
@@ -107,11 +116,14 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
 
       // snapshot を送信
       const recent = options.recentMessages?.() ?? [];
-      wrap.send(
-        recent.length > 0
-          ? { type: "snapshot", pending: options.queue.list(), messages: recent }
-          : { type: "snapshot", pending: options.queue.list() },
-      );
+      const sessions = options.currentSessions?.() ?? [];
+      const snapshot: Extract<WsServerMessage, { type: "snapshot" }> = {
+        type: "snapshot",
+        pending: options.queue.list(),
+        ...(recent.length > 0 ? { messages: recent } : {}),
+        ...(sessions.length > 0 ? { sessions } : {}),
+      };
+      wrap.send(snapshot);
 
       // 続けて観測可能性サマリー (今日の自動承認件数等) を送る。
       // pending が空の待機画面では「0 waiting」しか出せないので、iOS はこれを表示する。
@@ -167,9 +179,15 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
       // bonjour-service は CJS。Node ESM の dynamic import だと
       // `mod.Bonjour` または `mod.default.Bonjour` のどちらかに収まる。
       const mod = (await import("bonjour-service")) as unknown as {
-        Bonjour?: new () => { publish: (opts: object) => { stop?: () => void }; destroy?: () => void };
+        Bonjour?: new () => {
+          publish: (opts: object) => { stop?: () => void };
+          destroy?: () => void;
+        };
         default?: {
-          Bonjour?: new () => { publish: (opts: object) => { stop?: () => void }; destroy?: () => void };
+          Bonjour?: new () => {
+            publish: (opts: object) => { stop?: () => void };
+            destroy?: () => void;
+          };
         };
       };
       const BonjourCtor = mod.Bonjour ?? mod.default?.Bonjour;
@@ -278,6 +296,22 @@ function handleClientMessage(
     } catch (err) {
       (options.log ?? console.error)(
         `[vigili-ws] send-message handler error: ${(err as Error).message}`,
+      );
+    }
+    return;
+  }
+  // L4 ホスト型セッション宛 (answer-question / decide-plan / session-reply)。
+  if (
+    msg.type === "answer-question" ||
+    msg.type === "decide-plan" ||
+    msg.type === "session-reply"
+  ) {
+    if (!options.onSessionClient) return;
+    try {
+      options.onSessionClient(msg);
+    } catch (err) {
+      (options.log ?? console.error)(
+        `[vigili-ws] session client handler error: ${(err as Error).message}`,
       );
     }
     return;

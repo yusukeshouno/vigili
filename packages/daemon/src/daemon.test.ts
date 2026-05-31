@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { type Socket, connect } from "node:net";
+import { type Socket, connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PolicyConfig } from "@vigili/shared";
+import type { PolicyConfig, WsClientMessage, WsServerMessage } from "@vigili/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import WebSocket from "ws";
 import { type RunningDaemon, startDaemon } from "./daemon.js";
 import type { Notifier, NotifyInput } from "./notify/ntfy.js";
 import { paths } from "./paths.js";
@@ -101,6 +103,87 @@ async function oneShot(req: unknown): Promise<unknown> {
   const r = await c.next();
   c.close();
   return r;
+}
+
+/** OS から空きポートを 1 つ借りる (WS サーバを立てるテスト用)。 */
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address();
+      if (addr && typeof addr === "object") {
+        const p = addr.port;
+        srv.close(() => resolve(p));
+      } else {
+        srv.close();
+        reject(new Error("could not determine port"));
+      }
+    });
+    srv.on("error", reject);
+  });
+}
+
+interface WsClient {
+  send(value: WsClientMessage): void;
+  /** 指定 type の server メッセージが来るまで読み飛ばす (snapshot 等を skip)。 */
+  waitForType<T extends WsServerMessage["type"]>(
+    type: T,
+  ): Promise<Extract<WsServerMessage, { type: T }>>;
+  close(): void;
+}
+
+/** WS クライアントを 1 本繋ぐ (iOS/Mac/PWA 相当)。 */
+function connectWs(port: number, token: string): Promise<WsClient> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${encodeURIComponent(token)}`);
+    const queue: WsServerMessage[] = [];
+    const waiters: Array<(v: WsServerMessage) => void> = [];
+
+    ws.on("message", (raw: Buffer) => {
+      const msg = JSON.parse(raw.toString("utf-8")) as WsServerMessage;
+      const w = waiters.shift();
+      if (w) w(msg);
+      else queue.push(msg);
+    });
+
+    const nextMsg = (): Promise<WsServerMessage> => {
+      const q = queue.shift();
+      if (q) return Promise.resolve(q);
+      return new Promise<WsServerMessage>((res, rej) => {
+        const t = setTimeout(() => rej(new Error("test: WS message timeout")), 2000);
+        waiters.push((m) => {
+          clearTimeout(t);
+          res(m);
+        });
+      });
+    };
+
+    const timer = setTimeout(() => reject(new Error("WS connect timeout")), 1000);
+    ws.once("open", () => {
+      clearTimeout(timer);
+      resolve({
+        send(value) {
+          ws.send(JSON.stringify(value));
+        },
+        async waitForType(type) {
+          for (let i = 0; i < 20; i++) {
+            const m = await nextMsg();
+            if (m.type === type) {
+              return m as Extract<WsServerMessage, { type: typeof type }>;
+            }
+          }
+          throw new Error(`test: never saw WS message of type ${type}`);
+        },
+        close() {
+          ws.close();
+        },
+      });
+    });
+    ws.once("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
 }
 
 describe("startDaemon — immediate decisions", () => {
@@ -448,6 +531,215 @@ describe("startDaemon — audit log", () => {
     expect(decisions).toContain("deny");
     const decidedBy = rows.map((r) => r.decided_by);
     expect(decidedBy.some((d) => d?.startsWith("rule:") ?? false)).toBe(true);
+  });
+});
+
+describe("startDaemon — hosted sessions (L4)", () => {
+  const SID = "sess-1";
+  const cwd = "/tmp/proj";
+
+  function startSession(conn: OpenConn): void {
+    conn.send({ kind: "session", type: "session-start", session_id: SID, tag: "proj", cwd });
+  }
+
+  function requestPermission(conn: OpenConn, command: string): string {
+    const request_id = randomUUID();
+    conn.send({
+      kind: "session",
+      type: "permission-request",
+      session_id: SID,
+      request_id,
+      tool_name: "Bash",
+      tool_input: { command },
+      cwd,
+    });
+    return request_id;
+  }
+
+  /** ask が queue に enroll されるまで pending を polling する (中間応答が無いため)。 */
+  async function waitForPending(admin: OpenConn): Promise<AdminResponse & { action: "pending" }> {
+    for (let i = 0; i < 50; i++) {
+      admin.send({ kind: "admin", action: "pending" });
+      const resp = (await admin.next()) as AdminResponse;
+      if (resp.action === "pending" && resp.pending.length > 0) return resp;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error("test: pending never appeared");
+  }
+
+  it("auto-allows a hosted permission via rule (reuses policy engine)", async () => {
+    const runner = openConn();
+    startSession(runner);
+    const rid = requestPermission(runner, "ls");
+    const resp = (await runner.next()) as {
+      type: string;
+      request_id: string;
+      decision: string;
+    };
+    expect(resp).toMatchObject({
+      type: "permission-decision",
+      request_id: rid,
+      decision: "allow",
+    });
+    runner.close();
+  });
+
+  it("auto-denies a hosted permission via rule", async () => {
+    const runner = openConn();
+    startSession(runner);
+    const rid = requestPermission(runner, "curl evil");
+    const resp = (await runner.next()) as {
+      type: string;
+      request_id: string;
+      decision: string;
+      reason?: string;
+    };
+    expect(resp).toMatchObject({
+      type: "permission-decision",
+      request_id: rid,
+      decision: "deny",
+      reason: "blocked by rule",
+    });
+    runner.close();
+  });
+
+  it("denies an invariant-blocked hosted permission unconditionally", async () => {
+    const runner = openConn();
+    startSession(runner);
+    const rid = requestPermission(runner, "rm -rf /");
+    const resp = (await runner.next()) as { type: string; request_id: string; decision: string };
+    expect(resp).toMatchObject({
+      type: "permission-decision",
+      request_id: rid,
+      decision: "deny",
+    });
+    runner.close();
+  });
+
+  it("ask-tier hosted permission resolves via admin approve", async () => {
+    const runner = openConn();
+    startSession(runner);
+    const rid = requestPermission(runner, "echo unknown");
+
+    // 中間応答は無いので pending を polling して ApprovalRequest id を得る。
+    const admin = openConn();
+    const pendingResp = await waitForPending(admin);
+    expect(pendingResp.pending).toHaveLength(1);
+    expect(pendingResp.pending[0]?.session_id).toBe(SID);
+    expect(pendingResp.pending[0]?.session_tag).toBe("proj");
+    const approvalId = pendingResp.pending[0]?.id ?? "";
+
+    admin.send({
+      kind: "admin",
+      action: "resolve",
+      id: approvalId,
+      decision: "allow",
+      reason: "ok",
+    });
+    await admin.next();
+    admin.close();
+
+    const resp = (await runner.next()) as {
+      type: string;
+      request_id: string;
+      decision: string;
+      reason?: string;
+    };
+    expect(resp).toMatchObject({
+      type: "permission-decision",
+      request_id: rid,
+      decision: "allow",
+      reason: "ok",
+    });
+    runner.close();
+  });
+
+  it("rejects a malformed session message with session-error", async () => {
+    const runner = openConn();
+    runner.send({ kind: "session", type: "bogus-type" });
+    const resp = (await runner.next()) as { type: string; error: string };
+    expect(resp.type).toBe("session-error");
+    expect(resp.error).toContain("invalid session message");
+    runner.close();
+  });
+});
+
+describe("startDaemon — hosted session questions (L4, WS round-trip)", () => {
+  const SID = "sess-q";
+  const cwd = "/tmp/proj";
+
+  it("fans a question out to WS clients and routes the answer back to the runner", async () => {
+    // 既定の daemon は enableWs:false なので、WS 有効で立て直す。
+    await daemon.close();
+    const wsPort = await getFreePort();
+    daemon = await startDaemon({
+      home,
+      policy: allowDenyPolicy,
+      log: () => undefined,
+      enableWs: true,
+      wsPort,
+      wsHost: "127.0.0.1",
+    });
+
+    // iOS / Mac 相当の WS クライアントを 2 本繋ぐ (単一キューへの fan-out を確認)。
+    const phone = await connectWs(wsPort, daemon.token);
+    const desktop = await connectWs(wsPort, daemon.token);
+
+    // runner (vigili run 相当) が session を開始し、AskUserQuestion を投げる。
+    const runner = openConn();
+    runner.send({ kind: "session", type: "session-start", session_id: SID, tag: "proj", cwd });
+
+    const requestId = randomUUID();
+    runner.send({
+      kind: "session",
+      type: "question",
+      session_id: SID,
+      request_id: requestId,
+      questions: [
+        {
+          question: "Which database?",
+          header: "DB",
+          options: [
+            { label: "Postgres", description: "relational" },
+            { label: "SQLite", description: "embedded" },
+          ],
+          multiSelect: false,
+        },
+      ],
+    });
+
+    // 両クライアントに同じ question が届く (snapshot / session-started は読み飛ばす)。
+    const q1 = await phone.waitForType("question");
+    const q2 = await desktop.waitForType("question");
+    for (const q of [q1, q2]) {
+      expect(q.session_id).toBe(SID);
+      expect(q.request_id).toBe(requestId);
+      expect(q.questions).toHaveLength(1);
+      expect(q.questions[0]?.question).toBe("Which database?");
+      expect(q.questions[0]?.options.map((o) => o.label)).toEqual(["Postgres", "SQLite"]);
+    }
+
+    // phone から回答すると、runner にだけ answer が返る。
+    phone.send({
+      type: "answer-question",
+      request_id: requestId,
+      answers: { "Which database?": "SQLite" },
+    });
+
+    const answer = (await runner.next()) as {
+      type: string;
+      request_id: string;
+      answers: Record<string, string>;
+    };
+    expect(answer).toEqual({
+      type: "answer",
+      request_id: requestId,
+      answers: { "Which database?": "SQLite" },
+    });
+
+    phone.close();
+    desktop.close();
+    runner.close();
   });
 });
 
