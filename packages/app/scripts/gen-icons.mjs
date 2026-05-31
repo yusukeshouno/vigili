@@ -27,7 +27,7 @@ function convert(size) {
     const out = join(tmpdir(), `vigili-icon-${size}.png`);
     const p = spawn(RSVG, ["-w", size, "-h", size, TMPL, "-o", out]);
     p.on("close", (code) =>
-      code === 0 ? resolve(out) : reject(new Error(`rsvg exit ${code} for ${size}`))
+      code === 0 ? resolve(out) : reject(new Error(`rsvg exit ${code} for ${size}`)),
     );
     p.on("error", reject);
   });
@@ -49,15 +49,15 @@ async function main() {
   ];
 
   const mac = [
-    [16,   "app-mac-16x16@1x.png"],
-    [32,   "app-mac-16x16@2x.png"],
-    [32,   "app-mac-32x32@1x.png"],
-    [64,   "app-mac-32x32@2x.png"],
-    [128,  "app-mac-128x128@1x.png"],
-    [256,  "app-mac-128x128@2x.png"],
-    [256,  "app-mac-256x256@1x.png"],
-    [512,  "app-mac-256x256@2x.png"],
-    [512,  "app-mac-512x512@1x.png"],
+    [16, "app-mac-16x16@1x.png"],
+    [32, "app-mac-16x16@2x.png"],
+    [32, "app-mac-32x32@1x.png"],
+    [64, "app-mac-32x32@2x.png"],
+    [128, "app-mac-128x128@1x.png"],
+    [256, "app-mac-128x128@2x.png"],
+    [256, "app-mac-256x256@1x.png"],
+    [512, "app-mac-256x256@2x.png"],
+    [512, "app-mac-512x512@1x.png"],
     [1024, "app-mac-512x512@2x.png"],
   ];
 
@@ -81,4 +81,7 @@ async function main() {
   log("Done.");
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

@@ -30,6 +30,18 @@ final class DaemonWsClient: ObservableObject {
   /// daemon が接続直後と決着のたびに push する。未受信なら nil。
   @Published private(set) var stats: StatsBuckets? = nil
 
+  // --- L4 ホスト型セッション (vigili run) ---
+  /// 稼働中のホスト型セッション。snapshot / session-started / session-ended で更新。
+  @Published private(set) var sessions: [HostedSession] = []
+  /// session_id → transcript 行。transcript-append で追記、session-ended で破棄。
+  @Published private(set) var transcripts: [String: [TranscriptLine]] = [:]
+  /// 回答待ちの選択肢質問 (AskUserQuestion)。request_id 単位。
+  @Published private(set) var pendingQuestions: [PendingQuestion] = []
+  /// 承認待ちの plan (ExitPlanMode)。request_id 単位。
+  @Published private(set) var pendingPlans: [PendingPlan] = []
+  /// transcript の上限 (セッションあたり)。古い行から落とす。
+  private let transcriptCap = 500
+
   /// 接続先 (例: `ws://127.0.0.1:7878` または `wss://my-mac.tail-xxxx.ts.net`)。
   private var urlBase: URL
   /// 認証 bearer。空文字なら接続せず failed にする。
@@ -184,6 +196,62 @@ final class DaemonWsClient: ObservableObject {
     messages.insert(placeholder, at: 0)
   }
 
+  // MARK: - L4 ホスト型セッション (vigili run) への返信
+
+  /// AskUserQuestion への回答を返す。`answers` は {<question>: <選択 label>} 形。
+  func answerQuestion(requestId: String, answers: [String: String]) {
+    guard let task = task, case .connected = state else {
+      appLog("ws.answerQuestion: not connected, ignoring")
+      return
+    }
+    let msg: [String: Any] = [
+      "type": "answer-question",
+      "request_id": requestId,
+      "answers": answers,
+    ]
+    sendJson(msg, on: task)
+    // optimistic: ローカルから消す (runner 側で answer が消費される)
+    pendingQuestions.removeAll { $0.requestId == requestId }
+  }
+
+  /// plan (ExitPlanMode) の承認 / 却下を返す。decision は "approve" | "reject"。
+  func decidePlan(requestId: String, decision: String, reason: String? = nil) {
+    guard let task = task, case .connected = state else {
+      appLog("ws.decidePlan: not connected, ignoring")
+      return
+    }
+    var msg: [String: Any] = [
+      "type": "decide-plan",
+      "request_id": requestId,
+      "decision": decision,
+    ]
+    if let reason = reason, !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      msg["reason"] = reason
+    }
+    sendJson(msg, on: task)
+    pendingPlans.removeAll { $0.requestId == requestId }
+  }
+
+  /// ホスト型セッションへの自由文返信 (次の user turn になる)。
+  func sendSessionReply(sessionId: String, body: String) {
+    let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !sessionId.isEmpty, !trimmed.isEmpty else { return }
+    guard let task = task, case .connected = state else {
+      appLog("ws.sendSessionReply: not connected, ignoring")
+      return
+    }
+    let msg: [String: Any] = [
+      "type": "session-reply",
+      "session_id": sessionId,
+      "body": trimmed,
+    ]
+    sendJson(msg, on: task)
+    // optimistic: transcript に user 行として即時反映する
+    var lines = transcripts[sessionId] ?? []
+    lines.append(TranscriptLine(role: "user", text: trimmed, at: Date(), toolName: nil))
+    transcripts[sessionId] = lines
+  }
+
   // MARK: - private
 
   private func connect() {
@@ -305,6 +373,10 @@ final class DaemonWsClient: ObservableObject {
       if let arr = obj["messages"] as? [[String: Any]] {
         messages = arr.compactMap(Message.init(dict:))
       }
+      if let arr = obj["sessions"] as? [[String: Any]] {
+        sessions = arr.compactMap(HostedSession.init(dict:))
+        appLog("ws.snapshot \(sessions.count) sessions")
+      }
     case "pending":
       if let r = obj["request"] as? [String: Any], let req = ApprovalRequest(dict: r) {
         // 既存に同じ id が無いか確認 (snapshot との競合防止)
@@ -355,6 +427,54 @@ final class DaemonWsClient: ObservableObject {
             deliveredAt: Date(timeIntervalSince1970: delivered / 1000.0)
           )
           appLog("ws.message-delivered \(id)")
+        }
+      }
+    // --- L4 ホスト型セッション (vigili run) ---
+    case "session-started":
+      if let s = obj["session"] as? [String: Any], let sess = HostedSession(dict: s) {
+        if let idx = sessions.firstIndex(where: { $0.sessionId == sess.sessionId }) {
+          sessions[idx] = sess
+        } else {
+          sessions.append(sess)
+        }
+        appLog("ws.session-started \(sess.sessionId) (\(sess.displayName))")
+      }
+    case "session-ended":
+      if let sid = obj["session_id"] as? String {
+        sessions.removeAll { $0.sessionId == sid }
+        transcripts[sid] = nil
+        pendingQuestions.removeAll { $0.sessionId == sid }
+        pendingPlans.removeAll { $0.sessionId == sid }
+        appLog("ws.session-ended \(sid)")
+      }
+    case "transcript-append":
+      if let sid = obj["session_id"] as? String,
+         let l = obj["line"] as? [String: Any], let line = TranscriptLine(dict: l) {
+        var lines = transcripts[sid] ?? []
+        lines.append(line)
+        if lines.count > transcriptCap {
+          lines.removeFirst(lines.count - transcriptCap)
+        }
+        transcripts[sid] = lines
+      }
+    case "question":
+      if let sid = obj["session_id"] as? String,
+         let rid = obj["request_id"] as? String,
+         let qs = obj["questions"] as? [[String: Any]] {
+        if !pendingQuestions.contains(where: { $0.requestId == rid }) {
+          let questions = qs.compactMap(Question.init(dict:))
+          pendingQuestions.append(
+            PendingQuestion(sessionId: sid, requestId: rid, questions: questions))
+          appLog("ws.question +1 (\(questions.count)q) session=\(sid)")
+        }
+      }
+    case "plan":
+      if let sid = obj["session_id"] as? String,
+         let rid = obj["request_id"] as? String,
+         let plan = obj["plan"] as? String {
+        if !pendingPlans.contains(where: { $0.requestId == rid }) {
+          pendingPlans.append(PendingPlan(sessionId: sid, requestId: rid, plan: plan))
+          appLog("ws.plan +1 session=\(sid)")
         }
       }
     default:

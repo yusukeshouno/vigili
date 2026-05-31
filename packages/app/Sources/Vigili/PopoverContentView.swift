@@ -289,6 +289,25 @@ struct PopoverContentView: View {
 
       Spacer()
 
+      // ホスト型セッション (vigili run): 会話 + 質問/plan 回答 + 返信
+      Button {
+        SessionsWindow.show(coordinator: coordinator)
+      } label: {
+        ZStack(alignment: .topTrailing) {
+          Image(systemName: "bubble.left.and.bubble.right")
+            .font(.system(size: 12))
+            .foregroundStyle(coordinator.sessions.isEmpty ? Theme.fgMid : Theme.fg)
+          if sessionsNeedAttention {
+            Circle()
+              .fill(Theme.accent)
+              .frame(width: 6, height: 6)
+              .offset(x: 4, y: -3)
+          }
+        }
+      }
+      .buttonStyle(.plain)
+      .help("Hosted sessions (vigili run)")
+
       // iPhone ペアリング QR を再表示
       Button {
         showPairingQR = true
@@ -394,6 +413,11 @@ struct PopoverContentView: View {
   }
 
   // MARK: - helpers
+
+  /// ホスト型セッションに未回答の質問 / plan があるか (フッターのバッジ点灯用)。
+  private var sessionsNeedAttention: Bool {
+    !coordinator.pendingQuestions.isEmpty || !coordinator.pendingPlans.isEmpty
+  }
 
   private func openLogs() {
     // ~/.vigili が存在しなければ旧 ~/.sentinel から開く (移行期 fallback)

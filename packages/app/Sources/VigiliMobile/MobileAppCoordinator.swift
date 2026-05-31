@@ -39,6 +39,12 @@ final class MobileAppCoordinator: ObservableObject {
   /// `~/.vigili/.welcomed` 相当 (iOS は UserDefaults)。初回起動時 Welcome 画面を出す。
   @Published var showWelcome: Bool = !UserDefaults.standard.bool(forKey: "vigili.welcomed")
 
+  // --- L4 ホスト型セッション (vigili run) ---
+  @Published var sessions: [HostedSession] = []
+  @Published var transcripts: [String: [TranscriptLine]] = [:]
+  @Published var pendingQuestions: [PendingQuestion] = []
+  @Published var pendingPlans: [PendingPlan] = []
+
   enum Route: Equatable {
     case none
     case lan(host: String)     // 表示用: "192.168.1.5:7878"
@@ -74,6 +80,12 @@ final class MobileAppCoordinator: ObservableObject {
     wsClient.$stats
       .receive(on: DispatchQueue.main)
       .assign(to: &$stats)
+
+    // L4 ホスト型セッション系も mirror
+    wsClient.$sessions.receive(on: DispatchQueue.main).assign(to: &$sessions)
+    wsClient.$transcripts.receive(on: DispatchQueue.main).assign(to: &$transcripts)
+    wsClient.$pendingQuestions.receive(on: DispatchQueue.main).assign(to: &$pendingQuestions)
+    wsClient.$pendingPlans.receive(on: DispatchQueue.main).assign(to: &$pendingPlans)
 
     // Bonjour 発見状況が変わるたびに戦略を再評価
     bonjour.$services
@@ -160,6 +172,23 @@ final class MobileAppCoordinator: ObservableObject {
   /// "今後は自動で承認" ボタンから呼ばれる。
   func decideAndPromote(id: String, request: ApprovalRequest) {
     wsClient.decideWithPromote(id: id, promote: request.buildPromotePayload())
+  }
+
+  // --- L4 ホスト型セッションへの回答 ---
+
+  /// AskUserQuestion への回答。
+  func answerQuestion(requestId: String, answers: [String: String]) {
+    wsClient.answerQuestion(requestId: requestId, answers: answers)
+  }
+
+  /// plan (ExitPlanMode) の承認 / 却下。
+  func decidePlan(requestId: String, decision: String, reason: String? = nil) {
+    wsClient.decidePlan(requestId: requestId, decision: decision, reason: reason)
+  }
+
+  /// ホスト型セッションへの自由文返信。
+  func sendSessionReply(sessionId: String, body: String) {
+    wsClient.sendSessionReply(sessionId: sessionId, body: body)
   }
 
   /// MobileWelcomeView の CTA 押下で呼ばれる。以後 Welcome を出さないフラグを立てる。

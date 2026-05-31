@@ -5,7 +5,7 @@ import WidgetKit
 /// WidgetKit に解釈させる。
 ///
 /// 配置: Notification Center / Today View / macOS Sonoma+ の Desktop。
-/// データは `~/.vigili/widget-state.json` を 1 秒以下のレイテンシで読み込む。
+/// データは App Group 共有コンテナの `widget-state.json` を 1 秒以下のレイテンシで読み込む。
 @main
 struct VigiliWidgetBundle: WidgetBundle {
   var body: some Widget {

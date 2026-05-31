@@ -31,6 +31,12 @@ final class AppCoordinator: ObservableObject {
   @Published var wsState: DaemonWsClient.State = .disconnected
   @Published var lastError: String?
 
+  // --- L4 ホスト型セッション (vigili run) ---
+  @Published var sessions: [HostedSession] = []
+  @Published var transcripts: [String: [TranscriptLine]] = [:]
+  @Published var pendingQuestions: [PendingQuestion] = []
+  @Published var pendingPlans: [PendingPlan] = []
+
   /// 初回起動時に Welcome 画面を出すかどうか。`~/.vigili/.welcomed` の有無で判定。
   @Published var showWelcome: Bool
 
@@ -122,6 +128,12 @@ final class AppCoordinator: ObservableObject {
       .receive(on: DispatchQueue.main)
       .assign(to: &$messages)
 
+    // L4 ホスト型セッション系も coordinator に mirror
+    wsClient.$sessions.receive(on: DispatchQueue.main).assign(to: &$sessions)
+    wsClient.$transcripts.receive(on: DispatchQueue.main).assign(to: &$transcripts)
+    wsClient.$pendingQuestions.receive(on: DispatchQueue.main).assign(to: &$pendingQuestions)
+    wsClient.$pendingPlans.receive(on: DispatchQueue.main).assign(to: &$pendingPlans)
+
     // 起動
     daemonController.start()
     // daemon の socket / WS が立ち上がるまで少し時間がかかるので 2 秒遅延
@@ -163,6 +175,8 @@ final class AppCoordinator: ObservableObject {
       if self.tickCount % 5 == 0 {
         await self.tickStats()
       }
+      // widget の Allow/Deny ボタンが書いた決定を取り込んで daemon に適用 (毎 tick = 1s)
+      self.drainWidgetDecisions()
       self.tickCount &+= 1
     }
   }
@@ -176,6 +190,38 @@ final class AppCoordinator: ObservableObject {
   /// request.buildPromotePayload() でルールを自動生成して allow + promote を送る。
   func decideAndPromote(id: String, request: ApprovalRequest) {
     wsClient.decideWithPromote(id: id, promote: request.buildPromotePayload())
+  }
+
+  // --- L4 ホスト型セッションへの回答 ---
+
+  /// AskUserQuestion への回答。
+  func answerQuestion(requestId: String, answers: [String: String]) {
+    wsClient.answerQuestion(requestId: requestId, answers: answers)
+  }
+
+  /// plan (ExitPlanMode) の承認 / 却下。
+  func decidePlan(requestId: String, decision: String, reason: String? = nil) {
+    wsClient.decidePlan(requestId: requestId, decision: decision, reason: reason)
+  }
+
+  /// ホスト型セッションへの自由文返信。
+  func sendSessionReply(sessionId: String, body: String) {
+    wsClient.sendSessionReply(sessionId: sessionId, body: body)
+  }
+
+  // MARK: - widget の Allow/Deny ボタン取り込み
+
+  /// widget の Allow/Deny ボタン (App Intent) が widget コンテナに書いた決定を取り込み、
+  /// daemon に適用する。widget はサンドボックスで daemon socket に届かないため、
+  /// コンテナファイル経由で受け取る (毎 tick = 1s でドレイン)。
+  private func drainWidgetDecisions() {
+    let applied = WidgetState.drainDecisions { [weak self] id, decision in
+      self?.decide(id: id, decision: decision)
+      appLog("widget decision: \(decision) \(id)")
+    }
+    if applied > 0 {
+      appLog("widget decisions drained: \(applied)")
+    }
   }
 
   /// WelcomeView の "Got it" で呼ばれる。marker file を書いて以後出さない。

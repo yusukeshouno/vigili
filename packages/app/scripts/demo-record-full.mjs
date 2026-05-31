@@ -16,7 +16,7 @@ import { statSync } from "node:fs";
 
 const SOCKET = `${process.env.HOME}/.vigili/daemon.sock`;
 const SIM_ID = "151DCC8C-9181-46AD-B90E-56A3080C7FAB";
-const BUNDLE  = "io.vigili.mobile.shono";
+const BUNDLE = "io.vigili.mobile.shono";
 const RAW_MOV = "/tmp/demo-raw.mov";
 const SCREENSHOTS = `/Users/shounoyusuke/Dropbox (個人)/sentinel/packages/landing/public/screenshots`;
 
@@ -57,8 +57,11 @@ function socketRequest(payload) {
       const nl = buf.indexOf("\n");
       if (nl === -1) return;
       conn.end();
-      try { resolve(JSON.parse(buf.slice(0, nl))); }
-      catch (e) { reject(e); }
+      try {
+        resolve(JSON.parse(buf.slice(0, nl)));
+      } catch (e) {
+        reject(e);
+      }
     });
     conn.on("error", reject);
   });
@@ -81,16 +84,18 @@ function inject(req) {
     const conn = createConnection(SOCKET);
     let buf = "";
     conn.on("connect", () => {
-      conn.write(`${JSON.stringify({
-        kind: "request",
-        id: randomUUID(),
-        session_id: randomUUID(),
-        session_tag: req.session_tag,
-        tool_name: req.tool_name,
-        tool_input: req.tool_input,
-        cwd: "/Users/dev/myproj",
-        created_at: Date.now(),
-      })}\n`);
+      conn.write(
+        `${JSON.stringify({
+          kind: "request",
+          id: randomUUID(),
+          session_id: randomUUID(),
+          session_tag: req.session_tag,
+          tool_name: req.tool_name,
+          tool_input: req.tool_input,
+          cwd: "/Users/dev/myproj",
+          created_at: Date.now(),
+        })}\n`,
+      );
     });
     conn.on("data", (chunk) => {
       buf += chunk.toString("utf-8");
@@ -128,9 +133,11 @@ async function main() {
   await sleep(2500);
 
   log("Starting recording…");
-  const recorder = spawn("xcrun", [
-    "simctl", "io", SIM_ID, "recordVideo", "--codec=h264", "--force", RAW_MOV,
-  ], { stdio: ["ignore", "pipe", "pipe"] });
+  const recorder = spawn(
+    "xcrun",
+    ["simctl", "io", SIM_ID, "recordVideo", "--codec=h264", "--force", RAW_MOV],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
   recorder.on("error", (e) => log(`recorder error: ${e.message}`));
   await sleep(1500);
 
@@ -163,18 +170,37 @@ async function main() {
 
   log("Encoding mp4…");
   await runCmd("ffmpeg", [
-    "-y", "-i", RAW_MOV,
-    "-vf", "scale=390:-2:flags=lanczos",
-    "-c:v", "libx264", "-preset", "slow", "-crf", "20",
-    "-movflags", "faststart", "-an",
+    "-y",
+    "-i",
+    RAW_MOV,
+    "-vf",
+    "scale=390:-2:flags=lanczos",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "slow",
+    "-crf",
+    "20",
+    "-movflags",
+    "faststart",
+    "-an",
     `${SCREENSHOTS}/queue-loop.mp4`,
   ]);
 
   log("Encoding webm…");
   await runCmd("ffmpeg", [
-    "-y", "-i", RAW_MOV,
-    "-vf", "scale=390:-2:flags=lanczos",
-    "-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-an",
+    "-y",
+    "-i",
+    RAW_MOV,
+    "-vf",
+    "scale=390:-2:flags=lanczos",
+    "-c:v",
+    "libvpx-vp9",
+    "-crf",
+    "30",
+    "-b:v",
+    "0",
+    "-an",
     `${SCREENSHOTS}/queue-loop.webm`,
   ]);
 
@@ -183,4 +209,7 @@ async function main() {
   log(`Done! mp4: ${mp4}KB  webm: ${webm}KB`);
 }
 
-main().catch((e) => { console.error(`[demo] FATAL: ${e.message}`); process.exit(1); });
+main().catch((e) => {
+  console.error(`[demo] FATAL: ${e.message}`);
+  process.exit(1);
+});

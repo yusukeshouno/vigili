@@ -3,12 +3,16 @@ import Foundation
 /// Main app (Mac の `Sentinel` ターゲット) → Widget extension (`VigiliWidget`) の
 /// 単方向データ受け渡し用ファイル。
 ///
-/// 配置: `~/.vigili/widget-state.json`
+/// 配置: widget のサンドボックスコンテナ内の `widget-state.json`
+/// (`~/Library/Containers/io.vigili.app.shono.widget/Data/widget-state.json`)。
 ///
 /// WidgetKit の TimelineProvider はアプリ本体のメモリにアクセスできない
-/// (別プロセスで動く)。App Group + UserDefaults を使う手もあるが、
-/// 商用前なので code-signing entitlement を増やしたくない。
-/// ファイル経由なら同一ユーザ・同一 sandbox=false の前提で双方が読める。
+/// (別プロセスで動く)。さらに macOS の widget extension は **App Sandbox 必須**で、
+/// サンドボックス下では `~/.vigili/` を直読みできない。App Group も個人開発チームの
+/// automatic signing では provisioning できなかった (wildcard profile が選ばれ
+/// サンドボックスがコンテナ読み取りを deny する) ため、サンドボックスアプリが
+/// entitlement 無しで常に読める「自分のコンテナ」を共有場所にし、非サンドボックスの
+/// 本体がそこへ書き込む方式にした。詳細は SPEC.md §9.2。
 ///
 /// 書き手 (Sentinel.app の AppCoordinator) は pending/stats が変わるたびに
 /// `WidgetState.write(...)` を呼んでから `WidgetCenter.shared.reloadAllTimelines()` を叩く。
@@ -91,22 +95,32 @@ extension WidgetState {
 
 #if os(macOS)
 extension WidgetState {
-  /// 配置先のファイル URL。
-  /// `VIGILI_HOME` env override に従い、無ければ `~/.vigili/widget-state.json`。
-  /// リブランド過渡期: `~/.vigili` が無く `~/.sentinel` がある場合は後者を使う。
+  /// Widget extension の bundle id。host はこのコンテナへ書き、widget は自分のコンテナを読む。
+  public static let widgetBundleIdentifier = "io.vigili.app.shono.widget"
+
+  /// 配置先のファイル URL。優先順位:
+  /// 1. `VIGILI_HOME`/`SENTINEL_HOME` env override（テスト・CLI 用）
+  /// 2. widget のサンドボックスコンテナ
+  ///    `~/Library/Containers/io.vigili.app.shono.widget/Data/widget-state.json`
+  ///
+  /// widget (サンドボックス) では `NSHomeDirectory()` が自分のコンテナ `Data` を指すので
+  /// そのまま読める。host (非サンドボックス) では実ホーム配下の widget コンテナを明示パスで
+  /// 指す。両者が同じ絶対パスを計算するため、provisioning / App Group なしで共有できる。
   public static var fileURL: URL {
     let env = ProcessInfo.processInfo.environment
     if let home = env["VIGILI_HOME"] ?? env["SENTINEL_HOME"] {
       return URL(fileURLWithPath: home).appendingPathComponent("widget-state.json")
     }
-    let home = FileManager.default.homeDirectoryForCurrentUser
-    let vigili = home.appendingPathComponent(".vigili")
-    let sentinel = home.appendingPathComponent(".sentinel")
-    let base =
-      FileManager.default.fileExists(atPath: vigili.path)
-        ? vigili
-        : (FileManager.default.fileExists(atPath: sentinel.path) ? sentinel : vigili)
-    return base.appendingPathComponent("widget-state.json")
+    let containerData: URL
+    if Bundle.main.bundleIdentifier == widgetBundleIdentifier {
+      // サンドボックス化した widget: NSHomeDirectory() == 自分のコンテナ Data ルート
+      containerData = URL(fileURLWithPath: NSHomeDirectory())
+    } else {
+      // 非サンドボックスの host: 実ホーム配下の widget コンテナを明示パスで指す
+      containerData = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Containers/\(widgetBundleIdentifier)/Data")
+    }
+    return containerData.appendingPathComponent("widget-state.json")
   }
 
   /// Atomically write to disk.
@@ -135,6 +149,77 @@ extension WidgetState {
       return .placeholder
     }
     return decoded
+  }
+
+  // MARK: - widget → host 決定 (Allow/Deny)
+  //
+  // widget の Allow/Deny ボタン (App Intents) は daemon の unix socket に直接届かない
+  // (サンドボックス)。そこで widget は自分のコンテナ下 decisions/<request_id>.json に
+  // 決定を書き、非サンドボックスの host (AppCoordinator) が watch して daemon に適用する。
+  // host→widget の widget-state.json と対称な、逆方向のコンテナファイル IPC。
+
+  /// 決定受け渡しディレクトリ (widget コンテナ Data 下の decisions/)。
+  /// `fileURL` と同じ要領で widget / host のどちらの process でも同じ絶対パスを返す。
+  public static var decisionsDir: URL {
+    let env = ProcessInfo.processInfo.environment
+    if let home = env["VIGILI_HOME"] ?? env["SENTINEL_HOME"] {
+      return URL(fileURLWithPath: home).appendingPathComponent("decisions", isDirectory: true)
+    }
+    let containerData: URL
+    if Bundle.main.bundleIdentifier == widgetBundleIdentifier {
+      containerData = URL(fileURLWithPath: NSHomeDirectory())
+    } else {
+      containerData = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Containers/\(widgetBundleIdentifier)/Data")
+    }
+    return containerData.appendingPathComponent("decisions", isDirectory: true)
+  }
+
+  /// widget 側: Allow/Deny の決定を decisions/<id>.json に atomically 書く。
+  public static func writeDecision(id: String, decision: String) {
+    let dir = decisionsDir
+    do {
+      try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      let url = dir.appendingPathComponent("\(id).json")
+      let payload: [String: Any] = [
+        "id": id,
+        "decision": decision,
+        "at": Int(Date().timeIntervalSince1970 * 1000),
+      ]
+      let data = try JSONSerialization.data(withJSONObject: payload)
+      try data.write(to: url, options: [.atomic])
+    } catch {
+      NSLog("[vigili-widget] writeDecision failed: \(error.localizedDescription)")
+    }
+  }
+
+  /// host 側: decisions/ 内の全決定を読み、(id, decision) を apply に渡してファイルを消す。
+  /// decision は "allow" | "deny" のみ受け付ける。戻り値は適用件数。
+  @discardableResult
+  public static func drainDecisions(apply: (_ id: String, _ decision: String) -> Void) -> Int {
+    let dir = decisionsDir
+    let fm = FileManager.default
+    guard let entries = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+    else {
+      return 0
+    }
+    var count = 0
+    for url in entries where url.pathExtension == "json" {
+      guard
+        let data = try? Data(contentsOf: url),
+        let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let id = obj["id"] as? String,
+        let decision = obj["decision"] as? String,
+        decision == "allow" || decision == "deny"
+      else {
+        try? fm.removeItem(at: url)  // 壊れたファイルは消す
+        continue
+      }
+      apply(id, decision)
+      try? fm.removeItem(at: url)
+      count += 1
+    }
+    return count
   }
 }
 #endif

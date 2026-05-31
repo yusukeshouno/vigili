@@ -384,3 +384,151 @@ struct Message: Identifiable, Hashable {
 
   var isDelivered: Bool { deliveredAt != nil }
 }
+
+// MARK: - L4 ホスト型セッション (vigili run)
+
+/// daemon の `HostedSession` (shared/session.ts) と対応する Swift モデル。
+/// `vigili run` がホストする Claude Code セッションの公開ビュー。
+struct HostedSession: Identifiable, Hashable {
+  let sessionId: String
+  let tag: String?
+  let cwd: String
+  /// "running" | "awaiting" | "ended"
+  let status: String
+  let startedAt: Date
+
+  var id: String { sessionId }
+
+  init(sessionId: String, tag: String?, cwd: String, status: String, startedAt: Date) {
+    self.sessionId = sessionId
+    self.tag = tag
+    self.cwd = cwd
+    self.status = status
+    self.startedAt = startedAt
+  }
+
+  init?(dict: [String: Any]) {
+    guard
+      let sessionId = dict["session_id"] as? String,
+      let cwd = dict["cwd"] as? String,
+      let status = dict["status"] as? String,
+      let startedMs = (dict["started_at"] as? NSNumber)?.doubleValue
+    else { return nil }
+    self.sessionId = sessionId
+    self.tag = dict["tag"] as? String
+    self.cwd = cwd
+    self.status = status
+    self.startedAt = Date(timeIntervalSince1970: startedMs / 1000.0)
+  }
+
+  /// 表示用の短いラベル (tag があればそれ、無ければ cwd の末尾)。
+  var displayName: String {
+    if let tag = tag, !tag.isEmpty { return tag }
+    let base = URL(fileURLWithPath: cwd).lastPathComponent
+    return base.isEmpty ? sessionId : base
+  }
+}
+
+/// daemon の `TranscriptLine` (shared/session.ts) と対応する Swift モデル。
+/// チャット UI の 1 吹き出しに相当する。
+struct TranscriptLine: Identifiable, Hashable {
+  /// 生成時に発番する安定 ID (ForEach 用)。
+  let id: String
+  /// "assistant" | "user" | "tool" | "system"
+  let role: String
+  let text: String
+  let at: Date
+  /// role=="tool" のときのツール名。
+  let toolName: String?
+
+  init(role: String, text: String, at: Date, toolName: String?, id: String = UUID().uuidString) {
+    self.id = id
+    self.role = role
+    self.text = text
+    self.at = at
+    self.toolName = toolName
+  }
+
+  init?(dict: [String: Any]) {
+    guard
+      let role = dict["role"] as? String,
+      let text = dict["text"] as? String,
+      let atMs = (dict["at"] as? NSNumber)?.doubleValue
+    else { return nil }
+    self.id = UUID().uuidString
+    self.role = role
+    self.text = text
+    self.at = Date(timeIntervalSince1970: atMs / 1000.0)
+    self.toolName = dict["tool_name"] as? String
+  }
+}
+
+/// AskUserQuestion の選択肢 1 つ (shared/session.ts QuestionOption)。
+struct QuestionOption: Identifiable, Hashable {
+  let label: String
+  let description: String
+
+  var id: String { label }
+
+  init?(dict: [String: Any]) {
+    guard
+      let label = dict["label"] as? String,
+      let description = dict["description"] as? String
+    else { return nil }
+    self.label = label
+    self.description = description
+  }
+}
+
+/// AskUserQuestion の質問 1 つ (shared/session.ts Question)。
+struct Question: Identifiable, Hashable {
+  let question: String
+  let header: String
+  let options: [QuestionOption]
+  let multiSelect: Bool
+
+  var id: String { question }
+
+  init?(dict: [String: Any]) {
+    guard
+      let question = dict["question"] as? String,
+      let header = dict["header"] as? String,
+      let opts = dict["options"] as? [[String: Any]],
+      let multiSelect = dict["multiSelect"] as? Bool
+    else { return nil }
+    self.question = question
+    self.header = header
+    self.options = opts.compactMap(QuestionOption.init(dict:))
+    self.multiSelect = multiSelect
+  }
+}
+
+/// WS `question` で fan-out された選択肢質問。request_id で回答を対応づける。
+struct PendingQuestion: Identifiable, Hashable {
+  let sessionId: String
+  let requestId: String
+  let questions: [Question]
+
+  var id: String { requestId }
+
+  init(sessionId: String, requestId: String, questions: [Question]) {
+    self.sessionId = sessionId
+    self.requestId = requestId
+    self.questions = questions
+  }
+}
+
+/// WS `plan` で fan-out された plan 承認待ち (ExitPlanMode)。
+struct PendingPlan: Identifiable, Hashable {
+  let sessionId: String
+  let requestId: String
+  let plan: String
+
+  var id: String { requestId }
+
+  init(sessionId: String, requestId: String, plan: String) {
+    self.sessionId = sessionId
+    self.requestId = requestId
+    self.plan = plan
+  }
+}

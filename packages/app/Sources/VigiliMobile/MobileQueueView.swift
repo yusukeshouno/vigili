@@ -8,6 +8,7 @@ import UIKit
 struct MobileQueueView: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
   @State private var showSettings = false
+  @State private var showSessions = false
   /// id → "allow" | "deny"  — tracks cards mid-exit for color flash + direction
   @State private var decidedIds: [String: String] = [:]
   /// ロゴをバウンスさせるトリガー (pending が増えるたび)
@@ -130,6 +131,20 @@ struct MobileQueueView: View {
           .id(coordinator.pendingCount) // key change triggers re-entrance animation
       }
 
+      // ホスト型セッション (vigili run): 会話 + 質問/plan 回答 + 返信
+      Button {
+        showSessions = true
+      } label: {
+        ZStack(alignment: .topTrailing) {
+          Image(systemName: "bubble.left.and.bubble.right")
+            .foregroundStyle(coordinator.sessions.isEmpty ? Theme.fgMid : Theme.fg)
+            .font(.system(size: 18))
+          if sessionsNeedAttention {
+            Circle().fill(Theme.accent).frame(width: 7, height: 7).offset(x: 5, y: -3)
+          }
+        }
+      }
+
       Button {
         showSettings = true
       } label: {
@@ -141,6 +156,15 @@ struct MobileQueueView: View {
     .padding(.horizontal, 18)
     .padding(.vertical, 14)
     .animation(.spring(response: 0.32, dampingFraction: 0.65), value: coordinator.pendingCount)
+    .sheet(isPresented: $showSessions) {
+      MobileSessionsView(onClose: { showSessions = false })
+        .environmentObject(coordinator)
+    }
+  }
+
+  /// ホスト型セッションに未回答の質問 / plan があるか (バッジ点灯用)。
+  private var sessionsNeedAttention: Bool {
+    !coordinator.pendingQuestions.isEmpty || !coordinator.pendingPlans.isEmpty
   }
 
   private var cardList: some View {
