@@ -62,19 +62,16 @@ body {
   color: var(--color-fg);
   /* ページ全体で 1 本のグラデーション。各セクションは透明にしてこの上に乗る。
      上から下に向かって少しずつ深い黒に落ちていく。 */
-  background:
-    linear-gradient(
-      180deg,
-      #221e1a 0%,
-      #1a1714 18%,
-      #16130f 48%,
-      #110f0c 78%,
-      #0c0a08 100%
-    );
+  background: linear-gradient(
+    180deg,
+    #221e1a 0%,
+    #1a1714 18%,
+    #16130f 48%,
+    #110f0c 78%,
+    #0c0a08 100%
+  );
   background-repeat: no-repeat;
-  font-feature-settings:
-    "ss01",
-    "cv11";
+  font-feature-settings: "ss01", "cv11";
   text-rendering: optimizeLegibility;
   line-height: 1.5;
   letter-spacing: -0.005em;
@@ -93,8 +90,7 @@ body::before {
   inset: 0;
   pointer-events: none;
   z-index: 100;
-  background:
-    radial-gradient(1200px 600px at 20% -10%, rgba(224, 136, 104, 0.1), transparent 60%),
+  background: radial-gradient(1200px 600px at 20% -10%, rgba(224, 136, 104, 0.1), transparent 60%),
     radial-gradient(900px 500px at 110% 10%, rgba(158, 176, 145, 0.06), transparent 60%);
   mix-blend-mode: screen;
 }
@@ -213,28 +209,20 @@ a {
 
 /* shared shadows (dark の上では薄いハイライト) */
 .shadow-card {
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02),
-    0 24px 60px -28px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 24px 60px -28px rgba(0, 0, 0, 0.6);
 }
 .shadow-card-sm {
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02),
-    0 10px 28px -16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px -16px rgba(0, 0, 0, 0.5);
 }
 
 .press {
   /* spring overshoot on release */
-  transition:
-    transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 200ms ease;
+  transition: transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease;
 }
 .press:active {
   transform: scale(0.92) translateY(1px);
   opacity: 0.88;
-  transition:
-    transform 55ms linear,
-    opacity 55ms linear;
+  transition: transform 55ms linear, opacity 55ms linear;
 }
 
 /* ─── nav ───────────────────────────────────────────────────────────── */
@@ -297,10 +285,8 @@ nav.top .wrap {
   border-radius: 999px;
   font-size: 14px;
   font-weight: 500;
-  transition:
-    transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    background 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), background 0.18s ease, box-shadow
+    0.18s ease;
 }
 .cta:hover {
   background: var(--color-coral);
@@ -364,9 +350,18 @@ nav.top .wrap {
   animation: lp-dot-pulse 2.2s ease-out infinite 0.7s;
 }
 @keyframes lp-dot-pulse {
-  0% { transform: scale(0.6); opacity: 0.6; }
-  70% { transform: scale(2.8); opacity: 0; }
-  100% { transform: scale(2.8); opacity: 0; }
+  0% {
+    transform: scale(0.6);
+    opacity: 0.6;
+  }
+  70% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
 }
 .h-title {
   margin-top: 26px;
@@ -449,11 +444,17 @@ nav.top .wrap {
 
 /* hero video gentle float */
 @keyframes hero-float {
-  0%, 100% { transform: translateY(0px); }
-  40% { transform: translateY(-7px); }
-  70% { transform: translateY(-3px); }
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  40% {
+    transform: translateY(-7px);
+  }
+  70% {
+    transform: translateY(-3px);
+  }
 }
-
 
 /* hero video — iPhone simulator capture (9:19.5 縦長) を phone 風フレームに収める */
 .hero-video {
@@ -472,9 +473,7 @@ nav.top .wrap {
   border-radius: 38px;
   padding: 8px;
   border: 1px solid #2a2622;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 40px 90px -30px rgba(0, 0, 0, 0.85);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 40px 90px -30px rgba(0, 0, 0, 0.85);
   aspect-ratio: 9 / 19.5;
   overflow: hidden;
 }
@@ -495,9 +494,7 @@ nav.top .wrap {
   width: 460px;
   background: var(--color-surface);
   border-radius: 18px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 30px 80px -28px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 30px 80px -28px rgba(0, 0, 0, 0.75);
   border: 1px solid var(--color-rule);
   overflow: hidden;
   transform: rotate(-1.5deg);
@@ -599,9 +596,7 @@ nav.top .wrap {
   border: 0;
   padding: 5px 10px;
   border-radius: 999px;
-  font:
-    500 11px "Inter Tight",
-    sans-serif;
+  font: 500 11px "Inter Tight", sans-serif;
   cursor: pointer;
 }
 .req .btns .yes {
@@ -649,8 +644,7 @@ nav.top .wrap {
   background: #0a0907;
   border-radius: 38px;
   padding: 8px;
-  box-shadow:
-    0 30px 70px -20px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.8);
   border: 1px solid #1a1714;
 }
 .phone-screen {
@@ -793,9 +787,7 @@ section + section {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02),
-    0 10px 28px -16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px -16px rgba(0, 0, 0, 0.5);
 }
 .view-stage {
   background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
@@ -832,9 +824,7 @@ section + section {
   max-width: 260px;
   background: var(--color-bg);
   border-radius: 12px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 10px 28px -16px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 10px 28px -16px rgba(0, 0, 0, 0.6);
   border: 1px solid var(--color-rule);
   overflow: hidden;
   font-size: 11px;
@@ -893,9 +883,7 @@ section + section {
   display: flex;
   align-items: center;
   gap: 5px;
-  font:
-    500 10px "Inter Tight",
-    sans-serif;
+  font: 500 10px "Inter Tight", sans-serif;
   border: 1px solid var(--color-rule);
 }
 .menubar-icon .badge {
@@ -914,9 +902,7 @@ section + section {
   background: var(--color-bg);
   border-radius: 22px;
   border: 1px solid var(--color-rule);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 10px 28px -16px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 10px 28px -16px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -990,8 +976,7 @@ section + section {
   background: #0a0907;
   border-radius: 28px;
   padding: 6px;
-  box-shadow:
-    0 30px 70px -20px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.8);
 }
 .mini-phone .scr {
   background: linear-gradient(170deg, #2a2622, #100e0c 60%);
@@ -1091,9 +1076,7 @@ section + section {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02),
-    0 10px 28px -16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px -16px rgba(0, 0, 0, 0.5);
   position: relative;
 }
 .step .n {
@@ -1208,9 +1191,7 @@ section + section {
   border-radius: 12px;
   padding: 12px 14px;
   width: 220px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02),
-    0 10px 28px -16px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px -16px rgba(0, 0, 0, 0.45);
 }
 .rule-card .topbar {
   display: flex;
@@ -1482,9 +1463,7 @@ section + section {
   display: grid;
   place-items: center;
   color: var(--color-deep);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 10px 28px -10px rgba(224, 136, 104, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 10px 28px -10px rgba(224, 136, 104, 0.5);
 }
 .diag-flow .out {
   display: flex;
@@ -1577,9 +1556,7 @@ section + section {
   border: 1px solid var(--color-rule);
   border-radius: 22px;
   padding: 32px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02),
-    0 10px 28px -16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px -16px rgba(0, 0, 0, 0.5);
   position: relative;
 }
 .sec-card h3 {
@@ -1665,17 +1642,37 @@ footer.foot .wrap {
 
 /* pop entrance */
 @keyframes lp-pop-in {
-  0% { transform: scale(0.85); opacity: 0; }
-  60% { transform: scale(1.04); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 /* bounce-in (for hero pill badge) */
 @keyframes lp-bounce-in {
-  0% { transform: translateY(-8px) scale(0.9); opacity: 0; }
-  55% { transform: translateY(3px) scale(1.04); opacity: 1; }
-  80% { transform: translateY(-1px) scale(0.98); }
-  100% { transform: translateY(0) scale(1); opacity: 1; }
+  0% {
+    transform: translateY(-8px) scale(0.9);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(3px) scale(1.04);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-1px) scale(0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
 }
 
 /* responsive */

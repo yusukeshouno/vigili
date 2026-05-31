@@ -113,7 +113,10 @@ export function HowSection({ copy }: { copy: Copy }) {
               <div className="diag-funnel">
                 <div className="row">
                   <span className="lbl">incoming</span>
-                  <div className="bar" style={{ width: 240, background: "rgba(217,119,87,0.25)" }} />
+                  <div
+                    className="bar"
+                    style={{ width: 240, background: "rgba(217,119,87,0.25)" }}
+                  />
                   <span className="pct">100%</span>
                 </div>
                 <div className="row">

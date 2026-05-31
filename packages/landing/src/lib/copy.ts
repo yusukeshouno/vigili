@@ -150,7 +150,7 @@ const en: Copy = {
   problemEyebrow: "The problem",
   problemTitle: "Five Claude windows. Five places to keep checking.",
   problemLead:
-    "Permission prompts were designed for one terminal. Run five Claude Code windows in parallel and the system breaks down — context loss, terminal whack-a-mole, \"yes-fatigue.\" Vigili was built for that exact pattern.",
+    'Permission prompts were designed for one terminal. Run five Claude Code windows in parallel and the system breaks down — context loss, terminal whack-a-mole, "yes-fatigue." Vigili was built for that exact pattern.',
   problemCard1Label: "Today",
   problemCard1Title: "Constant terminal-switching",
   problemCard1Body:

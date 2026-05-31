@@ -108,9 +108,7 @@ async function sendConfirmationEmail(
   from: string,
 ): Promise<void> {
   const isJa = lang === "ja";
-  const subject = isJa
-    ? "Vigili のウェイトリストに登録しました"
-    : "You're on the Vigili waitlist";
+  const subject = isJa ? "Vigili のウェイトリストに登録しました" : "You're on the Vigili waitlist";
 
   const html = isJa ? buildHtmlJa() : buildHtmlEn();
   const text = isJa ? buildTextJa() : buildTextEn();

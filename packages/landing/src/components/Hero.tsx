@@ -37,14 +37,7 @@ export function Hero({ lang, copy }: { lang: Lang; copy: Copy }) {
           <div className="hero-video">
             <div className="hero-video-frame">
               {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-              <video
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                aria-label="Vigili demo"
-              >
+              <video autoPlay muted loop playsInline preload="metadata" aria-label="Vigili demo">
                 <source src="/screenshots/queue-loop.webm" type="video/webm" />
                 <source src="/screenshots/queue-loop.mp4" type="video/mp4" />
               </video>

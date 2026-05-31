@@ -7,15 +7,7 @@ import { Sparkle } from "./Sparkle";
 export function Showcase({ copy }: { copy: Copy }) {
   // QR ill: 49 マス (7x7) のパターン。元デザインの並びを保持。
   // ` ` (space) = filled cream, `b` = blank (paper through). 7 columns x 7 rows.
-  const qrPattern = [
-    "    b  ",
-    " b    b",
-    "  bb   ",
-    "b b b b",
-    "   b   ",
-    "  b  b ",
-    "       ",
-  ];
+  const qrPattern = ["    b  ", " b    b", "  bb   ", "b b b b", "   b   ", "  b  b ", "       "];
 
   return (
     <section className="tour" id="tour">
@@ -38,12 +30,11 @@ export function Showcase({ copy }: { copy: Copy }) {
               <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                 <div className="qr">
                   {qrPattern.flatMap((row, ri) =>
-                    row.split("").map((ch, ci) => (
-                      <i
-                        key={`${ri}-${ci}`}
-                        className={ch === "b" ? "b" : undefined}
-                      />
-                    )),
+                    row
+                      .split("")
+                      .map((ch, ci) => (
+                        <i key={`${ri}-${ci}`} className={ch === "b" ? "b" : undefined} />
+                      )),
                   )}
                 </div>
                 <div className="qr-side">

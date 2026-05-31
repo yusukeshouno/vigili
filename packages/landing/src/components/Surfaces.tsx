@@ -24,9 +24,33 @@ export function Surfaces({ copy }: { copy: Copy }) {
               <div className="mini-menubar">
                 <div className="topbar">
                   <div style={{ display: "flex", gap: 3 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E96D5C", display: "block" }} />
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E9C04A", display: "block" }} />
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#54C56C", display: "block" }} />
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "#E96D5C",
+                        display: "block",
+                      }}
+                    />
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "#E9C04A",
+                        display: "block",
+                      }}
+                    />
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "#54C56C",
+                        display: "block",
+                      }}
+                    />
                   </div>
                   <span style={{ marginLeft: "auto" }}>vigili</span>
                 </div>

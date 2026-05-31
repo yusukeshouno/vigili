@@ -66,7 +66,11 @@ export function WaitlistForm({
           style={inputStyle}
         />
         <button type="submit" disabled={submitting || success} style={buttonStyle}>
-          {submitting ? copy.heroWaitlistSubmitting : success ? "✓ On the list" : copy.heroWaitlistSubmit}
+          {submitting
+            ? copy.heroWaitlistSubmitting
+            : success
+              ? "✓ On the list"
+              : copy.heroWaitlistSubmit}
         </button>
       </div>
       <div className="h-meta meta">

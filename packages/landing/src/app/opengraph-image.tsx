@@ -80,7 +80,8 @@ export default function OpenGraphImage() {
             lineHeight: 1.35,
           }}
         >
-          Every Claude Code session's approvals in one queue. Auto-decide the routine, two-tap the rest.
+          Every Claude Code session's approvals in one queue. Auto-decide the routine, two-tap the
+          rest.
         </span>
         <span
           style={{
