@@ -35,15 +35,43 @@ public struct WidgetState: Codable, Equatable, Sendable {
   public struct PendingItem: Codable, Equatable, Sendable {
     /// 承認 ID (UUID)。tap で deeplink するため。
     public let id: String
-    /// 表示用タイトル (例: "Bash · pnpm install")。
+    /// コマンド / パス / URL のプレビュー (tool 接頭辞は含めない)。
     public let title: String
     /// 経過秒 (作成からの)。
     public let ageSeconds: Int
 
-    public init(id: String, title: String, ageSeconds: Int) {
+    // --- Mac ApprovalCard 相当のリッチ情報 ---
+    // widget ターゲットは AgentColor/RiskAssessment/ApprovalRequest を持たないため、
+    // host (AppCoordinator) が解決して詰める。旧 JSON 互換のため全て Optional。
+    /// ツール名 (Bash/Edit/Write/WebFetch …)。widget は chip + アイコンに使う。
+    public let toolName: String?
+    /// セッション tag (プロジェクト名)。
+    public let tag: String?
+    /// tag から AgentColor で解決した色の hex (#RRGGBB)。widget は Color(hex:) で点を描く。
+    public let tagColorHex: String?
+    /// リスクラベル ("危険"/"要注意")。nil = 非フラグ。
+    public let riskLabel: String?
+    /// `.danger` なら true (赤)、`.caution` なら false (amber)。
+    public let riskDanger: Bool?
+
+    public init(
+      id: String,
+      title: String,
+      ageSeconds: Int,
+      toolName: String? = nil,
+      tag: String? = nil,
+      tagColorHex: String? = nil,
+      riskLabel: String? = nil,
+      riskDanger: Bool? = nil
+    ) {
       self.id = id
       self.title = title
       self.ageSeconds = ageSeconds
+      self.toolName = toolName
+      self.tag = tag
+      self.tagColorHex = tagColorHex
+      self.riskLabel = riskLabel
+      self.riskDanger = riskDanger
     }
   }
 

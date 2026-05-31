@@ -1,5 +1,7 @@
-import Foundation
+import AppKit
 import Combine
+import Foundation
+import SwiftUI
 #if canImport(WidgetKit)
   import WidgetKit
 #endif
@@ -285,8 +287,18 @@ final class AppCoordinator: ObservableObject {
       let ageSec = max(0, Int(now.timeIntervalSince(req.createdAt)))
       var preview = req.primaryPreview
       if preview.count > 60 { preview = String(preview.prefix(57)) + "…" }
-      let title = "\(req.toolName) · \(preview)"
-      return WidgetState.PendingItem(id: req.id, title: title, ageSeconds: ageSec)
+      // Mac の ApprovalCard と同じ要素 (tool / tag色 / リスク) を widget へ渡す。
+      let risk = RiskAssessment.evaluate(req)
+      return WidgetState.PendingItem(
+        id: req.id,
+        title: preview,
+        ageSeconds: ageSec,
+        toolName: req.toolName,
+        tag: req.sessionTag,
+        tagColorHex: Self.hexString(AgentColor.color(for: req.sessionTag)),
+        riskLabel: risk.isFlagged ? risk.label : nil,
+        riskDanger: risk.level == .danger
+      )
     }
     let state = WidgetState(
       pendingCount: pendingCount,
@@ -311,5 +323,15 @@ final class AppCoordinator: ObservableObject {
     #if canImport(WidgetKit)
       WidgetCenter.shared.reloadTimelines(ofKind: "VigiliPendingWidget")
     #endif
+  }
+
+  /// SwiftUI Color → "#RRGGBB"。widget ターゲットは AgentColor/NSColor を持たないため、
+  /// host 側でここに変換して PendingItem.tagColorHex に載せる。
+  private static func hexString(_ color: Color) -> String {
+    let ns = NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
+    let r = Int((ns.redComponent * 255).rounded())
+    let g = Int((ns.greenComponent * 255).rounded())
+    let b = Int((ns.blueComponent * 255).rounded())
+    return String(format: "#%02X%02X%02X", r, g, b)
   }
 }

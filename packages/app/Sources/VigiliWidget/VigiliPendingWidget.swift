@@ -94,6 +94,16 @@ struct VigiliWidgetEntryView: View {
 private let accent = Theme.accent
 private let dim = Color.secondary  // システム適応色 (widget 背景に合わせて自動調整)
 
+/// toolName → SF Symbol (Mac の ApprovalCard と同じ対応)。
+private func toolIcon(_ tool: String) -> String {
+  switch tool {
+  case "Bash": return "terminal"
+  case "Edit", "Write": return "pencil"
+  case "WebFetch": return "globe"
+  default: return "wrench.and.screwdriver"
+  }
+}
+
 /// 8 突点星 (Vigili brand mark)。Sources/Shared/StarPath.swift と同じ path。
 private struct PetalMark: View {
   let size: CGFloat
@@ -256,17 +266,51 @@ private struct LargeView: View {
       } else {
         VStack(alignment: .leading, spacing: 6) {
           ForEach(state.recentPending.prefix(5), id: \.id) { item in
-            HStack(spacing: 6) {
-              Circle()
-                .fill(accent)
-                .frame(width: 4, height: 4)
-              Text(item.title)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-              Spacer(minLength: 4)
-              // タップで widget→host にコンテナ経由で決定を流す (App Intent)。
+            HStack(spacing: 8) {
+              VStack(alignment: .leading, spacing: 3) {
+                // 1 行目: プロジェクト tag 色ドット + tool チップ + リスク
+                HStack(spacing: 5) {
+                  Circle()
+                    .fill(item.tagColorHex.map { Color(hex: $0) } ?? accent)
+                    .frame(width: 6, height: 6)
+                  if let tool = item.toolName {
+                    HStack(spacing: 3) {
+                      Image(systemName: toolIcon(tool)).font(.system(size: 7))
+                      Text(tool.uppercased())
+                        .font(.system(size: 8, weight: .semibold))
+                        .tracking(0.5)
+                    }
+                    .foregroundStyle(dim)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .overlay(Capsule().stroke(Color.secondary.opacity(0.35), lineWidth: 0.5))
+                  }
+                  if let rl = item.riskLabel {
+                    HStack(spacing: 2) {
+                      Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 7))
+                      Text(rl).font(.system(size: 8, weight: .bold))
+                    }
+                    .foregroundStyle(item.riskDanger == true ? Theme.red : Theme.amber)
+                  }
+                  Spacer(minLength: 0)
+                }
+                // 2 行目: コマンド/パスのプレビュー + tag 名 + 経過秒
+                HStack(spacing: 6) {
+                  Text(item.title)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                  Spacer(minLength: 4)
+                  if let tag = item.tag, !tag.isEmpty {
+                    Text(tag).font(.system(size: 8)).foregroundStyle(dim).lineLimit(1)
+                  }
+                  Text("\(item.ageSeconds)s")
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundStyle(dim)
+                }
+              }
+              // タップで widget→host にコンテナ経由で決定を流す (App Intent, #73)。
               Button(intent: DecideRequestIntent(requestId: item.id, decision: "deny")) {
                 Image(systemName: "xmark")
                   .font(.system(size: 10, weight: .bold))
