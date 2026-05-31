@@ -8,8 +8,7 @@ import { GateConnectionError, sendToDaemon } from "./client.js";
 
 // VIGILI_GATE_DEBUG=1 で ~/.vigili/gate.log に時系列ログを残す。
 // Claude Code との実時間挙動を追跡するための裏ログ。
-const DEBUG_LOG =
-  process.env.VIGILI_GATE_DEBUG === "1" || process.env.SENTINEL_GATE_DEBUG === "1";
+const DEBUG_LOG = process.env.VIGILI_GATE_DEBUG === "1" || process.env.SENTINEL_GATE_DEBUG === "1";
 const VIGILI_HOME =
   process.env.VIGILI_HOME ?? process.env.SENTINEL_HOME ?? join(homedir(), ".vigili");
 // ~/.vigili が無く ~/.sentinel が在る場合は後者を使う (リブランド過渡期 fallback)
@@ -176,7 +175,9 @@ async function main(): Promise<number> {
     dbg("daemon result:", result);
     const additional = formatMessagesAsContext(result.messages);
     if (additional) {
-      console.error(`[vigili-gate] delivering ${result.messages?.length ?? 0} user message(s) to Claude`);
+      console.error(
+        `[vigili-gate] delivering ${result.messages?.length ?? 0} user message(s) to Claude`,
+      );
     }
     if (result.decision === "allow") {
       emitHookDecision("allow", result.reason ?? "approved via Vigili", hookEvent, additional);
@@ -257,7 +258,9 @@ function emitHookDecision(
  * 文字列に整形する。Claude にそのまま提示されるので、人間が書いたものだと分かる
  * 形にラベリングする (誤って Claude 自身の system context と混同させない)。
  */
-function formatMessagesAsContext(messages?: import("@vigili/shared").Message[]): string | undefined {
+function formatMessagesAsContext(
+  messages?: import("@vigili/shared").Message[],
+): string | undefined {
   if (!messages || messages.length === 0) return undefined;
   const lines = messages.map((m) => {
     const time = new Date(m.created_at).toISOString().replace(/\.\d+Z$/, "Z");
