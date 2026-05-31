@@ -73,7 +73,10 @@ export async function getPushStatus(): Promise<PushStatus> {
 }
 
 export class PushSetupError extends Error {
-  constructor(message: string, readonly kind: PushSetupErrorKind) {
+  constructor(
+    message: string,
+    readonly kind: PushSetupErrorKind,
+  ) {
     super(message);
     this.name = "PushSetupError";
   }
@@ -103,7 +106,11 @@ export async function enableNativePush(): Promise<string> {
   // 見なし、ダイアログを表示せず黙って "default" を返してくる。
   // よって supported/standalone のチェックは同期 API だけで先に済ませ、
   // requestPermission をまっさきに呼ぶ。
-  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+  if (
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window) ||
+    !("Notification" in window)
+  ) {
     throw new PushSetupError("このブラウザは Web Push 非対応です", "not-supported");
   }
   const standalone =
@@ -152,10 +159,7 @@ export async function enableNativePush(): Promise<string> {
       (await navigator.serviceWorker.getRegistration()) ??
       (await navigator.serviceWorker.register("/sw.js", { scope: "/" }));
   } catch (err) {
-    throw new PushSetupError(
-      `SW 登録失敗: ${(err as Error).message}`,
-      "register-failed",
-    );
+    throw new PushSetupError(`SW 登録失敗: ${(err as Error).message}`, "register-failed");
   }
   // SW が active になるまで待つ。subscribe は active 状態が必要。
   await navigator.serviceWorker.ready;
@@ -184,10 +188,7 @@ export async function enableNativePush(): Promise<string> {
       applicationServerKey: keyBuffer,
     });
   } catch (err) {
-    throw new PushSetupError(
-      `subscribe 失敗: ${(err as Error).message}`,
-      "subscribe-failed",
-    );
+    throw new PushSetupError(`subscribe 失敗: ${(err as Error).message}`, "subscribe-failed");
   }
 
   // daemon に登録

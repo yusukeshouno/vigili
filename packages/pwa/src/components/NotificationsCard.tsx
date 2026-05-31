@@ -1,12 +1,7 @@
 "use client";
 
 import { ArrowRightIcon, BellIcon } from "@/components/Icon";
-import {
-  type PushStatus,
-  disableNativePush,
-  enableNativePush,
-  getPushStatus,
-} from "@/lib/push";
+import { type PushStatus, disableNativePush, enableNativePush, getPushStatus } from "@/lib/push";
 import { useCallback, useEffect, useState } from "react";
 
 /**
@@ -80,16 +75,15 @@ export function NotificationsCard() {
         <StatusPill status={status} />
       </div>
 
-      <p
-        className="mb-4"
-        style={{ fontSize: 12, color: "var(--color-fg-dim)", lineHeight: 1.55 }}
-      >
-        Vigili から直接スマホに push 通知を飛ばします (ntfy などの中継不要)。 タップで該当
-        request の Detail 画面に飛びます。
+      <p className="mb-4" style={{ fontSize: 12, color: "var(--color-fg-dim)", lineHeight: 1.55 }}>
+        Vigili から直接スマホに push 通知を飛ばします (ntfy などの中継不要)。 タップで該当 request
+        の Detail 画面に飛びます。
       </p>
 
       {!status.supported ? (
-        <Hint kind="warn">このブラウザは Web Push 非対応です (Safari/Chrome/Firefox の比較的新しい版が必要)</Hint>
+        <Hint kind="warn">
+          このブラウザは Web Push 非対応です (Safari/Chrome/Firefox の比較的新しい版が必要)
+        </Hint>
       ) : status.needsHomeScreen ? (
         <Hint kind="warn">
           iOS では <strong>共有 → ホーム画面に追加</strong> してから、追加された PWA から

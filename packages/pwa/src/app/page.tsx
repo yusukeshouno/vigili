@@ -14,7 +14,9 @@ import { useEffect } from "react";
 
 export default function QueuePage() {
   const router = useRouter();
-  const { pending, state, stateDetail, needsSetup, decide } = useQueue();
+  const { pending, state, stateDetail, needsSetup, decide, pendingQuestions, pendingPlans } =
+    useQueue();
+  const sessionsNeedAttention = pendingQuestions.length > 0 || pendingPlans.length > 0;
 
   useEffect(() => {
     if (needsSetup) router.replace("/setup");
@@ -49,6 +51,31 @@ export default function QueuePage() {
             </span>
           ) : null}
           <ConnectionStatus state={state} detail={stateDetail} />
+          <Link
+            href="/sessions"
+            aria-label="Sessions"
+            className="press relative inline-flex size-8 items-center justify-center rounded-full border border-(--color-border) text-(--color-fg-mid) hover:border-(--color-border-strong) hover:text-(--color-fg)"
+          >
+            <svg
+              width={14}
+              height={14}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+            </svg>
+            {sessionsNeedAttention ? (
+              <span
+                className="absolute -right-0.5 -top-0.5 size-2 rounded-full"
+                style={{ background: "var(--color-accent)" }}
+              />
+            ) : null}
+          </Link>
           <Link
             href="/setup"
             aria-label="設定"

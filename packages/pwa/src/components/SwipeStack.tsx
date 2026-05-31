@@ -198,7 +198,8 @@ export function SwipeStack<T extends SwipeStackItem>({
               rot = flyOut.rot;
               scale = 0.82; // shrink as it flies away
               opacity = 0;
-              transition = "transform .40s cubic-bezier(.3,.05,.4,1), opacity .28s ease-in, scale .40s";
+              transition =
+                "transform .40s cubic-bezier(.3,.05,.4,1), opacity .28s ease-in, scale .40s";
             } else if (drag.dragging) {
               tx = drag.x;
               ty = Math.abs(drag.x) * 0.06 + drag.y * 0.2;
@@ -295,11 +296,7 @@ function HintOverlay({
           textShadow: `0 0 18px rgba(${color}, ${0.6 * progress})`,
         }}
       >
-        {isAllow ? (
-          <CheckIcon size={22} strokeWidth={2} />
-        ) : (
-          <XIcon size={22} strokeWidth={2} />
-        )}
+        {isAllow ? <CheckIcon size={22} strokeWidth={2} /> : <XIcon size={22} strokeWidth={2} />}
         {isAllow ? "Allow" : "Deny"}
       </div>
     </div>
@@ -344,21 +341,15 @@ function DecisionPills({
           gap: 8,
           padding: "13px 22px",
           borderRadius: 9999,
-          background: denyEmph
-            ? `rgba(214,118,108,${0.08 + denyPull * 0.2})`
-            : "transparent",
+          background: denyEmph ? `rgba(214,118,108,${0.08 + denyPull * 0.2})` : "transparent",
           color: denyEmph ? "var(--color-red-soft)" : "var(--color-fg-mid)",
-          border: `1.5px solid ${
-            denyEmph ? "var(--color-red)" : "var(--color-border-strong)"
-          }`,
+          border: `1.5px solid ${denyEmph ? "var(--color-red)" : "var(--color-border-strong)"}`,
           cursor: "pointer",
           fontFamily: "var(--font-ui)",
           fontSize: 14,
           fontWeight: 500,
           transform: `scale(${1 + denyPull * 0.04})`,
-          boxShadow: denyEmph
-            ? `0 0 22px -4px rgba(214,118,108,${0.3 * denyPull})`
-            : "none",
+          boxShadow: denyEmph ? `0 0 22px -4px rgba(214,118,108,${0.3 * denyPull})` : "none",
           transition:
             "background .12s, color .12s, border-color .12s, box-shadow .12s, transform 380ms cubic-bezier(0.34,1.56,0.64,1)",
         }}
@@ -381,9 +372,7 @@ function DecisionPills({
           gap: 8,
           padding: "13px 22px",
           borderRadius: 9999,
-          background: allowEmph
-            ? "var(--color-accent-soft)"
-            : "var(--color-accent)",
+          background: allowEmph ? "var(--color-accent-soft)" : "var(--color-accent)",
           color: "#fff",
           border: "1.5px solid transparent",
           cursor: "pointer",
