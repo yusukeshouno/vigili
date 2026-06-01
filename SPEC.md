@@ -553,3 +553,33 @@ macOS 14+ の interactive widget（`Button(intent:)` + App Intents）で、large
 - host: `AppCoordinator` が毎 tick（1s）で `WidgetState.drainDecisions { id, decision in decide(...) }`。decisions/ の各ファイルを読み、`allow`/`deny` のみ受理して daemon に適用（`decide(id:decision:)` → WS `decide`）、ファイルを削除。適用後は resolved → `refreshWidget()` で widget も自動更新。
 - パス解決 `WidgetState.decisionsDir` は `fileURL` と同じ要領で widget/host どちらの process でも同じ絶対パスを返す（widget は `NSHomeDirectory()`、host は実ホーム配下の widget コンテナ）。
 - 検証: macOS（`-scheme Vigili`）CLI ビルド green。
+
+## 10. アカウント中心オンボーディング（Sign in with Apple）
+
+### 10.1 動機
+
+旧オンボーディングは開発者向け手順（ターミナル `vigili-cli pair` → email/password → QR → daemon 手動再起動 → iPhone スキャン）で、一般ユーザーに出せない。2026-06 のプロダクト化転換に伴い、**ターミナル不要・QR 不要・パスワード不要**のフローへ移行する。ログインは **Sign in with Apple 主軸**。既存の email/password + QR 経路は後方互換フォールバックとして温存する。
+
+### 10.2 アーキテクチャ決定
+
+1. **Apple ネイティブ検証**: Mac/iOS アプリが Apple から `identityToken` (JWT) を取得し、relay `POST /v1/auth/apple` に `{identity_token, nonce}` を送る。relay は JWKS で署名検証し、`iss=https://appleid.apple.com` / `aud ∈ 許可 bundle id` / `exp` / `nonce==sha256(rawNonce)` を確認、`sub` でアカウントを find-or-create し session を発行。Services ID / 秘密鍵はネイティブ検証では不要（将来 PWA をやる時のみ）。
+2. **アカウント = テナント境界**: 同一 Apple `sub` の Mac (agent) と iPhone (client/device) を relay が束ねる。QR でのトークン転送を廃し、両端が同じアカウントにサインインするだけでリンクが成立。
+3. **hub の account 単位 fan-out**: 既存の per-pairing 経路（`/v1/agents/:pid`, `/v1/clients/:pid`）を維持しつつ、account-stream client（`/v1/account/stream`）を追加。agent のメッセージは「その pairing の legacy clients」と「その account の account-stream clients」の両方へ配信。client→agent（decide 等）は account 内の全 agent へブロードキャスト（`request_id` は一意なので所有 daemon のみ反応）。
+4. **daemon が config.yaml の唯一の書き手**: Mac アプリは新 admin アクション `relay-configure` を送るだけで、daemon が config 永続化と relay の**ホット再接続**を行う（`launchctl kickstart` 依存を撤廃）。
+5. **session token は Keychain 保管**（UserDefaults 不可）。
+
+### 10.3 relay の追加 API / スキーマ
+
+- `accounts` に `apple_sub TEXT`（nullable, partial unique index）を追加。`password_hash` は nullable（Apple アカウントは空文字 sentinel で signin を実質閉じる）。
+- `POST /v1/auth/apple {identity_token, nonce}` → `{account{id,email?}, session{token, expires_at}}`。
+- `POST /v1/account/devices {apns_token, platform}`（session 認証, pairing_id=null）。
+- WS `/v1/account/stream?token=<session>`（session 認証 → account_id）。
+- `maybePushApns` は pid→account_id を解決し `listDevicesForAccount` で**アカウント内全 device**へ push（apns_token で de-dup）。
+- env `APPLE_AUD`（CSV、既定 `io.vigili.app.shono,io.vigili.mobile.shono`）。検証ライブラリは `jose`。
+
+### 10.4 クライアント（Mac / iOS）
+
+- 共通 (Sources/Shared): `AppleSignIn`（`ASAuthorizationController` + nonce）、`KeychainStore`（`kSecAttrAccessibleAfterFirstUnlock`、アクセスグループ無し）、`RelayAuthClient`（`/v1/auth/apple`, `/v1/pairings`, `/v1/account/devices`）。
+- Mac: 「Claude Code に接続」= `HookInstaller`（`~/.claude/settings.json` に PreToolUse hook を冪等・非破壊で追加）+ daemon 起動。「Sign in with Apple」= サインイン → `createPairing` → `relay-configure` admin で daemon をホット再接続。
+- iOS: 「Sign in with Apple」= サインイン → `accountSessionToken`(Keychain) 保存 → `POST /v1/account/devices` で APNs 登録 → account-stream へ接続。`reevaluateRoute` 優先順位は **Bonjour LAN > account-stream > legacy relay > static LAN > none**。QR スキャンは副 CTA としてフォールバック維持。
+- entitlements: 両ターゲットに `com.apple.developer.applesignin = [Default]`。Apple Developer Console で両 App ID に Sign in with Apple capability を有効化（paid program 必須）。

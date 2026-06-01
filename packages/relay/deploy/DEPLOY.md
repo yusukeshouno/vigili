@@ -250,6 +250,9 @@ APNS_KEY_ID=XXXXXXXXXX
 APNS_TEAM_ID=2DG598WNT9
 APNS_TOPIC=io.vigili.mobile.shono
 APNS_ENV=sandbox
+# Sign in with Apple の identity token 検証で許可する audience(bundle id)。
+# 省略可 (既定が下記)。Apple の公開 JWKS で検証するので秘密鍵は不要。
+APPLE_AUD=io.vigili.app.shono,io.vigili.mobile.shono
 EOF
 sudo chown root:vigili /etc/vigili/relay.env
 sudo chmod 640 /etc/vigili/relay.env

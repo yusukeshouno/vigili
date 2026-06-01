@@ -30,13 +30,25 @@ Claude Code: (Vigili が自動許可、ターミナルは止まらない)
 
 ## セットアップ
 
+> **オンボーディング（推奨・ターミナル不要）**
+>
+> Vigili.app を開き、Welcome 画面で:
+>
+> 1. **「Claude Code に接続」** を押す → PreToolUse hook が `~/.claude/settings.json` に自動追加され、daemon が起動する（手動の hook 編集・`vigili-daemon start` は不要）。
+> 2. **「Sign in with Apple」** を押す → relay にこの Mac の pairing が作られ、daemon が**再起動なしで** relay へ接続する。
+> 3. iPhone で Vigili を開き、**「Sign in with Apple」**（同じ Apple ID）→ QR もパスワードも無しでアカウントに自動リンクし、APNs 通知が届くようになる。
+>
+> 前提（一度だけ）: Apple Developer Console で `io.vigili.app.shono` と `io.vigili.mobile.shono` の両 App ID に **Sign In with Apple** capability を有効化する。
+>
+> 以降の「### 1〜6」は手動 / 開発者向けの詳細手順（`vigili-cli pair` の QR 経路を含む）で、上記 GUI フローのフォールバックとして引き続き使えます。
+
 ### 必要なもの
 
 - macOS（Mac mini / Mac Studio で確認）
 - Node.js 22+
 - pnpm
-- Tailscale（PWA からの接続用）
-- ntfy アプリ（iPhone）
+- 有償 Apple Developer Program（Sign in with Apple / APNs に必要）
+- Tailscale（任意・LAN 直結の PWA 接続用）
 
 ### 1. ビルド
 
