@@ -45,8 +45,9 @@ export interface RelayClient {
   isConnected(): boolean;
 }
 
-/** keepalive: この間隔で ping を撃ち、次の interval までに pong が来なければ half-open とみなす。 */
-const PING_INTERVAL_MS = 20_000;
+/** keepalive: この間隔で ping を撃ち、次の interval までに pong が来なければ half-open とみなす。
+ *  短いほど断線・sleep 復帰後の再同期が速い (検知 ≒ 1 interval + 次 interval)。 */
+const PING_INTERVAL_MS = 10_000;
 
 export function createRelayClient(options: RelayClientOptions): RelayClient {
   const { url, pairingId, agentKey, reconnectMaxSeconds, onClientMessage, onOpen, log } = options;

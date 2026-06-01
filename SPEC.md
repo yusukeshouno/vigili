@@ -382,6 +382,11 @@ sentinel-cli stats [--today]           # 統計（自動許可 N 件、人間判
 - daemon の常駐メモリは 100MB 以下
 - SQLite DB は 100MB を超えたら自動で 30 日以前のレコードを削除（監査ログは別ファイルにアーカイブ）
 - ポリシー reload はゼロダウンタイム（gate の進行中リクエストには旧ポリシーが適用される）
+- **同期の自動回復は積極的に**: WS が切れた / half-open になったら短時間で再接続し、「同期が切れたまま放置」を避ける。
+  - daemon→relay (`server/relay-client.ts`): 周期 ping 10s で half-open 検知、reconnect backoff 初回 500ms・cap 15s。
+  - iOS/Mac クライアント (`DaemonWsClient`): 周期 ping 10s、reconnect backoff cap 8s、前面化 / 通知タップで即再接続。Mac host (`AppCoordinator`) は 1s tick で未接続を検知し 5s ごとに `reconnectNow()`（widget の stale 放置を防ぐ）。
+  - PWA (`ws-client.ts`): reconnect backoff cap 5s、`visibilitychange`(タブ復帰) / `online`(ネット復帰) で即再接続。
+  - half-open 検知は基本 server 側の周期 ping/timeout に委ね、各 client は close を受けたら即 backoff 再接続する。
 
 ---
 

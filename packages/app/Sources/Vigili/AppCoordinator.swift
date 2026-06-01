@@ -173,6 +173,16 @@ final class AppCoordinator: ObservableObject {
         // WS が source of truth、ここでは触らない
       } else {
         await self.tickPending()
+        // 切断中は積極的に再接続を促す。wsClient 自身の backoff より優先して
+        // 5 秒ごとに health probe → 即再接続。widget が stale のまま放置されるのを防ぐ。
+        if self.tickCount % 5 == 0 {
+          switch self.wsState {
+          case .failed, .disconnected:
+            self.wsClient.reconnectNow()
+          default:
+            break  // .connecting 中は触らない (churn 防止)
+          }
+        }
       }
       if self.tickCount % 5 == 0 {
         await self.tickStats()

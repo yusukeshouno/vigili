@@ -15,15 +15,29 @@ export interface WsClient {
 }
 
 /**
- * シンプルな WebSocket クライアント。
- * - 接続失敗 / 切断時に exponential backoff (max 10s) で再接続する。
- * - 状態変更は onState で通知する。
+ * WebSocket クライアント。
+ * - 接続失敗 / 切断時に exponential backoff (max 5s) で再接続。
+ * - タブ復帰 (visibilitychange) / ネット復帰 (online) で backoff を待たず即再接続し、
+ *   「同期が切れたまま放置」を防ぐ。
+ * - 状態変更は onState で通知。
+ *
+ * half-open (TCP は生きているが相手が消えている) の検知は server 側 ping/timeout に任せる
+ * (relay は agent/client に周期 ping → 死んでいれば close が飛ぶ)。ブラウザ WS API は
+ * ping を撃てず、アプリメッセージの無通信は idle と区別できないため、こちら発の
+ * staleness 強制再接続は入れない (idle での誤再接続を避ける)。
  */
 export function createWsClient(url: string, handlers: WsClientHandlers): WsClient {
   let ws: WebSocket | null = null;
   let closed = false;
   let retry = 0;
   let reconnectTimer: number | null = null;
+
+  const clearTimer = (): void => {
+    if (reconnectTimer !== null) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+  };
 
   const connect = (): void => {
     if (closed) return;
@@ -64,11 +78,36 @@ export function createWsClient(url: string, handlers: WsClientHandlers): WsClien
   };
 
   const scheduleReconnect = (): void => {
-    if (closed) return;
-    const delay = Math.min(10_000, 500 * 2 ** retry);
+    if (closed || reconnectTimer !== null) return;
+    const delay = Math.min(5_000, 500 * 2 ** retry);
     retry++;
-    reconnectTimer = window.setTimeout(connect, delay);
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
   };
+
+  /** backoff を待たず即再接続する。タブ/ネット復帰イベントで呼ぶ。 */
+  const reconnectNow = (): void => {
+    if (closed) return;
+    // 既に生きている / 接続試行中なら触らない (churn 防止)
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    clearTimer();
+    retry = 0;
+    connect();
+  };
+
+  const onVisible = (): void => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") reconnectNow();
+  };
+  const onOnline = (): void => reconnectNow();
+
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisible);
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", onOnline);
+  }
 
   connect();
 
@@ -80,9 +119,12 @@ export function createWsClient(url: string, handlers: WsClientHandlers): WsClien
     },
     close() {
       closed = true;
-      if (reconnectTimer !== null) {
-        window.clearTimeout(reconnectTimer);
-        reconnectTimer = null;
+      clearTimer();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisible);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", onOnline);
       }
       ws?.close();
     },

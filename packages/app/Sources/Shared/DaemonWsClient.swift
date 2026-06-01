@@ -55,7 +55,8 @@ final class DaemonWsClient: ObservableObject {
   /// keepalive 用の周期 ping ループ。half-open 接続 (網切替・スリープ後) を検知する。
   private var pingTask: Task<Void, Never>?
   /// ping 間隔 (秒)。relay/daemon 側の watchdog より短くして先に自分で気付く。
-  private let pingIntervalSeconds: UInt64 = 15
+  /// 短いほど half-open / sleep 復帰の検知が速く、再同期が積極的になる。
+  private let pingIntervalSeconds: UInt64 = 10
 
   init(urlBase: URL = URL(string: "ws://127.0.0.1:7878")!, token: String = "") {
     self.urlBase = urlBase
@@ -499,7 +500,8 @@ final class DaemonWsClient: ObservableObject {
   private func scheduleReconnect() {
     reconnectWork?.cancel()
     reconnectAttempts += 1
-    let delay = min(pow(2.0, Double(min(reconnectAttempts, 5))), 30.0)
+    // backoff は最大 8s で頭打ち。短く保ち、断線時の再同期を積極的にする。
+    let delay = min(pow(2.0, Double(min(reconnectAttempts, 3))), 8.0)
     let work = DispatchWorkItem { [weak self] in
       Task { @MainActor [weak self] in
         self?.connect()

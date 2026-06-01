@@ -64,8 +64,8 @@ export const ConfigSchema = z
         pairing_id: z.string().min(1),
         /** Agent key (relay が `pairings.agent_key_hash` で照合)。発行時に一度だけ平文。 */
         agent_key: z.string().min(1),
-        /** 再接続の最大 backoff 秒 (デフォルト 30 秒)。 */
-        reconnect_max_seconds: z.number().int().positive().default(30),
+        /** 再接続の最大 backoff 秒 (デフォルト 15 秒)。短いほど断線復帰が速い。 */
+        reconnect_max_seconds: z.number().int().positive().default(15),
       })
       .optional(),
   })
