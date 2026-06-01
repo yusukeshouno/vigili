@@ -54,6 +54,15 @@ export const StatsBucketsSchema = z.object({
 
 export type StatsBuckets = z.infer<typeof StatsBucketsSchema>;
 
+/**
+ * 1 日分のバケット。WS `stats` メッセージの `week` 配列要素。
+ * index 0 = 今日、index 6 = 7 日前。
+ */
+export const DailyBucketSchema = StatsBucketsSchema.extend({
+  date: z.string(), // "YYYY-MM-DD" ローカル日付
+});
+export type DailyBucket = z.infer<typeof DailyBucketSchema>;
+
 /** daemon → PWA */
 export const WsServerMessageSchema = z.discriminatedUnion("type", [
   z.object({
@@ -93,6 +102,8 @@ export const WsServerMessageSchema = z.discriminatedUnion("type", [
      */
     type: z.literal("stats"),
     stats: StatsBucketsSchema,
+    /** 直近 7 日の日別バケット (index 0=今日, 6=7日前)。ヘルスアプリ風週次グラフ用。 */
+    week: z.array(DailyBucketSchema).optional(),
   }),
   // --- L4 ホスト型セッション (vigili run) ---
   z.object({
