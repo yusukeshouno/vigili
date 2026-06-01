@@ -24,7 +24,7 @@ import {
   writeRelayConfig,
 } from "./config.js";
 import { type MessageStore, createMessageStore } from "./db/messages.js";
-import { computeStats, pruneOldRequests } from "./db/stats.js";
+import { computeStats, computeWeekStats, pruneOldRequests } from "./db/stats.js";
 import { type RequestStore, openStore } from "./db/store.js";
 import { createNtfyNotifier } from "./notify/ntfy.js";
 import { NULL_NOTIFIER, type Notifier, multiNotifier } from "./notify/types.js";
@@ -112,6 +112,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     const now = Date.now();
     return computeStats(store.raw().db, startOfTodayLocalMs(now), now + 60_000);
   };
+  // 週次バケット: 決着/sweep のたびに再計算して push する。
+  // computeStats 7 回呼び出しだが各クエリは軽量 (1 日分のフィルタ)。
+  const weekStats = () => computeWeekStats(store.raw().db, Date.now());
 
   // Web Push: 有効なら VAPID 鍵 + subscription store を用意する。
   // notifier はその後で組み立てる (ntfy と並列に走らせる場合あり)。
@@ -230,7 +233,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         messages: messageStore.listRecent(50),
         sessions: sessions.list(),
       });
-      client.send({ type: "stats", stats: todayStats() });
+      client.send({ type: "stats", stats: todayStats(), week: weekStats() });
     };
     return client;
   }
@@ -251,7 +254,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   // 決着のたびに今日の集計を作り直して push する (待機画面サマリーを最新に保つ)。
   // allow/deny カウントが動くのは resolve の瞬間なので、ここが主要な更新点。
-  queue.onResolved(() => broadcastAll({ type: "stats", stats: todayStats() }));
+  queue.onResolved(() => broadcastAll({ type: "stats", stats: todayStats(), week: weekStats() }));
 
   // relay へ pending/resolved を流す subscription は relay の有無に関わらず常時張る
   // (relay が null の間は relay?.send が no-op)。後から relay-configure で接続しても効く。
@@ -320,7 +323,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         messages: messageStore.listRecent(50),
         sessions: sessions.list(),
       });
-      broadcastAll({ type: "stats", stats: todayStats() });
+      broadcastAll({ type: "stats", stats: todayStats(), week: weekStats() });
       log(`[vigili-daemon] sweep: expired ${swept.length} stale pending request(s)`);
     } catch (err) {
       log(`[vigili-daemon] sweep 失敗: ${(err as Error).message}`);

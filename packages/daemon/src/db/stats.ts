@@ -150,6 +150,38 @@ function percentile(sorted: number[], p: number): number | null {
  *
  * @returns 削除した行数 (0 のときは prune しなかった)
  */
+/**
+ * 1 日分のバケット (StatsBuckets + ローカル日付文字列)。
+ * WS の `stats` メッセージ内 `week` 配列の要素として配信される。
+ */
+export interface DailyBucket extends StatsBuckets {
+  /** ローカル日付 "YYYY-MM-DD"。index 0 = 今日、6 = 7 日前。 */
+  date: string;
+}
+
+/**
+ * 直近 7 日分 (今日 + 過去 6 日) の日別統計を返す。
+ * index 0 = 今日 (00:00 〜 nowMs)、index 1 = 昨日、…、index 6 = 7 日前。
+ * 各日は computeStats を呼ぶだけなので追加 SQL なし。
+ */
+export function computeWeekStats(db: Database.Database, nowMs: number): DailyBucket[] {
+  const result: DailyBucket[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(nowMs);
+    d.setDate(d.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    d.setMinutes(0, 0, 0);
+    const fromMs = d.getTime();
+    // 今日 (i=0) は nowMs まで、過去日は 1 日丸ごと。
+    const toMs = i === 0 ? nowMs : fromMs + 86_400_000;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    result.push({ ...computeStats(db, fromMs, toMs), date: `${y}-${m}-${day}` });
+  }
+  return result;
+}
+
 export interface PruneResult {
   pruned: number;
   sizeBefore: number;
