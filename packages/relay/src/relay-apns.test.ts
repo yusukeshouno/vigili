@@ -260,3 +260,47 @@ describe("APNs push on question / plan (L4 hosted session)", () => {
     agent.close();
   });
 });
+
+describe("APNs push targets the whole account", () => {
+  it("pushes to an account-level device (pairing_id null) on the account's agent pending", async () => {
+    const su = await postJson("/v1/signup", { email: "acctpush@x.co", password: "password1234" });
+    const token = (su.json as { session: { token: string } }).session.token;
+    const cp = await postJson("/v1/pairings", { name: "mac" }, token);
+    const pair = cp.json as Pairing;
+    // pairing_id を持たない account-level device
+    const reg = await postJson(
+      "/v1/account/devices",
+      { apns_token: "acctdev999", platform: "ios" },
+      token,
+    );
+    expect(reg.status).toBe(201);
+
+    const agent = await connectAgent(relay.port, pair.id, pair.agent_key);
+    agent.send(JSON.stringify({ type: "pending", request: { tool_name: "Bash" } }));
+
+    await new Promise((r) => setTimeout(r, 150));
+    expect(sent.map((s) => s.token)).toContain("acctdev999");
+    agent.close();
+  });
+
+  it("de-dups so the same apns_token registered twice gets a single push", async () => {
+    const su = await postJson("/v1/signup", { email: "dedup@x.co", password: "password1234" });
+    const token = (su.json as { session: { token: string } }).session.token;
+    const cp = await postJson("/v1/pairings", { name: "mac" }, token);
+    const pair = cp.json as Pairing;
+    // 同じ token を per-pairing と account-level の両方で登録 (upsert で 1 行に集約される)
+    await postJson(
+      `/v1/clients/${pair.id}/devices`,
+      { apns_token: "sametoken111", platform: "ios" },
+      pair.user_token,
+    );
+    await postJson("/v1/account/devices", { apns_token: "sametoken111", platform: "ios" }, token);
+
+    const agent = await connectAgent(relay.port, pair.id, pair.agent_key);
+    agent.send(JSON.stringify({ type: "pending", request: { tool_name: "Write" } }));
+
+    await new Promise((r) => setTimeout(r, 150));
+    expect(sent.filter((s) => s.token === "sametoken111")).toHaveLength(1);
+    agent.close();
+  });
+});

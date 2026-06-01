@@ -16,6 +16,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import type { WebSocket as WsWebSocket } from "ws";
 import { z } from "zod";
 import { type ApnsSender, createApnsSenderFromEnv } from "./apns.js";
+import { type AppleVerifier, createAppleVerifierFromEnv } from "./apple.js";
 import {
   constantTimeEqualString,
   generatePairingId,
@@ -41,6 +42,8 @@ export interface RelayOptions {
   hub?: PairingHub;
   /** 既存の APNs sender を渡してテストで観察するためのフック。未指定なら env から組む。 */
   apns?: ApnsSender;
+  /** Apple identity token 検証器。未指定なら env (JWKS) から組む。テストで差し替え可。 */
+  apple?: AppleVerifier;
 }
 
 export interface RunningRelay {
@@ -78,6 +81,17 @@ const ClientRegisterDeviceSchema = z.object({
   platform: z.enum(["ios", "ipados", "macos"]),
 });
 
+const AppleAuthSchema = z.object({
+  identity_token: z.string().min(1).max(8192),
+  nonce: z.string().min(1).max(256),
+});
+
+/** account session 認証の device 登録 (pairing 非依存)。 */
+const AccountDeviceSchema = z.object({
+  apns_token: z.string().min(8).max(256),
+  platform: z.enum(["ios", "ipados", "macos"]),
+});
+
 export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
   const log = options.log ?? ((m) => console.error(m));
   const dbPath = options.dbPath ?? `${process.env.HOME ?? ""}/.sentinel/relay.db`;
@@ -85,6 +99,7 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
   const hub = options.hub ?? createPairingHub(log);
   const ownsStore = !options.store;
   const apns = options.apns ?? createApnsSenderFromEnv(log);
+  const apple = options.apple ?? createAppleVerifierFromEnv(log);
 
   const app: FastifyInstance = Fastify({ logger: false });
   await app.register(fastifyWebsocket);
@@ -132,6 +147,44 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
     log(`[relay] signin account=${account.id}`);
     return reply.send({
       account: { id: account.id, email: account.email },
+      session: { token: session.token, expires_at: session.expires_at },
+    });
+  });
+
+  app.post("/v1/auth/apple", async (req, reply) => {
+    const parsed = AppleAuthSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "invalid_body" });
+    }
+    let identity: { sub: string; email: string | null };
+    try {
+      identity = await apple.verify(parsed.data.identity_token, parsed.data.nonce);
+    } catch (err) {
+      // 検証失敗は理由コードのみログ (token は出さない)。fail-closed で 401。
+      log(`[relay] apple auth rejected: ${(err as Error).message}`);
+      return reply.code(401).send({ error: "invalid_apple_token" });
+    }
+    // sub でのみ find-or-create (email では紐付けない — email 乗っ取り防止)。
+    let account = store.findAccountByAppleSub(identity.sub);
+    if (!account) {
+      const id = randomUUID();
+      const now = Date.now();
+      // email 列は UNIQUE NOT NULL のため衝突しない合成値を入れる。実 email は応答でのみ返す。
+      store.insertAppleAccount({
+        id,
+        email: `appleid:${identity.sub}`,
+        apple_sub: identity.sub,
+        created_at: now,
+      });
+      account = store.findAccountById(id);
+      log(`[relay] apple account created account=${id}`);
+    } else {
+      log(`[relay] apple signin account=${account.id}`);
+    }
+    if (!account) return reply.code(500).send({ error: "account_persist_failed" });
+    const session = issueSession(store, account.id);
+    return reply.send({
+      account: { id: account.id, email: identity.email },
       session: { token: session.token, expires_at: session.expires_at },
     });
   });
@@ -267,6 +320,32 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
     return reply.code(201).send({ ok: true });
   });
 
+  // ---------- REST: account device registration (session 認証) ----------
+  //
+  // Sign in with Apple したクライアントは account session を持つので、pairing_id 無しで
+  // アカウントに直接 device を登録する。push は同一アカウントの全 agent の pending で飛ぶ。
+
+  app.post("/v1/account/devices", async (req, reply) => {
+    const auth = requireAccount(req, reply);
+    if (!auth) return;
+    const parsed = AccountDeviceSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid_body" });
+    const now = Date.now();
+    store.upsertDevice({
+      id: randomUUID(),
+      account_id: auth.account_id,
+      pairing_id: null,
+      apns_token: parsed.data.apns_token,
+      platform: parsed.data.platform,
+      last_seen_at: now,
+      created_at: now,
+    });
+    log(
+      `[relay] account device registered account=${auth.account_id} platform=${parsed.data.platform}`,
+    );
+    return reply.code(201).send({ ok: true });
+  });
+
   // ---------- WSS: agents (Mac daemon) ----------
 
   app.get(
@@ -288,8 +367,10 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
     },
     (socket, req) => {
       const pid = (req.params as { pid: string }).pid;
+      // preValidation を通過しているので pairing は必ず存在する。account_id を hub に渡す。
+      const accountId = store.findPairingById(pid)?.account_id ?? "";
       const wrap = wrapSocket(socket);
-      const { detach } = hub.attachAgent(pid, wrap);
+      const { detach } = hub.attachAgent(pid, wrap, accountId);
       const stopKeepalive = setupKeepalive(socket, log, `agent pid=${pid}`);
       socket.on("message", (raw: Buffer) => {
         const text = raw.toString("utf-8");
@@ -335,6 +416,42 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
       const stopKeepalive = setupKeepalive(socket, log, `client pid=${pid}`);
       socket.on("message", (raw: Buffer) => {
         hub.forwardClientToAgent(pid, raw.toString("utf-8"));
+      });
+      socket.on("close", () => {
+        stopKeepalive();
+        detach();
+      });
+      socket.on("error", () => {
+        stopKeepalive();
+        detach();
+      });
+    },
+  );
+
+  // ---------- WSS: account stream (Sign in with Apple したクライアント) ----------
+  //
+  // session 認証で account に直接ぶら下がる。アカウント内の全 agent の pending/質問/plan を
+  // 受け取り、decide/answer 等はアカウント内の全 agent へブロードキャストする。
+
+  app.get(
+    "/v1/account/stream",
+    {
+      websocket: true,
+      preValidation: async (req, reply) => {
+        const provided = extractBearer(req.headers.authorization, req.url ?? "");
+        if (!provided) return reply.code(401).send({ error: "missing_credentials" });
+        const auth = verifySessionToken(store, provided);
+        if (!auth) return reply.code(401).send({ error: "invalid_session" });
+        (req as FastifyRequest & { accountId?: string }).accountId = auth.account_id;
+      },
+    },
+    (socket, req) => {
+      const accountId = (req as FastifyRequest & { accountId?: string }).accountId ?? "";
+      const wrap = wrapSocket(socket);
+      const { detach } = hub.attachAccountClient(accountId, wrap);
+      const stopKeepalive = setupKeepalive(socket, log, `account ${accountId}`);
+      socket.on("message", (raw: Buffer) => {
+        hub.forwardAccountClientToAgents(accountId, raw.toString("utf-8"));
       });
       socket.on("close", () => {
         stopKeepalive();
@@ -434,7 +551,18 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
     if (notice === null) return;
     const n = notice;
 
-    const devices = store.listDevicesForPairing(pid);
+    // pid → account を解決し、アカウント内の全 device へ push (apns_token で de-dup)。
+    // legacy per-pairing device も account-level device もまとめて起こす。
+    const pairing = store.findPairingById(pid);
+    const rows = pairing
+      ? store.listDevicesForAccount(pairing.account_id)
+      : store.listDevicesForPairing(pid);
+    const seen = new Set<string>();
+    const devices = rows.filter((d) => {
+      if (seen.has(d.apns_token)) return false;
+      seen.add(d.apns_token);
+      return true;
+    });
     if (devices.length === 0) return;
     await Promise.all(
       devices.map(async (d) => {

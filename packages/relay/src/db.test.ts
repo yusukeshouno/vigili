@@ -111,4 +111,40 @@ describe("openRelayStore", () => {
     expect(store.listDevicesForPairing("p-1")).toHaveLength(0);
     store.close();
   });
+
+  it("creates + finds Apple accounts by sub and keeps them distinct from email accounts", () => {
+    const store = openRelayStore(":memory:");
+    store.insertAppleAccount({
+      id: "apple-1",
+      email: "appleid:sub-xyz",
+      apple_sub: "sub-xyz",
+      created_at: 1,
+    });
+    const found = store.findAccountByAppleSub("sub-xyz");
+    expect(found?.id).toBe("apple-1");
+    expect(found?.apple_sub).toBe("sub-xyz");
+    expect(found?.password_hash).toBe(""); // sentinel — signin できない
+    expect(store.findAccountByAppleSub("nope")).toBeNull();
+    // email/password アカウントは apple_sub=null
+    store.insertAccount({ id: "e-1", email: "e@x.co", password_hash: "scrypt$0$0", created_at: 2 });
+    expect(store.findAccountById("e-1")?.apple_sub).toBeNull();
+    store.close();
+  });
+
+  it("lists devices for an account regardless of pairing_id", () => {
+    const store = openRelayStore(":memory:");
+    store.insertAppleAccount({ id: "acc", email: "appleid:s", apple_sub: "s", created_at: 1 });
+    store.upsertDevice({
+      id: "d-1",
+      account_id: "acc",
+      pairing_id: null, // account-level device
+      apns_token: "acctdev",
+      platform: "ios",
+      last_seen_at: 1,
+      created_at: 1,
+    });
+    expect(store.listDevicesForAccount("acc")).toHaveLength(1);
+    expect(store.listDevicesForPairing("acc")).toHaveLength(0); // pairing 経路では出ない
+    store.close();
+  });
 });

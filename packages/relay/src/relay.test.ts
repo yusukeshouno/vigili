@@ -38,6 +38,17 @@ beforeEach(async () => {
     host: "127.0.0.1",
     store,
     log: () => undefined,
+    // Apple 検証はスタブ化 (本物の JWKS には触れない)。"GOOD:<sub>" 形式を受理。
+    apple: {
+      enabled: true,
+      verify: async (identityToken: string) => {
+        if (identityToken.startsWith("GOOD:")) {
+          const sub = identityToken.slice("GOOD:".length);
+          return { sub, email: `${sub}@privaterelay.appleid.com` };
+        }
+        throw new Error("apple_token_invalid");
+      },
+    },
   });
   base = `http://127.0.0.1:${relay.port}`;
 });
@@ -278,6 +289,105 @@ describe("relay WSS", () => {
     const got = JSON.parse(await agent.next());
     expect(got).toMatchObject({ type: "decide", id: "y" });
     client.close();
+    agent.close();
+  });
+});
+
+interface AppleAccount {
+  token: string;
+  account_id: string;
+  email: string | null;
+}
+
+async function signInApple(sub: string): Promise<AppleAccount> {
+  const r = await postJson("/v1/auth/apple", { identity_token: `GOOD:${sub}`, nonce: "rawnonce" });
+  expect(r.status).toBe(200);
+  const j = r.json as {
+    account: { id: string; email: string | null };
+    session: { token: string };
+  };
+  return { token: j.session.token, account_id: j.account.id, email: j.account.email };
+}
+
+describe("account-centric (Sign in with Apple)", () => {
+  it("apple sign-in creates an account and issues a session", async () => {
+    const acct = await signInApple("sub-aaa");
+    expect(acct.account_id).toBeTruthy();
+    expect(acct.email).toBe("sub-aaa@privaterelay.appleid.com");
+    // session が有効
+    const me = await getJson("/v1/me", acct.token);
+    expect(me.status).toBe(200);
+  });
+
+  it("same apple sub re-uses the same account", async () => {
+    const first = await signInApple("sub-stable");
+    const second = await signInApple("sub-stable");
+    expect(second.account_id).toBe(first.account_id);
+  });
+
+  it("rejects an invalid apple token", async () => {
+    const r = await postJson("/v1/auth/apple", { identity_token: "BAD", nonce: "x" });
+    expect(r.status).toBe(401);
+  });
+
+  it("account device registration works with the apple session", async () => {
+    const acct = await signInApple("sub-dev");
+    const r = await postJson(
+      "/v1/account/devices",
+      { apns_token: "acctdevice123", platform: "ios" },
+      acct.token,
+    );
+    expect(r.status).toBe(201);
+    const devices = store.listDevicesForAccount(acct.account_id);
+    expect(devices).toHaveLength(1);
+    expect(devices[0]?.pairing_id).toBeNull();
+  });
+
+  it("account device registration requires auth", async () => {
+    const r = await postJson("/v1/account/devices", {
+      apns_token: "x".repeat(10),
+      platform: "ios",
+    });
+    expect(r.status).toBe(401);
+  });
+
+  it("account-stream rejects an invalid session", async () => {
+    await expect(connectWs("/v1/account/stream", "NOT-A-SESSION")).rejects.toBeDefined();
+  });
+
+  it("agent pending reaches the account-stream client (no QR)", async () => {
+    const acct = await signInApple("sub-stream");
+    const pair = await createPairing(acct.token, "macbook");
+    const acctClient = await connectWs("/v1/account/stream", acct.token);
+    // 接続直後は agent unonline
+    expect(JSON.parse(await acctClient.next())).toMatchObject({
+      type: "agent-status",
+      online: false,
+    });
+    const agent = await connectWs(`/v1/agents/${pair.id}`, pair.agent_key);
+    // agent 接続で account-stream クライアントに online 通知
+    expect(JSON.parse(await acctClient.next())).toMatchObject({
+      type: "agent-status",
+      online: true,
+    });
+    agent.ws.send(JSON.stringify({ type: "pending", id: "p-1" }));
+    expect(JSON.parse(await acctClient.next())).toMatchObject({ type: "pending", id: "p-1" });
+    acctClient.close();
+    agent.close();
+  });
+
+  it("account-stream client decide is forwarded to the account's agent", async () => {
+    const acct = await signInApple("sub-decide");
+    const pair = await createPairing(acct.token);
+    const agent = await connectWs(`/v1/agents/${pair.id}`, pair.agent_key);
+    const acctClient = await connectWs("/v1/account/stream", acct.token);
+    expect(JSON.parse(await acctClient.next())).toMatchObject({
+      type: "agent-status",
+      online: true,
+    });
+    acctClient.ws.send(JSON.stringify({ type: "decide", id: "z", decision: "allow" }));
+    expect(JSON.parse(await agent.next())).toMatchObject({ type: "decide", id: "z" });
+    acctClient.close();
     agent.close();
   });
 });

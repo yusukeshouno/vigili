@@ -51,7 +51,17 @@ const MIGRATIONS = [
 export interface AccountRow {
   id: string;
   email: string;
+  /** email/password アカウントは scrypt ハッシュ。Apple アカウントは空文字 sentinel。 */
   password_hash: string;
+  created_at: number;
+  /** Sign in with Apple の安定ユーザ ID (sub)。email/password アカウントは null。 */
+  apple_sub: string | null;
+}
+
+export interface AppleAccountInsert {
+  id: string;
+  email: string;
+  apple_sub: string;
   created_at: number;
 }
 
@@ -84,9 +94,12 @@ export interface DeviceRow {
 
 export interface RelayStore {
   // accounts
-  insertAccount(row: AccountRow): void;
+  // email/password アカウントは apple_sub を持たない (SQL 既定 NULL)。
+  insertAccount(row: Omit<AccountRow, "apple_sub">): void;
+  insertAppleAccount(row: AppleAccountInsert): void;
   findAccountByEmail(email: string): AccountRow | null;
   findAccountById(id: string): AccountRow | null;
+  findAccountByAppleSub(appleSub: string): AccountRow | null;
   // sessions
   insertSession(row: SessionRow): void;
   findSession(tokenHash: string): SessionRow | null;
@@ -101,10 +114,21 @@ export interface RelayStore {
   // devices
   upsertDevice(row: DeviceRow): void;
   listDevicesForPairing(pairingId: string): DeviceRow[];
+  listDevicesForAccount(accountId: string): DeviceRow[];
   deleteDeviceByToken(apnsToken: string): boolean;
   // misc
   close(): void;
   raw(): Database.Database;
+}
+
+function addColumnIfMissing(
+  db: Database.Database,
+  table: string,
+  column: string,
+  ddl: string,
+): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === column)) db.exec(ddl);
 }
 
 export function openRelayStore(dbPath: string): RelayStore {
@@ -116,12 +140,28 @@ export function openRelayStore(dbPath: string): RelayStore {
   db.pragma("foreign_keys = ON");
   for (const sql of MIGRATIONS) db.exec(sql);
 
+  // Sign in with Apple: 既存 DB にも後付けできるよう ALTER で追加する。
+  // apple_sub は NULL 許容 + partial unique (Apple アカウント間でのみ一意)。
+  addColumnIfMissing(db, "accounts", "apple_sub", "ALTER TABLE accounts ADD COLUMN apple_sub TEXT");
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_apple_sub
+       ON accounts(apple_sub) WHERE apple_sub IS NOT NULL`,
+  );
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_devices_account ON devices(account_id)`);
+
   // accounts
   const insertAccountStmt = db.prepare<[string, string, string, number]>(
     `INSERT INTO accounts (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)`,
   );
+  const insertAppleAccountStmt = db.prepare<[string, string, string, number, string]>(
+    `INSERT INTO accounts (id, email, password_hash, created_at, apple_sub)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
   const findAccountByEmailStmt = db.prepare<[string]>(`SELECT * FROM accounts WHERE email = ?`);
   const findAccountByIdStmt = db.prepare<[string]>(`SELECT * FROM accounts WHERE id = ?`);
+  const findAccountByAppleSubStmt = db.prepare<[string]>(
+    `SELECT * FROM accounts WHERE apple_sub = ?`,
+  );
 
   // sessions
   const insertSessionStmt = db.prepare<[string, string, number, number, number]>(
@@ -164,17 +204,28 @@ export function openRelayStore(dbPath: string): RelayStore {
   const listDevicesForPairingStmt = db.prepare<[string]>(
     `SELECT * FROM devices WHERE pairing_id = ?`,
   );
+  const listDevicesForAccountStmt = db.prepare<[string]>(
+    `SELECT * FROM devices WHERE account_id = ?`,
+  );
   const deleteDeviceByTokenStmt = db.prepare<[string]>(`DELETE FROM devices WHERE apns_token = ?`);
 
   return {
     insertAccount(row) {
       insertAccountStmt.run(row.id, row.email, row.password_hash, row.created_at);
     },
+    insertAppleAccount(row) {
+      // Apple アカウントはパスワードを持たない → password_hash は空文字 sentinel。
+      // signin (email/password) は verifyPassword("scrypt$..." 期待) で必ず弾かれる。
+      insertAppleAccountStmt.run(row.id, row.email, "", row.created_at, row.apple_sub);
+    },
     findAccountByEmail(email) {
       return (findAccountByEmailStmt.get(email) as AccountRow | undefined) ?? null;
     },
     findAccountById(id) {
       return (findAccountByIdStmt.get(id) as AccountRow | undefined) ?? null;
+    },
+    findAccountByAppleSub(appleSub) {
+      return (findAccountByAppleSubStmt.get(appleSub) as AccountRow | undefined) ?? null;
     },
 
     insertSession(row) {
@@ -234,6 +285,9 @@ export function openRelayStore(dbPath: string): RelayStore {
     },
     listDevicesForPairing(pairingId) {
       return listDevicesForPairingStmt.all(pairingId) as DeviceRow[];
+    },
+    listDevicesForAccount(accountId) {
+      return listDevicesForAccountStmt.all(accountId) as DeviceRow[];
     },
     deleteDeviceByToken(apnsToken) {
       const info = deleteDeviceByTokenStmt.run(apnsToken);
