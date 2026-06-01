@@ -131,15 +131,15 @@ const en: Copy = {
   surfacePhoneLabel: "iPhone app",
   surfacePhoneHeadline: "For when you've stepped away.",
   surfacePhoneBody:
-    "The same list, in your pocket. Dynamic Island shows the count — tap to approve in a meeting or on a walk. Sessions resume the moment you tap.",
+    "The same list, in your pocket. Dynamic Island shows the count — tap to approve in a meeting or on a walk. Sessions resume the moment you tap. The waiting screen shows today's auto-approved count, yesterday's comparison, and a 14-day activity chart.",
 
   tourEyebrow: "A 60-second tour",
   tourTitle: "Set up once. Every window included.",
   tourLead:
     "Install Vigili on your Mac and pair your phone once. From then on, every Claude Code window you open is already in the loop — no per-session setup.",
-  tourStep1Title: "Pair your phone, once.",
+  tourStep1Title: "Sign in with Apple. Linked in seconds.",
   tourStep1Body:
-    "On first launch, a QR appears in the Mac menu bar. Scan it with your iPhone camera — paired in under five seconds. No account, no cloud sign-up. Every Claude window after uses this pairing.",
+    "Click 'Sign in with Apple' in the Mac menu bar app, then do the same on your iPhone. Both devices link to your Apple ID instantly — no QR, no terminal, no manual token. If you prefer, a QR fallback is still there.",
   tourStep2Title: "Step away. Your phone takes over.",
   tourStep2Body:
     "When a window stops on something your rules can't decide automatically, your phone wakes up. Dynamic Island shows what's waiting and which project — no need to walk back to the terminal.",
@@ -173,7 +173,7 @@ const en: Copy = {
     "Once installed, every Claude Code window on your Mac sends its approval requests through Vigili first. No matter how many windows you open — they're all visible in one place, on your Mac and on your phone.",
   howStep2Title: "Rules handle the obvious — and grow over time",
   howStep2Body:
-    "Vigili ships with sensible defaults: reading files is always allowed, deleting system folders is always blocked. Tap Always on an approval and Vigili creates a rule for the same pattern. Rules auto-expire daily, so stale allows don't pile up.",
+    "Vigili ships with sensible defaults: reading files is always allowed. Tap Always on an approval and Vigili creates a rule for the same pattern — auto-expiring daily so stale allows don't accumulate. Dangerous operations like deleting system folders or force-pushing to main are always blocked, regardless of any rule you write.",
   howStep3Title: "Only genuinely unclear requests reach you",
   howStep3Body:
     "Requests your rules can't decide — typically 5–15% to start — get pushed to your phone. One list across all windows, worked through in order. Approve from your desk or while away. Either way, the windows resume.",
@@ -181,13 +181,13 @@ const en: Copy = {
   secEyebrow: "Security",
   secTitle: "Your code stays on your machine.",
   secLead:
-    "Vigili was built so a third party never has to see your code or your commands. No accounts, no cloud sync by default — and if the service ever fails, Claude waits, never approves on its own.",
-  sec1Title: "Same Wi-Fi? Direct connection.",
+    "Vigili was built so a third party never sees your code or commands. Approvals flow as encrypted identifiers — never the source. And if the service ever fails, Claude waits; it never approves on its own.",
+  sec1Title: "Same network? Direct connection.",
   sec1Body:
-    "When your phone is on the same network as your Mac, they talk directly — nothing goes through the internet. No third party in the middle.",
-  sec2Title: "Away from home? Optional relay.",
+    "When your phone is on the same Wi-Fi as your Mac, they talk directly over your local network — nothing goes through the internet. No third party in the middle.",
+  sec2Title: "Away from home? Vigili Cloud.",
   sec2Body:
-    "Out of the house? An optional relay passes the requests through — never storing your code or commands. The relay is open source, so you can run your own.",
+    "Sign in with Apple on your Mac and iPhone once. Vigili's cloud relay forwards notifications and approvals between your devices — never storing your source code or commands. Your Apple ID links the devices; no manual token exchange needed.",
   sec3Title: "If Vigili stops, Claude pauses.",
   sec3Body:
     "If something goes wrong with Vigili, Claude stops and waits. It never approves on its own when you're not watching. Every window stays blocked until you're back.",
@@ -234,15 +234,15 @@ const ja: Copy = {
   surfacePhoneLabel: "iPhone アプリ",
   surfacePhoneHeadline: "離席中はこちらで。",
   surfacePhoneBody:
-    "同じリストをポケットに。Dynamic Island に待ち件数が表示され、会議中・散歩中でもタップで承認。タップした瞬間にセッションが再開します。",
+    "同じリストをポケットに。Dynamic Island に待ち件数が表示され、会議中・散歩中でもタップで承認。タップした瞬間にセッションが再開します。待機画面には今日の自動承認件数・前日比・14 日間のアクティビティチャートが表示されます。",
 
   tourEyebrow: "60 秒で見るツアー",
   tourTitle: "1 回セットアップ。全ウィンドウが対象になる。",
   tourLead:
     "Mac にインストールしてスマホとペアリングするだけ。以後、開く Claude Code ウィンドウはすべて自動で対象になります。",
-  tourStep1Title: "スマホを 1 回だけ繋ぐ。",
+  tourStep1Title: "Apple ID でサインイン。数秒でリンク完了。",
   tourStep1Body:
-    "初回起動時にメニューバーに QR が出ます。iPhone のカメラで読むだけで 5 秒以内にペアリング完了。アカウント不要、クラウド登録なし。以後のウィンドウはすべてこの接続を使います。",
+    "Mac メニューバーアプリで「Apple でサインイン」をクリック、次に iPhone アプリでも同じ操作をするだけ。同じ Apple ID で両デバイスが自動でリンクされます。QR もターミナルもトークン手入力も不要。QR によるフォールバックも残っています。",
   tourStep2Title: "席を離れる。スマホが代わりに教えてくれる。",
   tourStep2Body:
     "ルールで判断できないリクエストが来ると、スマホが起きます。Dynamic Island に何が待っているか・どのプロジェクトからかが出るので、ターミナルに戻る必要はありません。",
@@ -276,7 +276,7 @@ const ja: Copy = {
     "Mac にインストールすると、すべての Claude Code ウィンドウの承認リクエストが Vigili に流れます。Mac でもスマホでも、横断的に 1 つのリストで見られます。",
   howStep2Title: "明らかなものはルールが処理 — そして育つ",
   howStep2Body:
-    "最初から「読み取りは許可」「システムフォルダ削除は拒否」などのデフォルトが入っています。承認時に「Always」を押すと同じパターンのルールが作られます。ルールは毎日自動で失効するので古いものが溜まりません。",
+    "最初から「読み取りは許可」などのデフォルトが入っています。承認時に「Always」を押すと同じパターンに毎日自動失効するルールが作られます。システムフォルダ削除や main への force-push などの危険操作は、どんなルールを書いても常時ブロックされます。",
   howStep3Title: "本当に判断が必要なものだけ届く",
   howStep3Body:
     "ルールで決められないリクエスト — 最初は全体の 5〜15% 程度 — がスマホに届きます。全ウィンドウ横断の 1 リストを順に処理。机からでも離席中でも承認でき、どちらでもウィンドウが再開します。",
@@ -284,13 +284,13 @@ const ja: Copy = {
   secEyebrow: "セキュリティ",
   secTitle: "コードはあなたのパソコンから出ない。",
   secLead:
-    "Vigili は第三者があなたのコードやコマンドを見ない設計です。アカウント不要、デフォルトでクラウド同期なし — もし Vigili が止まっても、Claude は勝手に進まず待ちます。",
-  sec1Title: "同じ Wi-Fi なら直接つながる",
+    "Vigili は第三者があなたのコードやコマンドを見ない設計です。承認リクエストは暗号化された識別子として流れ、ソースコードは送信されません。Vigili が止まっても、Claude は勝手に進まず待ちます。",
+  sec1Title: "同じネットワークなら直接つながる",
   sec1Body:
-    "スマホと Mac が同じネットワークにいるとき、両者は直接通信します。インターネットを経由しないので、間に第三者は入りません。",
-  sec2Title: "外出先はリレー経由（任意）",
+    "スマホと Mac が同じ Wi-Fi にいるとき、両者はローカルネットワークで直接通信します。インターネットを経由しないので、間に第三者は入りません。",
+  sec2Title: "外出先は Vigili Cloud 経由",
   sec2Body:
-    "自宅の Wi-Fi から離れているときは、任意のリレーサービスを経由してリクエストを転送します。コードや承認内容は保存されません。リレーはオープンソースで、自前で運用することもできます。",
+    "Mac と iPhone でそれぞれ「Apple でサインイン」するだけで設定完了。Vigili のクラウド relay がデバイス間で通知と承認を転送します。ソースコードや承認内容は保存されません。Apple ID がデバイスをリンクするので、手動でのトークン交換は不要です。",
   sec3Title: "Vigili が止まったら、Claude も止まる",
   sec3Body:
     "Vigili に問題が起きた場合、Claude はその場で止まって待ちます。あなたが見ていないときに勝手に許可することは絶対にありません。すべてのウィンドウは復帰までブロックされたままです。",
