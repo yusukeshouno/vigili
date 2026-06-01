@@ -1,3 +1,4 @@
+export * from "./apple-auth.js";
 export * from "./approval-request.js";
 export * from "./decision.js";
 export * from "./message.js";
