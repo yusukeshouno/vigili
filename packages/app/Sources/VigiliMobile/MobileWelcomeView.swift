@@ -88,16 +88,34 @@ struct MobileWelcomeView: View {
 
           // ── CTA ─────────────────────────────────────────────────────
           VStack(spacing: 12) {
+            // 主軸: Sign in with Apple — ターミナル/QR 不要でアカウント連携。
             PillButton(
-              label: "Scan setup QR",
-              icon: "qrcode.viewfinder",
+              label: coordinator.isSigningIn ? "サインイン中…" : "Sign in with Apple",
+              icon: "apple.logo",
               style: .primary
+            ) {
+              Task { await coordinator.signInWithApple() }
+            }
+            .disabled(coordinator.isSigningIn)
+
+            if let err = coordinator.signInError {
+              Text(err)
+                .font(.system(size: 12))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            // フォールバック: QR スキャン / 手動入力 (上の Mac 手順を使う既存経路)。
+            PillButton(
+              label: "QR でセットアップ",
+              icon: "qrcode.viewfinder",
+              style: .ghost
             ) {
               startWithScanner = true
               coordinator.dismissWelcome()
             }
             PillButton(
-              label: "Skip — enter manually",
+              label: "手動で入力",
               icon: "arrow.right",
               style: .ghost
             ) {

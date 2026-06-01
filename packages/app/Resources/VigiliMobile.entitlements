@@ -9,5 +9,12 @@
        Push Notifications capability を有効化した有償 Apple Developer Program 必須。 -->
   <key>aps-environment</key>
   <string>development</string>
+  <!-- Sign in with Apple (アカウント中心オンボーディング)。
+       App ID (io.vigili.mobile.shono) で Sign In with Apple capability を有効化した
+       有償 Apple Developer Program が必要。 -->
+  <key>com.apple.developer.applesignin</key>
+  <array>
+    <string>Default</string>
+  </array>
 </dict>
 </plist>

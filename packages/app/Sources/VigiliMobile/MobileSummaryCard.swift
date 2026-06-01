@@ -115,6 +115,7 @@ struct StandingWatchLedger: View {
     case .connected:
       switch coordinator.activeRoute {
       case .lan: return "watching · local"
+      case .account: return "watching · remote"
       case .relay: return "watching · remote"
       case .none: return "watching"
       }

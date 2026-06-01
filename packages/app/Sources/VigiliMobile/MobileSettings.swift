@@ -22,6 +22,9 @@ enum MobileSettings {
     static let relayPid = "vigili.relay.pairing_id"        // UUID
     static let relayUserToken = "vigili.relay.user_token"
 
+    // Account 経路 (Sign in with Apple)。session token は Keychain (UserDefaults ではない)。
+    static let accountRelayUrl = "vigili.account.relay_url"  // "https://relay.vigili.io"
+
     // 旧設定 (migration source)
     static let legacyDaemonUrl = "sentinel.daemonUrl"
     static let legacyToken = "sentinel.token"
@@ -156,10 +159,57 @@ enum MobileSettings {
       && !(relayUserToken ?? "").isEmpty
   }
 
+  // MARK: - Account (Sign in with Apple)
+
+  static var accountRelayUrl: String? {
+    get { UserDefaults.standard.string(forKey: Key.accountRelayUrl) }
+    set {
+      if let v = newValue, !v.isEmpty {
+        UserDefaults.standard.set(v, forKey: Key.accountRelayUrl)
+      } else {
+        UserDefaults.standard.removeObject(forKey: Key.accountRelayUrl)
+      }
+    }
+  }
+
+  /// relay の session token (Keychain 保管。UserDefaults には置かない)。
+  static var accountSessionToken: String? {
+    get { KeychainStore.get(account: KeychainStore.sessionTokenAccount) }
+    set {
+      if let v = newValue, !v.isEmpty {
+        KeychainStore.set(v, account: KeychainStore.sessionTokenAccount)
+      } else {
+        KeychainStore.delete(account: KeychainStore.sessionTokenAccount)
+      }
+    }
+  }
+
+  static var hasAccount: Bool {
+    !(accountRelayUrl ?? "").isEmpty && !(accountSessionToken ?? "").isEmpty
+  }
+
+  /// account stream の WS URL。形式: `wss://<relay>/v1/account/stream`
+  /// (token は DaemonWsClient が ?token= で付ける。`/ws` は付与されない)。
+  static var accountWsUrl: URL? {
+    guard let base = accountRelayUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !base.isEmpty
+    else { return nil }
+    let trimmed = base.hasSuffix("/") ? String(base.dropLast()) : base
+    let wsBase: String
+    if trimmed.hasPrefix("https://") {
+      wsBase = "wss://" + trimmed.dropFirst("https://".count)
+    } else if trimmed.hasPrefix("http://") {
+      wsBase = "ws://" + trimmed.dropFirst("http://".count)
+    } else {
+      wsBase = trimmed
+    }
+    return URL(string: "\(wsBase)/v1/account/stream")
+  }
+
   // MARK: - Aggregate / migration
 
   /// 何かしら 1 経路でも設定されていれば configured とみなす。
-  static var isConfigured: Bool { hasLan || hasRelay }
+  static var isConfigured: Bool { hasLan || hasRelay || hasAccount }
 
   /// 旧 `sentinel.daemonUrl` / `sentinel.token` を `lan*` にコピーする (1 回だけ)。
   /// 移行後は migrated フラグを立てて再実行しない。
@@ -183,10 +233,12 @@ enum MobileSettings {
     let ud = UserDefaults.standard
     for k in [
       Key.lanUrl, Key.lanToken, Key.relayUrl, Key.relayPid, Key.relayUserToken,
-      Key.legacyDaemonUrl, Key.legacyToken,
+      Key.accountRelayUrl, Key.legacyDaemonUrl, Key.legacyToken,
     ] {
       ud.removeObject(forKey: k)
     }
+    KeychainStore.delete(account: KeychainStore.sessionTokenAccount)
+    KeychainStore.delete(account: KeychainStore.sessionExpiresAccount)
     // migrated フラグは残す (再 migration 不要)
   }
 
@@ -201,5 +253,11 @@ enum MobileSettings {
     ud.removeObject(forKey: Key.relayUrl)
     ud.removeObject(forKey: Key.relayPid)
     ud.removeObject(forKey: Key.relayUserToken)
+  }
+
+  static func clearAccount() {
+    UserDefaults.standard.removeObject(forKey: Key.accountRelayUrl)
+    KeychainStore.delete(account: KeychainStore.sessionTokenAccount)
+    KeychainStore.delete(account: KeychainStore.sessionExpiresAccount)
   }
 }

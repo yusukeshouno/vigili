@@ -125,6 +125,9 @@ targets:
         # 非サンドボックス本体でも entitlement さえ持てばコンテナを読み書きできる。
         com.apple.security.application-groups:
           - group.io.vigili.app.shono
+        # Sign in with Apple (アカウント中心オンボーディング)。App ID で capability 有効化必須。
+        com.apple.developer.applesignin:
+          - Default
 
   # ============================================================
   # iOS: iPhone / iPad アプリ (Live Activity 対応予定)
@@ -208,6 +211,9 @@ targets:
       path: Resources/VigiliMobile.entitlements
       properties:
         aps-environment: development
+        # Sign in with Apple (アカウント中心オンボーディング)。App ID で capability 有効化必須。
+        com.apple.developer.applesignin:
+          - Default
 
   # ============================================================
   # iOS: Widget Extension (Live Activity 用)

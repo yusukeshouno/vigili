@@ -267,11 +267,12 @@ final class DaemonWsClient: ObservableObject {
     // urlBase 側の path が既にあればそれを尊重し、末尾に /ws を追加。
     // 例: https://mac.tail.ts.net (path 空) → /ws
     //     https://mac.tail.ts.net/api (path /api) → /api/ws
-    // 例外: relay の `/v1/clients/<pid>` は終端なので /ws を足さない (Vigili Cloud)。
+    // 例外: relay の `/v1/clients/<pid>` と `/v1/account/stream` は終端なので
+    // /ws を足さない (Vigili Cloud)。
     let basePath = components.path.hasSuffix("/")
       ? String(components.path.dropLast())
       : components.path
-    if basePath.contains("/v1/clients/") {
+    if basePath.contains("/v1/clients/") || basePath.contains("/v1/account/") {
       components.path = basePath
     } else {
       components.path = "\(basePath)/ws"

@@ -42,6 +42,16 @@ final class AppCoordinator: ObservableObject {
   /// 初回起動時に Welcome 画面を出すかどうか。`~/.vigili/.welcomed` の有無で判定。
   @Published var showWelcome: Bool
 
+  // --- オンボーディング (ターミナル不要) ---
+  /// Claude Code hook が ~/.claude/settings.json に導入済みか。
+  @Published var hookInstalled: Bool = HookInstaller.isInstalled()
+  /// Sign in with Apple で relay 接続が構成済みか。
+  @Published var relayConfigured: Bool = false
+  /// 「Claude Code に接続」の結果トースト。
+  @Published var connectStatus: String?
+  /// 「Sign in with Apple」の結果トースト。
+  @Published var signInStatus: String?
+
   private var pollTimer: Timer?
   private var tickCount = 0
 
@@ -246,6 +256,64 @@ final class AppCoordinator: ObservableObject {
     let marker = home.appendingPathComponent(".welcomed")
     try? "ok\n".write(to: marker, atomically: true, encoding: .utf8)
     showWelcome = false
+  }
+
+  // MARK: - ターミナル不要オンボーディング
+
+  /// 「Claude Code に接続」: PreToolUse hook を ~/.claude/settings.json に冪等導入し daemon を起動。
+  func connectToClaudeCode() {
+    do {
+      let r = try HookInstaller.installIfNeeded()
+      hookInstalled = true
+      daemonController.start()
+      connectStatus = r.alreadyPresent
+        ? "既に接続済みです"
+        : "hook を導入しました（Claude Code のセッションを開き直してください）"
+    } catch {
+      connectStatus = "接続に失敗: \(error.localizedDescription)"
+    }
+    clearConnectStatusSoon()
+  }
+
+  /// 「Sign in with Apple」: Apple 認証 → relay session → この Mac の pairing 作成 →
+  /// daemon を再起動なしで relay 接続 (relay-configure admin)。
+  func signInWithAppleAndPair() {
+    Task { @MainActor in
+      signInStatus = "サインイン中…"
+      do {
+        let result = try await AppleSignInCoordinator().signIn()
+        let auth = try await RelayAuthClient.signInWithApple(
+          identityToken: result.identityToken, rawNonce: result.rawNonce,
+        )
+        let host = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+        let pairing = try await RelayAuthClient.createPairing(
+          sessionToken: auth.session.token, name: host,
+        )
+        // iPhone フォールバック (unified QR) のため user_token をローカルキャッシュ。
+        writeRelayUserTokenCache(pairing.userToken)
+        _ = try await adminClient.configureRelay(
+          url: RelayConstants.base, pairingId: pairing.id, agentKey: pairing.agentKey,
+        )
+        relayConfigured = true
+        signInStatus = "サインイン完了 — スマホでも承認できます"
+      } catch {
+        signInStatus = "サインインに失敗: \(error.localizedDescription)"
+      }
+    }
+  }
+
+  private func writeRelayUserTokenCache(_ token: String) {
+    let url = Self.vigiliHome().appendingPathComponent("relay-user-token")
+    try? token.data(using: .utf8)?.write(to: url, options: .atomic)
+    try? FileManager.default.setAttributes(
+      [.posixPermissions: 0o600], ofItemAtPath: url.path,
+    )
+  }
+
+  private func clearConnectStatusSoon() {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+      self?.connectStatus = nil
+    }
   }
 
   private func tickPending() async {

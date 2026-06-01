@@ -17,16 +17,41 @@ enum RelayDeviceRegistrar {
   /// AppDelegate が APNs token を取得したときに呼ぶ。
   static func register(apnsToken: String) {
     lastToken = apnsToken
-    post(apnsToken: apnsToken)
+    dispatch(apnsToken: apnsToken)
   }
 
-  /// relay credentials が後から入った (QR ペアリング) ときに呼ぶ。
+  /// relay credentials / account session が後から入ったときに呼ぶ。
   static func reregisterIfPossible() {
     guard let token = lastToken else { return }
-    post(apnsToken: token)
+    dispatch(apnsToken: token)
   }
 
-  private static func post(apnsToken: String) {
+  /// account session があれば account-level 登録、無ければ legacy per-pairing 登録。
+  private static func dispatch(apnsToken: String) {
+    if MobileSettings.hasAccount, let session = MobileSettings.accountSessionToken {
+      let base = MobileSettings.accountRelayUrl ?? RelayConstants.base
+      Task {
+        do {
+          try await RelayAuthClient.registerAccountDevice(
+            relayBase: base, sessionToken: session, apnsToken: apnsToken, platform: "ios",
+          )
+          await MainActor.run { appLog("RelayDeviceRegistrar: account device 登録成功") }
+        } catch {
+          await MainActor.run {
+            appLog("RelayDeviceRegistrar: account device 登録失敗 \(error.localizedDescription)")
+          }
+        }
+      }
+      return
+    }
+    if MobileSettings.hasRelay {
+      postLegacy(apnsToken: apnsToken)
+      return
+    }
+    Task { @MainActor in appLog("RelayDeviceRegistrar: relay/account 未設定、device 登録スキップ") }
+  }
+
+  private static func postLegacy(apnsToken: String) {
     guard
       let relay = MobileSettings.relayUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
       !relay.isEmpty,

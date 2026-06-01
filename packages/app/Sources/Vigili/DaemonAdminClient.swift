@@ -153,6 +153,24 @@ actor DaemonAdminClient {
     return (resp["written"] as? NSNumber)?.intValue ?? 0
   }
 
+  // MARK: - relay (Sign in with Apple)
+
+  /// relay の接続先を daemon に渡し、config.yaml 永続化 + ホット再接続させる。
+  /// プロセス再起動 (`launchctl kickstart`) を経由しない。戻り値は試行直後の接続状態。
+  func configureRelay(url: String, pairingId: String, agentKey: String) async throws -> Bool {
+    let resp = try await send(request: [
+      "kind": "admin",
+      "action": "relay-configure",
+      "url": url,
+      "pairing_id": pairingId,
+      "agent_key": agentKey,
+    ])
+    guard let ok = resp["ok"] as? Bool, ok else {
+      throw ClientError.responseError(resp["error"] as? String ?? "unknown")
+    }
+    return (resp["connected"] as? Bool) ?? false
+  }
+
   // MARK: - low level
 
   private func send(request: [String: Any]) async throws -> [String: Any] {

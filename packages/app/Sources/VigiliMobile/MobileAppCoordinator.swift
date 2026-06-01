@@ -47,8 +47,9 @@ final class MobileAppCoordinator: ObservableObject {
 
   enum Route: Equatable {
     case none
-    case lan(host: String)     // 表示用: "192.168.1.5:7878"
-    case relay(host: String)   // 表示用: "relay.vigili.io"
+    case lan(host: String)      // 表示用: "192.168.1.5:7878"
+    case account(host: String)  // 表示用: "relay.vigili.io" (Sign in with Apple)
+    case relay(host: String)    // 表示用: "relay.vigili.io" (legacy QR pairing)
   }
 
   private var cancellables = Set<AnyCancellable>()
@@ -197,6 +198,35 @@ final class MobileAppCoordinator: ObservableObject {
     showWelcome = false
   }
 
+  /// 進行中フラグ (ボタンの二度押し防止 / スピナー表示用)。
+  @Published var isSigningIn = false
+  /// サインインの最後のエラー (UI 表示用)。
+  @Published var signInError: String?
+
+  /// 「Sign in with Apple」CTA から呼ばれる。Apple 認証 → relay session → account 経路で接続。
+  /// QR スキャンもパスワードも不要。
+  func signInWithApple() async {
+    if isSigningIn { return }
+    isSigningIn = true
+    signInError = nil
+    defer { isSigningIn = false }
+    do {
+      let result = try await AppleSignInCoordinator().signIn()
+      let auth = try await RelayAuthClient.signInWithApple(
+        identityToken: result.identityToken, rawNonce: result.rawNonce,
+      )
+      MobileSettings.accountRelayUrl = RelayConstants.base
+      MobileSettings.accountSessionToken = auth.session.token
+      isConfigured = MobileSettings.isConfigured
+      reconfigureAndConnect()  // account 経路を選び、APNs device を登録する
+      dismissWelcome()
+      appLog("MobileAppCoordinator.signInWithApple: ok account=\(auth.account.id)")
+    } catch {
+      signInError = error.localizedDescription
+      appLog("MobileAppCoordinator.signInWithApple failed: \(error.localizedDescription)")
+    }
+  }
+
   /// セットアップ URL を受け取って LAN / relay の credentials を保存し reconnect する。
   ///
   /// 対応スキーマ:
@@ -281,11 +311,19 @@ final class MobileAppCoordinator: ObservableObject {
       return
     }
 
-    // (2) Relay (remote) を優先: Bonjour で同一 LAN の daemon が見つからない =
-    //     off-LAN とみなして relay を使う。relay は agent→client の pending を WS で
-    //     転送するので、どこからでも承認カードが届く。
-    //
-    //     静的 lanUrl (下の (3)) より必ず先に試すのが要点。静的 lanUrl が LAN IP の
+    // (2) Account stream (Sign in with Apple) を最優先の remote 経路にする。
+    //     同一アカウントに紐づく全 Mac の pending/質問/plan が account stream に流れてくる。
+    if MobileSettings.hasAccount,
+      let url = MobileSettings.accountWsUrl,
+      let token = MobileSettings.accountSessionToken
+    {
+      let host = MobileSettings.accountRelayUrl.flatMap { URL(string: $0)?.host } ?? "relay"
+      switchTo(url: url, token: token, route: .account(host: host))
+      return
+    }
+
+    // (3) legacy relay (QR pairing) — account が無い既存ユーザー向けフォールバック。
+    //     静的 lanUrl (下の (4)) より必ず先に試すのが要点。静的 lanUrl が LAN IP の
     //     場合 off-LAN では到達できず、掴んでしまうと「繋がっているのに承認が来ない」
     //     状態 (= 旧挙動: watching local のまま無音) になっていた。relay を持っているなら
     //     それを使う。Bonjour で LAN daemon が見つかれば (1) が即座に上書きする。
@@ -298,8 +336,8 @@ final class MobileAppCoordinator: ObservableObject {
       return
     }
 
-    // (3) 静的 lanUrl (Tailscale 等、Bonjour で見えない手動ホスト) —
-    //     relay 未設定時のフォールバックとしてのみ使う。relay があるなら (2) で確定済み。
+    // (4) 静的 lanUrl (Tailscale 等、Bonjour で見えない手動ホスト) —
+    //     account/relay 未設定時のフォールバックとしてのみ使う。
     if MobileSettings.hasLan,
       let url = MobileSettings.lanWsUrlBase,
       let token = MobileSettings.lanToken
@@ -308,7 +346,7 @@ final class MobileAppCoordinator: ObservableObject {
       return
     }
 
-    // (4) 何も無い
+    // (5) 何も無い
     if currentUrl != nil {
       appLog("reevaluate: no credentials, disconnecting")
       wsClient.stop()

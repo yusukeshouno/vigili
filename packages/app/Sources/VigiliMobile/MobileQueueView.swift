@@ -370,6 +370,7 @@ struct MobileSettingsSheet: View {
     switch coordinator.activeRoute {
     case .none: return "—"
     case .lan(let h): return "local · \(h)"
+    case .account(let h): return "remote · \(h)"
     case .relay(let h): return "remote · \(h)"
     }
   }

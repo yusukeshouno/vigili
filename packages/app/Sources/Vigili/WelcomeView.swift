@@ -131,8 +131,30 @@ struct WelcomeView: View {
   }
 
   private var footer: some View {
-    HStack {
+    HStack(spacing: 10) {
+      Button(action: { coordinator.connectToClaudeCode() }) {
+        HStack(spacing: 4) {
+          Image(systemName: coordinator.hookInstalled ? "checkmark.circle.fill" : "link")
+            .font(.system(size: 10))
+          Text(coordinator.hookInstalled ? "Claude Code 接続済み" : "Claude Code に接続")
+            .font(.system(size: 11, weight: .medium))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Capsule().stroke(Theme.border, lineWidth: 1))
+        .foregroundStyle(coordinator.hookInstalled ? Theme.green : Theme.fg)
+      }
+      .buttonStyle(.plain)
+
+      if let s = coordinator.connectStatus {
+        Text(s)
+          .font(.system(size: 9))
+          .foregroundStyle(Theme.fgDim)
+          .lineLimit(2)
+      }
+
       Spacer()
+
       Button(action: { coordinator.dismissWelcome() }) {
         Text("Got it")
           .font(.system(size: 12, weight: .semibold))
@@ -148,7 +170,7 @@ struct WelcomeView: View {
   /// 外出先用 relay ペアリングのステータスとセットアップ案内。
   @ViewBuilder
   private var remoteSection: some View {
-    let hasRelay = SetupPayload.relayConfigured()
+    let hasRelay = SetupPayload.relayConfigured() || coordinator.relayConfigured
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: hasRelay ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right")
         .font(.system(size: 13))
@@ -168,35 +190,27 @@ struct WelcomeView: View {
           Text("外出先でも使う（任意）")
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(Theme.fg)
-          Text("relay 経由のセットアップを行うと、Wi-Fi 外でも接続できます。Terminal で 1 回ペアリングしてから QR を再表示してください。")
+          Text("Sign in with Apple すると、この Mac が relay に接続され、Wi-Fi 外でもスマホに承認が届きます。ターミナルも QR も不要です。")
             .font(.system(size: 10))
             .foregroundStyle(Theme.fgDim)
             .fixedSize(horizontal: false, vertical: true)
-          HStack(spacing: 8) {
-            Button(action: copyPairCommand) {
-              HStack(spacing: 4) {
-                Image(systemName: "doc.on.doc").font(.system(size: 9))
-                Text("コマンドをコピー").font(.mono(9))
-              }
-              .padding(.horizontal, 8)
-              .padding(.vertical, 4)
-              .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgRise))
-              .foregroundStyle(Theme.fgMid)
+          Button(action: { coordinator.signInWithAppleAndPair() }) {
+            HStack(spacing: 5) {
+              Image(systemName: "apple.logo").font(.system(size: 10))
+              Text("Sign in with Apple").font(.system(size: 10, weight: .semibold))
             }
-            .buttonStyle(.plain)
-            Button(action: openTerminal) {
-              HStack(spacing: 4) {
-                Image(systemName: "terminal").font(.system(size: 9))
-                Text("Terminal を開く").font(.mono(9))
-              }
-              .padding(.horizontal, 8)
-              .padding(.vertical, 4)
-              .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgRise))
-              .foregroundStyle(Theme.fgMid)
-            }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Theme.fg))
+            .foregroundStyle(Theme.bg)
           }
+          .buttonStyle(.plain)
           .padding(.top, 2)
+          if let s = coordinator.signInStatus {
+            Text(s)
+              .font(.system(size: 9))
+              .foregroundStyle(Theme.fgDim)
+          }
         }
       }
       Spacer()
