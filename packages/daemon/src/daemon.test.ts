@@ -774,3 +774,50 @@ describe("startDaemon — bootstrap", () => {
     }
   });
 });
+
+describe("startDaemon — relay-configure (Sign in with Apple ホット再接続)", () => {
+  it("persists the relay section to config.yaml and reports ok", async () => {
+    // 起動時 relay 無し。relay-configure admin で cold から接続を構成する。
+    const resp = (await oneShot({
+      kind: "admin",
+      action: "relay-configure",
+      url: "wss://127.0.0.1:1", // 接続は失敗してよい (config 永続化と admin 応答を確認する)
+      pairing_id: "pid-test-1234",
+      agent_key: "agentkey-test",
+    })) as AdminResponse & { action: "relay-configure" };
+
+    expect(resp.kind).toBe("admin");
+    expect(resp.action).toBe("relay-configure");
+    expect(resp.ok).toBe(true);
+    // 接続確立は非同期 (死んだポート) なので connected は false で問題ない。
+    expect(typeof resp.connected).toBe("boolean");
+
+    // config.yaml に relay セクションが書かれている (daemon が唯一の writer)。
+    const cfg = readFileSync(join(home, "config.yaml"), "utf-8");
+    expect(cfg).toContain("relay:");
+    expect(cfg).toContain("pid-test-1234");
+    expect(cfg).toContain("wss://127.0.0.1:1");
+  });
+
+  it("is idempotent across repeated configures (latest endpoint wins)", async () => {
+    await oneShot({
+      kind: "admin",
+      action: "relay-configure",
+      url: "wss://127.0.0.1:1",
+      pairing_id: "pid-first",
+      agent_key: "k1",
+    });
+    const resp = (await oneShot({
+      kind: "admin",
+      action: "relay-configure",
+      url: "wss://127.0.0.1:2",
+      pairing_id: "pid-second",
+      agent_key: "k2",
+    })) as AdminResponse & { action: "relay-configure" };
+    expect(resp.ok).toBe(true);
+
+    const cfg = readFileSync(join(home, "config.yaml"), "utf-8");
+    expect(cfg).toContain("pid-second");
+    expect(cfg).not.toContain("pid-first");
+  });
+});

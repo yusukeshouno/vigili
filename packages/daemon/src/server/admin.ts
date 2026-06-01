@@ -78,6 +78,19 @@ export const AdminRequestSchema = z.discriminatedUnion("action", [
     action: z.literal("policy-write-from-catalog"),
     selected_ids: z.array(z.string().min(1)),
   }),
+  /**
+   * Mac アプリの「Sign in with Apple」後に呼ばれる: relay の接続先を config.yaml に
+   * 永続化し、daemon の relay client をプロセス再起動なしでホット再接続させる。
+   * これで `launchctl kickstart` を経由せずにサインインだけで relay へ繋がる。
+   */
+  z.object({
+    kind: z.literal("admin"),
+    action: z.literal("relay-configure"),
+    url: z.string().url(),
+    pairing_id: z.string().min(1),
+    agent_key: z.string().min(1),
+    reconnect_max_seconds: z.number().int().positive().optional(),
+  }),
 ]);
 
 export type AdminRequest = z.infer<typeof AdminRequestSchema>;
@@ -167,6 +180,14 @@ export const AdminResponseSchema = z.discriminatedUnion("action", [
     action: z.literal("policy-write-from-catalog"),
     ok: z.boolean(),
     written: z.number().int().optional(),
+    error: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("admin"),
+    action: z.literal("relay-configure"),
+    ok: z.boolean(),
+    /** 再接続を試みた直後の接続状態 (確立は非同期なので "試行直後の値")。 */
+    connected: z.boolean().optional(),
     error: z.string().optional(),
   }),
 ]);

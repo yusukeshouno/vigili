@@ -17,7 +17,12 @@ import {
   type WsClientMessage,
   type WsServerMessage,
 } from "@vigili/shared";
-import { type SentinelConfig, loadConfigFile } from "./config.js";
+import {
+  type RelayConfigSection,
+  type SentinelConfig,
+  loadConfigFile,
+  writeRelayConfig,
+} from "./config.js";
 import { type MessageStore, createMessageStore } from "./db/messages.js";
 import { computeStats, pruneOldRequests } from "./db/stats.js";
 import { type RequestStore, openStore } from "./db/store.js";
@@ -135,6 +140,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     policyPath: p.policy,
     generatedPolicyPath: p.policyGenerated,
     broadcast: () => {},
+    reconfigureRelay: () => false,
     onMessageAdded: () => {},
     onMessageDelivered: () => {},
   };
@@ -199,30 +205,38 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   // という launchd 再起動ループ (relay agent が flap し iOS リモートが切れる) を誘発する。
   await writeFile(p.pid, String(process.pid), { mode: 0o600 });
 
-  // --- Vigili Cloud Relay への outbound WSS (Phase 14-B) ---
+  // --- Vigili Cloud Relay への outbound WSS (Phase 14-B / ホット再設定対応) ---
+  // relay は起動時に config.relay があれば即接続するが、無くても後から Mac アプリの
+  // 「Sign in with Apple」(= relay-configure admin) で接続できるよう、関連配線は常時行い、
+  // mutable な `relay` ref を null 安全 (`relay?.`) に参照する。
   let relay: RelayClient | null = null;
-  if (config.relay) {
-    // クロージャ参照のため宣言は前置きしておく (TS の hoisting に頼らず、later assignment)
+
+  function buildRelay(cfg: RelayConfigSection): RelayClient {
+    // クロージャ参照のため sendSnapshot は later assignment。
     let sendSnapshot: (() => void) | null = null;
-    relay = createRelayClient({
-      url: config.relay.url,
-      pairingId: config.relay.pairing_id,
-      agentKey: config.relay.agent_key,
-      reconnectMaxSeconds: config.relay.reconnect_max_seconds,
+    const client = createRelayClient({
+      url: cfg.url,
+      pairingId: cfg.pairing_id,
+      agentKey: cfg.agent_key,
+      reconnectMaxSeconds: cfg.reconnect_max_seconds ?? 15,
       onClientMessage: handleClientMessage,
       onOpen: () => sendSnapshot?.(),
       log,
     });
-    const relayRef = relay; // satisfy strict-null-checks within closure
     sendSnapshot = () => {
-      relayRef.send({
+      client.send({
         type: "snapshot",
         pending: queue.list(),
         messages: messageStore.listRecent(50),
         sessions: sessions.list(),
       });
-      relayRef.send({ type: "stats", stats: todayStats() });
+      client.send({ type: "stats", stats: todayStats() });
     };
+    return client;
+  }
+
+  if (config.relay) {
+    relay = buildRelay(config.relay);
     relay.start();
     log(`[vigili-daemon] relay outbound enabled (pairing=${config.relay.pairing_id})`);
   }
@@ -239,39 +253,52 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   // allow/deny カウントが動くのは resolve の瞬間なので、ここが主要な更新点。
   queue.onResolved(() => broadcastAll({ type: "stats", stats: todayStats() }));
 
-  // queue のイベントを LAN WS は内部 listener で捕まえてるが、relay の方には別途流す必要がある。
-  // 二重送信を避けるため LAN WS の onPending/onResolved 経路を残しつつ、relay には
-  // 独自に subscribe する。
-  if (relay) {
-    queue.onPending((req) => relay?.send({ type: "pending", request: req }));
-    queue.onResolved((id, decision) => relay?.send({ type: "resolved", id, decision }));
-  }
+  // relay へ pending/resolved を流す subscription は relay の有無に関わらず常時張る
+  // (relay が null の間は relay?.send が no-op)。後から relay-configure で接続しても効く。
+  queue.onPending((req) => relay?.send({ type: "pending", request: req }));
+  queue.onResolved((id, decision) => relay?.send({ type: "resolved", id, decision }));
 
   // --- LAN 外 (relay 経路) で承認が飛んでこない問題の対策 ---
-  // LAN WS は client 接続のたびに snapshot を送れるが、relay の hub は client 接続を
-  // agent (= この daemon) に通知しない。実運用では「pending 発生 → プッシュ通知 →
-  // ユーザーがアプリを開いて relay 接続」という順序なので、接続時点で既に存在する
-  // pending は snapshot 無しでは iOS 側に現れない。これが off-LAN で承認が来ない主因。
-  //
-  // hub / iOS を触らず daemon 単独で塞ぐため、pending が 1 件以上残っている間だけ
-  // relay へ snapshot を周期再送する。これで「後から接続した client」も数秒以内に
-  // 現在のキューを受け取れる。pending が空のアイドル時は一切送らない (帯域・電池節約)。
+  // pending が 1 件以上残っている間だけ relay へ snapshot を周期再送する (後から接続した
+  // client も数秒以内に現在のキューを受け取れる)。relay 未接続/未構築のときは内部ガードで no-op。
   const RELAY_SNAPSHOT_INTERVAL_MS = 3000;
-  let relaySnapshotTimer: NodeJS.Timeout | null = null;
-  if (relay) {
-    relaySnapshotTimer = setInterval(() => {
-      const r = relay;
-      if (!r?.isConnected()) return;
-      const pending = queue.list();
-      if (pending.length === 0) return;
-      r.send({
-        type: "snapshot",
-        pending,
-        messages: messageStore.listRecent(50),
-        sessions: sessions.list(),
+  const relaySnapshotTimer: NodeJS.Timeout = setInterval(() => {
+    const r = relay;
+    if (!r?.isConnected()) return;
+    const pending = queue.list();
+    if (pending.length === 0) return;
+    r.send({
+      type: "snapshot",
+      pending,
+      messages: messageStore.listRecent(50),
+      sessions: sessions.list(),
+    });
+  }, RELAY_SNAPSHOT_INTERVAL_MS);
+
+  // Mac アプリの「Sign in with Apple」→ relay-configure admin から呼ばれる。
+  // config.yaml に永続化し、relay をプロセス再起動なしで (再)接続する。
+  ctx.reconfigureRelay = (cfg) => {
+    writeRelayConfig(p.config, {
+      url: cfg.url,
+      pairing_id: cfg.pairing_id,
+      agent_key: cfg.agent_key,
+      reconnect_max_seconds: cfg.reconnect_max_seconds,
+    });
+    if (relay === null) {
+      relay = buildRelay(cfg);
+      relay.start();
+      log(`[vigili-daemon] relay outbound enabled via sign-in (pairing=${cfg.pairing_id})`);
+    } else {
+      relay.reconfigure({
+        url: cfg.url,
+        pairingId: cfg.pairing_id,
+        agentKey: cfg.agent_key,
+        reconnectMaxSeconds: cfg.reconnect_max_seconds,
       });
-    }, RELAY_SNAPSHOT_INTERVAL_MS);
-  }
+      log(`[vigili-daemon] relay reconfigured via sign-in (pairing=${cfg.pairing_id})`);
+    }
+    return relay.isConnected();
+  };
 
   // ctx の broadcast コールバックを実体に差し替える (LAN + Relay 同時)
   ctx.onMessageAdded = (m) => broadcastAll({ type: "message-added", message: m });
@@ -381,7 +408,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       clearInterval(sweepTimer);
       clearInterval(archiveTimer);
       clearInterval(digestTimer);
-      if (relaySnapshotTimer) clearInterval(relaySnapshotTimer);
+      clearInterval(relaySnapshotTimer);
       queue.cancelAll("daemon shutdown");
       await socket.close();
       if (ws) await ws.close();
@@ -484,6 +511,11 @@ interface DaemonContext {
   generatedPolicyPath: string;
   /** WS + relay に WsServerMessage を同時 broadcast する。WS/relay 構築後に差し替える。 */
   broadcast: (msg: WsServerMessage) => void;
+  /**
+   * relay の接続先 (url/pairing/agent_key) を config.yaml に永続化し、プロセス再起動なしで
+   * relay client を (再)接続する。relay 構築後に実体へ差し替える。戻り値は試行直後の接続状態。
+   */
+  reconfigureRelay: (cfg: RelayConfigSection) => boolean;
   /** WS から PWA に message-added / message-delivered を broadcast するコールバック。
    *  WS server が起動後に差し替える。startDaemon の構築時点では noop。 */
   onMessageAdded: (m: import("@vigili/shared").Message) => void;
@@ -556,6 +588,32 @@ async function handleAdmin(value: unknown, conn: ConnContext, ctx: DaemonContext
       rules: ctx.policy.rules.length,
     };
     conn.send(resp);
+    return;
+  }
+  if (req.action === "relay-configure") {
+    let connected = false;
+    try {
+      connected = ctx.reconfigureRelay({
+        url: req.url,
+        pairing_id: req.pairing_id,
+        agent_key: req.agent_key,
+        reconnect_max_seconds: req.reconnect_max_seconds,
+      });
+    } catch (err) {
+      conn.send({
+        kind: "admin",
+        action: "relay-configure",
+        ok: false,
+        error: (err as Error).message,
+      } satisfies AdminResponse);
+      return;
+    }
+    conn.send({
+      kind: "admin",
+      action: "relay-configure",
+      ok: true,
+      connected,
+    } satisfies AdminResponse);
     return;
   }
   if (req.action === "stats") {

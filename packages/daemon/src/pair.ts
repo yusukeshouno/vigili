@@ -9,9 +9,8 @@
  *    本来は再起動が必要だが、ホットリロード未対応である旨を案内する)
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { writeRelayConfig } from "./config.js";
 import { paths } from "./paths.js";
 
 interface PairingResponse {
@@ -98,8 +97,10 @@ export async function pair(args: string[]): Promise<number> {
   // 4. config.yaml を更新
   if (!skipConfig) {
     try {
-      writeRelayConfig({
-        relay: { url: baseUrl, pairing_id: pairing.id, agent_key: pairing.agent_key },
+      writeRelayConfig(paths().config, {
+        url: baseUrl,
+        pairing_id: pairing.id,
+        agent_key: pairing.agent_key,
       });
     } catch (err) {
       console.error(`[vigili-cli] config.yaml の書き込みに失敗: ${(err as Error).message}`);
@@ -225,31 +226,6 @@ async function callRelay<T>(
     throw err;
   }
   return parsed as T;
-}
-
-// ---------- config.yaml writer ----------
-
-interface RelaySection {
-  relay: {
-    url: string;
-    pairing_id: string;
-    agent_key: string;
-    reconnect_max_seconds?: number;
-  };
-}
-
-function writeRelayConfig(patch: RelaySection): void {
-  const p = paths();
-  let existing: Record<string, unknown> = {};
-  if (existsSync(p.config)) {
-    const raw = readFileSync(p.config, "utf-8");
-    const parsed = parseYaml(raw);
-    if (parsed !== null && typeof parsed === "object") {
-      existing = parsed as Record<string, unknown>;
-    }
-  }
-  existing.relay = patch.relay;
-  writeFileSync(p.config, stringifyYaml(existing), { encoding: "utf-8", mode: 0o600 });
 }
 
 // ---------- prompt helpers ----------

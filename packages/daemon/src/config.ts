@@ -1,5 +1,6 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 
 /**
@@ -112,4 +113,28 @@ export async function loadConfigFile(path: string): Promise<SentinelConfig> {
     );
   }
   return result.data;
+}
+
+export interface RelayConfigSection {
+  url: string;
+  pairing_id: string;
+  agent_key: string;
+  reconnect_max_seconds?: number | undefined;
+}
+
+/**
+ * config.yaml の relay セクションだけを冪等に差し替える (他キーは保持)。perms 0600。
+ * `vigili-cli pair` と daemon の `relay-configure` admin の両方から使う単一の writer。
+ */
+export function writeRelayConfig(configPath: string, relay: RelayConfigSection): void {
+  let existing: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
+    const raw = readFileSync(configPath, "utf-8");
+    const parsed = parseYaml(raw);
+    if (parsed !== null && typeof parsed === "object") {
+      existing = parsed as Record<string, unknown>;
+    }
+  }
+  existing.relay = relay;
+  writeFileSync(configPath, stringifyYaml(existing), { encoding: "utf-8", mode: 0o600 });
 }

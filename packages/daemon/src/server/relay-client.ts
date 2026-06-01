@@ -43,6 +43,17 @@ export interface RelayClient {
   send(msg: WsServerMessage): void;
   /** 現在 relay と接続できているか (テスト / 観測用)。 */
   isConnected(): boolean;
+  /**
+   * 接続先 (url/pairing/agent_key) を差し替え、即座に貼り直す。
+   * プロセス再起動なしで Mac アプリのサインインから relay へ繋ぐために使う。
+   * auth 失敗で停止していた場合も復活させる。
+   */
+  reconfigure(opts: {
+    url: string;
+    pairingId: string;
+    agentKey: string;
+    reconnectMaxSeconds?: number | undefined;
+  }): void;
 }
 
 /** keepalive: この間隔で ping を撃ち、次の interval までに pong が来なければ half-open とみなす。
@@ -50,7 +61,12 @@ export interface RelayClient {
 const PING_INTERVAL_MS = 10_000;
 
 export function createRelayClient(options: RelayClientOptions): RelayClient {
-  const { url, pairingId, agentKey, reconnectMaxSeconds, onClientMessage, onOpen, log } = options;
+  const { onClientMessage, onOpen, log } = options;
+  // 接続パラメータは reconfigure() で差し替えられるよう可変にする。
+  let url = options.url;
+  let pairingId = options.pairingId;
+  let agentKey = options.agentKey;
+  let reconnectMaxSeconds = options.reconnectMaxSeconds;
   let ws: WebSocket | null = null;
   let closed = false;
   let retry = 0;
@@ -98,12 +114,12 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
     }, PING_INTERVAL_MS);
   }
 
-  const endpoint = `${url.replace(/\/$/, "")}/v1/agents/${encodeURIComponent(
-    pairingId,
-  )}?token=${encodeURIComponent(agentKey)}`;
-
   function connect(): void {
     if (closed) return;
+    // endpoint は接続のたびに最新パラメータから組む (reconfigure 対応)。
+    const endpoint = `${url.replace(/\/$/, "")}/v1/agents/${encodeURIComponent(
+      pairingId,
+    )}?token=${encodeURIComponent(agentKey)}`;
     log(`[vigili-relay] connecting → ${url.replace(/\/$/, "")}/v1/agents/${pairingId}`);
     try {
       ws = new WebSocket(endpoint, { handshakeTimeout: 10_000 });
@@ -218,6 +234,33 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
     },
     isConnected() {
       return connected;
+    },
+    reconfigure(opts) {
+      url = opts.url;
+      pairingId = opts.pairingId;
+      agentKey = opts.agentKey;
+      if (opts.reconnectMaxSeconds !== undefined) reconnectMaxSeconds = opts.reconnectMaxSeconds;
+      // auth 失敗等で停止していたら復活させ、backoff もリセットして即時に貼り直す。
+      closed = false;
+      retry = 0;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      stopPing();
+      connected = false;
+      if (ws) {
+        // 旧 socket の listener を外し、close からの競合 reconnect を防いでから捨てる。
+        ws.removeAllListeners();
+        try {
+          ws.close(1000, "reconfigure");
+        } catch {
+          /* ignore */
+        }
+        ws = null;
+      }
+      log(`[vigili-relay] reconfigure → ${url.replace(/\/$/, "")}/v1/agents/${pairingId}`);
+      connect();
     },
   };
 }
