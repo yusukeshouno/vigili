@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 /// メニューバーアイコンクリックで出るポップオーバーの中身。
@@ -230,13 +231,21 @@ struct PopoverContentView: View {
   }
 
   private var emptyState: some View {
-    // popover は縦が限られるため、ヘッダー + レーダー + フッターが全部収まる
-    // ように小さめ (200) にする。これより大きいとフッターが画面外に押し出される。
-    StandingWatchView(wsState: coordinator.wsState, radarSize: 200)
-      .padding(.vertical, 16)
-      // コンテナ自体は素直にフェードのみ。浮かび上がる演出は StandingWatchView
-      // 内部の段階的 intro (ライン→星→レーダー→文字) に任せる。
-      .transition(.opacity)
+    VStack(spacing: 0) {
+      // レーダー (少し縮小してスペースを確保)
+      StandingWatchView(wsState: coordinator.wsState, radarSize: 180)
+        .padding(.vertical, 10)
+        .transition(.opacity)
+
+      // 統計ストリップ (今日の件数 + 前日比 + 7日スパークライン)
+      if coordinator.todayStats != nil || !coordinator.weekStats.isEmpty {
+        MacStatsStrip(
+          stats: coordinator.todayStats,
+          week: coordinator.weekStats
+        )
+        .padding(.top, 8)
+      }
+    }
   }
 
   private var cardList: some View {
@@ -426,6 +435,86 @@ struct PopoverContentView: View {
     let sentinel = home.appendingPathComponent(".sentinel/daemon.log")
     let url = FileManager.default.fileExists(atPath: vigili.path) ? vigili : sentinel
     NSWorkspace.shared.open(url)
+  }
+}
+
+// MARK: - Mac コンパクト統計ストリップ
+
+/// ポップオーバーの待機画面 (レーダー下) に出る 1 行 + スパークラインの統計ストリップ。
+///
+///  Today  47  ↑ +12  ▁▃▅▇▅▃█  (7 日スパークライン)
+private struct MacStatsStrip: View {
+  let stats: StatsBuckets?
+  let week: [DailyBucket]
+
+  private var todayTotal: Int { stats?.total ?? 0 }
+
+  private var delta: Int? {
+    guard stats != nil, week.count > 1 else { return nil }
+    return todayTotal - week[1].total
+  }
+
+  private var deltaLabel: String {
+    guard let d = delta else { return "" }
+    if d == 0 { return "=" }
+    return d > 0 ? "↑ +\(abs(d))" : "↓ \(abs(d))"
+  }
+
+  private var deltaColor: Color {
+    guard let d = delta else { return Theme.fgDim }
+    return d > 0 ? Theme.accent : Theme.fgDim
+  }
+
+  /// 週次スパークライン用: 古い順 (左=古, 右=今日)
+  private var sparkData: [DailyBucket] { week.reversed() }
+  private var sparkMax: Int { max(1, sparkData.map { $0.total }.max() ?? 1) }
+
+  var body: some View {
+    HStack(spacing: 10) {
+      // 「Today N」
+      HStack(alignment: .firstTextBaseline, spacing: 5) {
+        Text("Today")
+          .font(.mono(9))
+          .foregroundStyle(Theme.fgDim)
+        Text("\(todayTotal)")
+          .font(.mono(13, weight: .semibold))
+          .foregroundStyle(Theme.fg)
+          .contentTransition(.numericText())
+      }
+
+      // 前日比
+      if !deltaLabel.isEmpty {
+        Text(deltaLabel)
+          .font(.mono(9))
+          .foregroundStyle(deltaColor)
+      }
+
+      Spacer(minLength: 4)
+
+      // 7 日スパークライン (純 SwiftUI でシンプルに)
+      if !sparkData.isEmpty {
+        HStack(alignment: .bottom, spacing: 2) {
+          ForEach(sparkData) { day in
+            let h = max(2.0, 22.0 * CGFloat(day.total) / CGFloat(sparkMax))
+            let isToday = day.id == sparkData.last?.id
+            RoundedRectangle(cornerRadius: 1.5)
+              .fill(isToday ? Theme.accent : Theme.fgMid.opacity(0.45))
+              .frame(width: 5, height: h)
+          }
+        }
+        .frame(height: 22)
+      }
+    }
+    .padding(.horizontal, 2)
+    .padding(.vertical, 8)
+    .background(
+      RoundedRectangle(cornerRadius: 6)
+        .fill(Theme.bgRise)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 6)
+        .stroke(Theme.border, lineWidth: 0.5)
+    )
   }
 }
 

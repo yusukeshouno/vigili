@@ -29,6 +29,8 @@ final class AppCoordinator: ObservableObject {
   @Published var pending: [ApprovalRequest] = []
   @Published var messages: [Message] = []
   @Published var todayStats: StatsBuckets?
+  /// 直近 7 日の日別バケット (index 0=今日)。WS 経由で取得。
+  @Published var weekStats: [DailyBucket] = []
   @Published var daemonStatus: DaemonController.Status = .stopped
   @Published var wsState: DaemonWsClient.State = .disconnected
   @Published var lastError: String?
@@ -139,6 +141,11 @@ final class AppCoordinator: ObservableObject {
     wsClient.$messages
       .receive(on: DispatchQueue.main)
       .assign(to: &$messages)
+
+    // 週次バケット (WS stats メッセージ) を mirror
+    wsClient.$weekStats
+      .receive(on: DispatchQueue.main)
+      .assign(to: &$weekStats)
 
     // L4 ホスト型セッション系も coordinator に mirror
     wsClient.$sessions.receive(on: DispatchQueue.main).assign(to: &$sessions)

@@ -29,6 +29,9 @@ final class DaemonWsClient: ObservableObject {
   /// 観測可能性サマリー (今日の自動承認/承認/ブロック件数等)。
   /// daemon が接続直後と決着のたびに push する。未受信なら nil。
   @Published private(set) var stats: StatsBuckets? = nil
+  /// 直近 7 日の日別バケット (index 0=今日, 6=7日前)。
+  /// stats メッセージの `week` フィールドで配信される。ヘルスアプリ風グラフ用。
+  @Published private(set) var weekStats: [DailyBucket] = []
 
   // --- L4 ホスト型セッション (vigili run) ---
   /// 稼働中のホスト型セッション。snapshot / session-started / session-ended で更新。
@@ -396,6 +399,9 @@ final class DaemonWsClient: ObservableObject {
       if let s = obj["stats"] as? [String: Any], let parsed = StatsBuckets(dict: s) {
         stats = parsed
         appLog("ws.stats total=\(parsed.total) allow=\(parsed.byDecision.allow)")
+      }
+      if let w = obj["week"] as? [[String: Any]] {
+        weekStats = w.compactMap { DailyBucket(dict: $0) }
       }
     case "message-added":
       if let m = obj["message"] as? [String: Any], let msg = Message(dict: m) {

@@ -121,11 +121,9 @@ targets:
       path: Resources/Vigili.entitlements
       properties:
         com.apple.security.app-sandbox: false
-        # Widget (サンドボックス必須) と widget-state.json を共有するための App Group。
-        # 非サンドボックス本体でも entitlement さえ持てばコンテナを読み書きできる。
-        com.apple.security.application-groups:
-          - group.io.vigili.app.shono
         # Sign in with Apple (アカウント中心オンボーディング)。App ID で capability 有効化必須。
+        # 注: widget との IPC は App Group ではなく widget 自身のコンテナを直接読み書き
+        #     する方式 (WidgetState.swift) なので application-groups entitlement は不要。
         com.apple.developer.applesignin:
           - Default
 
@@ -289,11 +287,9 @@ targets:
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: "2DG598WNT9"
     # macOS の WidgetKit 拡張は App Sandbox 必須 (無効だと chronod/pkd が登録しない)。
-    # サンドボックス下では ~/.vigili を直読みできないため App Group 共有コンテナで
-    # widget-state.json を受け渡す。SPEC.md §9.2 参照。
+    # サンドボックス下でも widget 自身のコンテナ (~/Library/Containers/<widget>/Data)
+    # に本体が直接 widget-state.json を書き込む方式なので App Group は不要。SPEC.md §9.2 参照。
     entitlements:
       path: Resources/VigiliWidget.entitlements
       properties:
         com.apple.security.app-sandbox: true
-        com.apple.security.application-groups:
-          - group.io.vigili.app.shono

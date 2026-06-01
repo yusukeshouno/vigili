@@ -32,6 +32,8 @@ final class MobileAppCoordinator: ObservableObject {
   @Published var messages: [Message] = []
   /// 観測可能性サマリー (今日の自動承認/承認/ブロック件数等)。待機画面カードが表示する。
   @Published var stats: StatsBuckets? = nil
+  /// 直近 7 日の日別バケット (index 0=今日, 6=7日前)。週次グラフ用。
+  @Published var weekStats: [DailyBucket] = []
   @Published var wsState: DaemonWsClient.State = .disconnected
   @Published var isConfigured: Bool = MobileSettings.isConfigured
   /// 現在どの経路で繋がっているか (UI 表示用)。
@@ -81,6 +83,9 @@ final class MobileAppCoordinator: ObservableObject {
     wsClient.$stats
       .receive(on: DispatchQueue.main)
       .assign(to: &$stats)
+    wsClient.$weekStats
+      .receive(on: DispatchQueue.main)
+      .assign(to: &$weekStats)
 
     // L4 ホスト型セッション系も mirror
     wsClient.$sessions.receive(on: DispatchQueue.main).assign(to: &$sessions)

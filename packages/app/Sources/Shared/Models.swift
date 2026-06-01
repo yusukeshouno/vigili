@@ -249,6 +249,52 @@ struct StatsBuckets {
   }
 }
 
+// MARK: -
+
+/// 1 日分の統計バケット。WS `stats` メッセージの `week` 配列要素。
+/// index 0 = 今日、index 6 = 7 日前。
+struct DailyBucket: Identifiable {
+  let date: String  // "YYYY-MM-DD"
+  let stats: StatsBuckets
+  var id: String { date }
+
+  /// Vigili が自動処理した件数 (allow - 人間承認)。
+  var auto: Int {
+    let human = (stats.bySource["human-pwa"] ?? 0) + (stats.bySource["human-cli"] ?? 0)
+    return max(0, stats.byDecision.allow - human)
+  }
+  /// 人間が明示承認した件数。
+  var humanApproved: Int {
+    (stats.bySource["human-pwa"] ?? 0) + (stats.bySource["human-cli"] ?? 0)
+  }
+  /// ブロックした件数。
+  var denied: Int { stats.byDecision.deny }
+  /// 総件数 (auto + human + denied + cancelled 等)。
+  var total: Int { stats.total }
+
+  init?(dict: [String: Any]) {
+    guard
+      let date = dict["date"] as? String,
+      let parsed = StatsBuckets(dict: dict)
+    else { return nil }
+    self.date = date
+    self.stats = parsed
+  }
+
+  /// 曜日の短縮形 ("M" "T" "W" "T" "F" "S" "S")。
+  var weekdayLetter: String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    guard let d = formatter.date(from: date) else { return "?" }
+    let cal = Calendar.current
+    let weekday = cal.component(.weekday, from: d)
+    // Sun=1, Mon=2 ... Sat=7 → "S","M","T","W","T","F","S"
+    let letters = ["S", "M", "T", "W", "T", "F", "S"]
+    let idx = weekday - 1
+    return (idx >= 0 && idx < letters.count) ? letters[idx] : "?"
+  }
+}
+
 /// daemon の `PolicyRule` (shared/src/policy.ts) と対応する Swift モデル。
 /// when の各フィールドを一行サマリーに変換して表示に使う。
 struct PolicyRule: Identifiable {
