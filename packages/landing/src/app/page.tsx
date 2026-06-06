@@ -1,6 +1,7 @@
 import { Footer } from "@/components/Footer";
 import { Hero } from "@/components/Hero";
 import { HowSection } from "@/components/HowSection";
+import { QuickStart } from "@/components/QuickStart";
 import { SecuritySection } from "@/components/SecuritySection";
 import { Showcase } from "@/components/Showcase";
 import { Surfaces } from "@/components/Surfaces";
@@ -24,6 +25,7 @@ export default async function Page({ searchParams }: PageProps) {
       <TopBar lang={lang} copy={copy} />
       <main>
         <Hero lang={lang} copy={copy} />
+        <QuickStart />
         <Surfaces copy={copy} />
         <Showcase copy={copy} />
         <WhySection copy={copy} />

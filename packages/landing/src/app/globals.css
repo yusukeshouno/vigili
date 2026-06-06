@@ -60,6 +60,7 @@ html {
 body {
   font-family: var(--font-ui);
   color: var(--color-fg);
+  overflow-x: hidden;
   /* ページ全体で 1 本のグラデーション。各セクションは透明にしてこの上に乗る。
      上から下に向かって少しずつ深い黒に落ちていく。 */
   background: linear-gradient(
@@ -436,6 +437,200 @@ nav.top .wrap {
   gap: 10px;
 }
 
+/* ============================================================
+   Download CTA
+   ============================================================ */
+.dl-cta {
+  margin-top: 36px;
+}
+
+.dl-btns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+
+.dl-btn-primary {
+  background: var(--color-coral);
+  color: var(--color-deep);
+  border: none;
+}
+.dl-btn-primary:hover {
+  background: var(--color-coral-soft);
+}
+
+.dl-btn-ghost {
+  background: transparent;
+  color: var(--color-fg);
+  border: 1px solid var(--color-rule);
+}
+.dl-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dl-btn-disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.dl-btn-disabled:hover {
+  background: transparent;
+}
+
+.dl-version {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.65;
+  margin-left: 2px;
+}
+
+/* Brew command row */
+.dl-brew {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-rule);
+  border-radius: 8px;
+  padding: 8px 14px;
+}
+
+.brew-cmd {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  color: var(--color-fg-2);
+  user-select: all;
+}
+
+.brew-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--color-fg-4);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.brew-copy:hover {
+  color: var(--color-fg);
+}
+
+.dl-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--color-fg-4);
+}
+
+/* dark variant tweaks */
+.dl-cta-dark .dl-btn-ghost {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.dl-cta-dark .dl-brew {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================================
+   Quick Start section
+   ============================================================ */
+.qs {
+  padding: 80px 0;
+  border-top: 1px solid var(--color-rule);
+}
+
+.qs-title {
+  margin-top: 12px;
+  font-size: clamp(24px, 3.5vw, 36px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  max-width: 520px;
+}
+
+.qs-steps {
+  margin-top: 48px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+@media (max-width: 768px) {
+  .qs-steps {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
+.qs-step {
+  display: flex;
+  gap: 16px;
+}
+
+.qs-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-coral);
+  color: var(--color-deep);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.qs-body h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--color-fg);
+}
+
+.qs-body p {
+  font-size: 14px;
+  color: var(--color-fg-3);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.qs-code {
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-rule);
+  border-radius: 6px;
+  padding: 6px 12px;
+  display: inline-block;
+}
+
+.qs-code code {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--color-fg-2);
+}
+
 /* hero stage */
 .stage {
   position: relative;
@@ -777,7 +972,7 @@ section + section {
 /* three-views section */
 .views {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
 }
 .view-card {
@@ -1064,9 +1259,10 @@ section + section {
 }
 .tour-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
   margin-top: 60px;
+  align-items: stretch;
 }
 .step {
   background: var(--color-surface);
@@ -1107,12 +1303,16 @@ section + section {
 }
 .step h3 {
   font-size: 20px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .step p {
   margin: 0;
   color: var(--color-fg-2);
   font-size: 14.5px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* QR (dark theme: invert — light dots on dark) */
@@ -1244,9 +1444,10 @@ section + section {
 }
 .problem-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
   position: relative;
+  align-items: stretch;
 }
 .pcard {
   background: rgba(255, 255, 255, 0.03);
@@ -1548,8 +1749,9 @@ section + section {
 /* security */
 .sec-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
+  align-items: stretch;  /* 全カードを同じ高さに */
 }
 .sec-card {
   background: var(--color-surface);
@@ -1558,16 +1760,22 @@ section + section {
   padding: 32px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px -16px rgba(0, 0, 0, 0.5);
   position: relative;
+  display: flex;
+  flex-direction: column;  /* 縦並びで高さ 100% を占める */
 }
 .sec-card h3 {
   font-size: 21px;
   margin: 14px 0 10px;
+  overflow-wrap: anywhere;  /* 日本語の長い見出しも折り返す */
+  word-break: break-word;
 }
 .sec-card p {
   color: var(--color-fg-2);
   font-size: 14.5px;
   line-height: 1.55;
   margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .sec-card .icon {
   width: 42px;

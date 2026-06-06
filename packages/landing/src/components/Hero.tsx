@@ -1,5 +1,5 @@
 import type { Copy, Lang } from "@/lib/copy";
-import { WaitlistForm } from "./WaitlistForm";
+import { DownloadCTA } from "./DownloadCTA";
 
 /**
  * Hero. 右側は実際の動作デモ動画を再生する。
@@ -28,9 +28,7 @@ export function Hero({ lang, copy }: { lang: Lang; copy: Copy }) {
             </span>
           </h1>
           <p className="lead h-sub">{copy.heroSubtitle}</p>
-          <div id="waitlist">
-            <WaitlistForm lang={lang} copy={copy} />
-          </div>
+          <DownloadCTA />
         </div>
 
         <div className="stage">

@@ -99,10 +99,10 @@ const en: Copy = {
   navProduct: "Product",
   navHow: "How it works",
   navSecurity: "Security",
-  navWaitlist: "Get notified",
+  navWaitlist: "Download",
   langSwitchTo: "日本語",
 
-  heroPill: "Coming soon · macOS + iOS",
+  heroPill: "Available now · macOS + iOS",
   // 行分割は <br /> ではなく `\n` で表現し、コンポーネント側で分割する。
   heroTitleLeft: "Five sessions.",
   heroTitleEm: "One list",
@@ -192,7 +192,7 @@ const en: Copy = {
   sec3Body:
     "If something goes wrong with Vigili, Claude stops and waits. It never approves on its own when you're not watching. Every window stays blocked until you're back.",
 
-  footerEyebrow: "Coming soon",
+  footerEyebrow: "Download now",
   footerTitle: "All your Claude sessions. One list to work through.",
   footerPrivacy: "Privacy",
 };
@@ -201,10 +201,10 @@ const ja: Copy = {
   navProduct: "プロダクト",
   navHow: "仕組み",
   navSecurity: "セキュリティ",
-  navWaitlist: "通知を受け取る",
+  navWaitlist: "ダウンロード",
   langSwitchTo: "English",
 
-  heroPill: "近日公開 · macOS + iOS",
+  heroPill: "公開中 · macOS + iOS",
   // 半角スペースを残すと word-break: keep-all が "1 " と "つのリスト" の間で折り返す。
   // JA 側は半角スペースを除去して 1 つの単位として扱う。
   heroTitleLeft: "5 セッション、",

@@ -27,11 +27,11 @@ export function Showcase({ copy }: { copy: Copy }) {
               STEP <b>01</b>
             </div>
             <div className="ill">
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start", maxWidth: "100%" }}>
                 {/* Apple sign-in button mockup */}
                 <div
                   style={{
-                    display: "flex",
+                    display: "inline-flex",
                     alignItems: "center",
                     gap: 8,
                     background: "#000",
@@ -41,6 +41,8 @@ export function Showcase({ copy }: { copy: Copy }) {
                     fontSize: 13,
                     fontWeight: 600,
                     letterSpacing: 0.1,
+                    boxSizing: "border-box",
+                    maxWidth: "100%",
                   }}
                 >
                   <svg width="14" height="17" viewBox="0 0 14 17" fill="white" aria-hidden>

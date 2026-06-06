@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Copy, Lang } from "@/lib/copy";
 import { VigiliMark } from "./Sparkle";
-import { WaitlistForm } from "./WaitlistForm";
+import { DownloadCTA } from "./DownloadCTA";
 
 export function Footer({ lang, copy }: { lang: Lang; copy: Copy }) {
   return (
@@ -12,7 +12,7 @@ export function Footer({ lang, copy }: { lang: Lang; copy: Copy }) {
             {copy.footerEyebrow}
           </span>
           <h2>{copy.footerTitle}</h2>
-          <WaitlistForm lang={lang} copy={copy} variant="dark" />
+          <DownloadCTA variant="dark" />
         </div>
         <div className="foot-row">
           <Link href="#top" className="brand">
