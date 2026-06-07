@@ -106,13 +106,28 @@ async function loadOnePolicy(path: string): Promise<PolicyConfig> {
  * いずれかにマッチしたら、そのルールが invariant を上書きしていると判定する。
  */
 const INVARIANT_PROBE_COMMANDS: readonly string[] = [
+  // rm -rf root (canonical + フラグ順序/分割/long-form の等価別表記)
   "rm -rf /",
+  "rm -fr /",
+  "rm -r -f /",
+  "rm -f -r /",
+  "rm --recursive --force /",
+  "rm --force --recursive /",
   "rm -rf /usr/local",
+  "rm -rf '/'",
+  // rm -rf home
   "rm -rf ~/",
+  "rm -fr ~/",
   "rm -rf ~/Documents",
+  "rm --recursive --force $HOME",
+  // git force push to protected branch (前置/後置/refspec/long-form)
   "git push --force origin main",
+  "git push origin main --force",
   "git push -f origin master",
+  "git push origin master -f",
   "git push --force-with-lease origin production",
+  "git push origin +main",
+  "git push origin +refs/heads/master",
 ];
 
 export function validatePolicyAgainstInvariants(policy: PolicyConfig): void {
