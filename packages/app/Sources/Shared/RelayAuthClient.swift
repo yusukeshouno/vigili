@@ -4,6 +4,23 @@ import Foundation
 enum RelayConstants {
   /// relay の base URL。daemon の pair.ts デフォルトと揃える。
   static let base = "https://relay.vigili.io"
+
+  /// relay として受け入れる唯一のホスト。
+  /// deeplink/QR から渡された relay URL がこのホストかを必ず検証する
+  /// (攻撃者が悪意ある relay に接続先を差し替えるのを防ぐ)。
+  static let allowedHost = "relay.vigili.io"
+
+  /// 与えられた文字列が「https://relay.vigili.io(:port)(/path)」形式かを検証する。
+  /// - scheme は https のみ (平文 http は拒否)
+  /// - host は allowedHost と完全一致 (サブドメイン偽装も拒否)
+  static func isTrustedRelayURL(_ raw: String) -> Bool {
+    guard let c = URLComponents(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
+      c.scheme?.lowercased() == "https",
+      let host = c.host?.lowercased(),
+      host == allowedHost
+    else { return false }
+    return true
+  }
 }
 
 struct RelaySession: Decodable {

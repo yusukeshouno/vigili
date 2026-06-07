@@ -378,6 +378,12 @@ struct MobileSetupView: View {
         let trimmedU = u.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedR = r.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedP.isEmpty, !trimmedU.isEmpty, !trimmedR.isEmpty {
+          // SECURITY: relay は Vigili 運用の単一ホストのみ。悪意ある QR で
+          // 接続先を攻撃者 relay に差し替えられるのを防ぐ。
+          guard RelayConstants.isTrustedRelayURL(trimmedR) else {
+            error = "信頼できない relay URL です"
+            return false
+          }
           // relay 経路は別チャンネルに保存 (LAN credentials は消さない)
           MobileSettings.relayUrl = trimmedR
           MobileSettings.relayPid = trimmedP

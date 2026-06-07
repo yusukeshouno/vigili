@@ -243,8 +243,9 @@ final class MobileAppCoordinator: ObservableObject {
   ///
   /// 既存の他経路は消さない (両方並列に保てる)。
   func handleSetupURL(_ url: URL) {
-    appLog("MobileAppCoordinator.handleSetupURL: \(url.absoluteString.prefix(80))")
+    // 注意: URL 全体をログに出さない (クエリに token が乗るため)。scheme/host のみ。
     let scheme = url.scheme?.lowercased() ?? ""
+    appLog("MobileAppCoordinator.handleSetupURL: \(scheme)://\(url.host ?? "?")")
     guard scheme == "sentinel" || scheme == "vigili" else { return }
     let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
     let items = comps?.queryItems ?? []
@@ -265,6 +266,12 @@ final class MobileAppCoordinator: ObservableObject {
         appLog("MobileAppCoordinator.handleSetupURL: pair fields empty")
         return
       }
+      // SECURITY: relay は Vigili が運用する単一ホストのみ許可。
+      // 攻撃者が細工リンクで悪意ある relay に接続先を差し替えるのを防ぐ。
+      guard RelayConstants.isTrustedRelayURL(relay) else {
+        appLog("MobileAppCoordinator.handleSetupURL: untrusted relay host rejected")
+        return
+      }
       MobileSettings.relayUrl = relay
       MobileSettings.relayPid = pid
       MobileSettings.relayUserToken = userToken
@@ -278,6 +285,12 @@ final class MobileAppCoordinator: ObservableObject {
     let lanUrl = q("u")
     let lanToken = q("t")
     if !lanUrl.isEmpty && !lanToken.isEmpty {
+      // SECURITY: LAN setup は同一 LAN 上の Mac に手元の QR を読ませる前提。
+      // deeplink 経由で任意ホストを無確認で接続先にしない (private IP / .local / Tailscale 名のみ許可)。
+      guard isPlausibleLanHost(lanUrl) else {
+        appLog("MobileAppCoordinator.handleSetupURL: non-LAN host rejected for u=")
+        return
+      }
       MobileSettings.lanUrl = lanUrl
       MobileSettings.lanToken = lanToken
       didSave = true
@@ -287,6 +300,11 @@ final class MobileAppCoordinator: ObservableObject {
     let relayPid = q("p")
     let relayUserToken = q("k")
     if !relayUrl.isEmpty && !relayPid.isEmpty && !relayUserToken.isEmpty {
+      // SECURITY: relay は信頼ホストのみ。
+      guard RelayConstants.isTrustedRelayURL(relayUrl) else {
+        appLog("MobileAppCoordinator.handleSetupURL: untrusted relay host rejected")
+        return
+      }
       MobileSettings.relayUrl = relayUrl
       MobileSettings.relayPid = relayPid
       MobileSettings.relayUserToken = relayUserToken
@@ -298,6 +316,41 @@ final class MobileAppCoordinator: ObservableObject {
     } else {
       appLog("MobileAppCoordinator.handleSetupURL: no fields recognized")
     }
+  }
+
+  /// LAN setup の host が「同一 LAN にありそう」かを判定する。
+  /// 公開インターネットの任意ホストへ deeplink で接続先を差し替えられるのを防ぐ。
+  /// 許可: プライベート IP (10./172.16-31./192.168./127.)、.local、ホスト名(ドット無し or .local/.ts.net 等の内部名)。
+  /// scheme 付きで来た場合も host 部だけ取り出して判定する。
+  private func isPlausibleLanHost(_ raw: String) -> Bool {
+    var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if s.isEmpty { return false }
+    // scheme があれば host を取り出す。無ければ host:port とみなす。
+    if s.contains("://"), let h = URLComponents(string: s)?.host {
+      s = h
+    } else if let h = URLComponents(string: "ws://\(s)")?.host {
+      s = h
+    }
+    let host = s.lowercased()
+    // 公開インターネットの FQDN (例: relay.attacker.com) は拒否。
+    // プライベート IPv4 レンジ
+    if host.hasPrefix("127.") || host.hasPrefix("10.") || host.hasPrefix("192.168.") {
+      return true
+    }
+    if host.hasPrefix("172.") {
+      let parts = host.split(separator: ".")
+      if parts.count >= 2, let second = Int(parts[1]), (16...31).contains(second) {
+        return true
+      }
+    }
+    if host == "localhost" { return true }
+    // mDNS / Tailscale 等の内部名。公開 TLD を含む FQDN は除外。
+    if host.hasSuffix(".local") || host.hasSuffix(".ts.net") || host.hasSuffix(".internal") {
+      return true
+    }
+    // ドットを含まない単一ラベル (例: my-mac) は LAN ホスト名とみなす。
+    if !host.contains(".") { return true }
+    return false
   }
 
   // MARK: - 戦略選択
@@ -366,7 +419,8 @@ final class MobileAppCoordinator: ObservableObject {
       // 既に同じ経路で繋がっている — 何もしない
       return
     }
-    appLog("switchTo route=\(route) url=\(url.absoluteString.prefix(60))…")
+    // query を含めずに host/path のみログ (token が将来 url に混ざっても漏らさない)
+    appLog("switchTo route=\(route) host=\(url.host ?? "?")\(url.path)")
     currentUrl = url
     activeRoute = route
     wsClient.configure(urlBase: url, token: token)

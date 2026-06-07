@@ -293,7 +293,8 @@ final class DaemonWsClient: ObservableObject {
     let task = s.webSocketTask(with: url)
     self.task = task
     task.resume()
-    appLog("ws.connect → \(url.absoluteString.prefix(60))…")
+    // SECURITY: query (?token=…) はログに出さない。scheme/host/path のみ。
+    appLog("ws.connect → \(components.scheme ?? "?")://\(components.host ?? "?")\(components.path)")
 
     // 受信ループ
     receiveTask = Task { @MainActor [weak self] in
