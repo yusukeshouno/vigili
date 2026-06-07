@@ -12,6 +12,22 @@ coverage/
 # Sentinel runtime artifacts (should never live in repo)
 /.sentinel/
 
+# Secrets — must never be committed (defense in depth on top of .env rules)
+*.p8
+*.pem
+*.key
+*.p12
+*.mobileprovision
+AuthKey_*.p8
+id_rsa
+id_ed25519
+
+# Local databases / runtime state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
 # pnpm
 .pnpm-store/
 .vercel

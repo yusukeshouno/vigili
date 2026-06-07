@@ -47,17 +47,24 @@ enum MobileSettings {
     }
   }
 
+  /// LAN の access token。SECURITY: 認証情報なので Keychain に保存する
+  /// (UserDefaults は平文 plist でデバイスバックアップから復元可能なため不可)。
+  /// 旧バージョンが UserDefaults に書いた値は初回読み出し時に Keychain へ移行する。
   static var lanToken: String? {
     get {
       migrateLegacyIfNeeded()
-      return UserDefaults.standard.string(forKey: Key.lanToken)
+      migrateTokenToKeychainIfNeeded(
+        udKey: Key.lanToken, account: KeychainStore.lanTokenAccount)
+      return KeychainStore.get(account: KeychainStore.lanTokenAccount)
     }
     set {
       if let v = newValue, !v.isEmpty {
-        UserDefaults.standard.set(v, forKey: Key.lanToken)
+        KeychainStore.set(v, account: KeychainStore.lanTokenAccount)
       } else {
-        UserDefaults.standard.removeObject(forKey: Key.lanToken)
+        KeychainStore.delete(account: KeychainStore.lanTokenAccount)
       }
+      // 旧 UserDefaults 値が残っていれば消す (二重保管しない)。
+      UserDefaults.standard.removeObject(forKey: Key.lanToken)
     }
   }
 
@@ -120,17 +127,21 @@ enum MobileSettings {
     }
   }
 
+  /// legacy relay (QR pairing) の user_token。SECURITY: 認証情報なので Keychain に保存。
   static var relayUserToken: String? {
     get {
       migrateLegacyIfNeeded()
-      return UserDefaults.standard.string(forKey: Key.relayUserToken)
+      migrateTokenToKeychainIfNeeded(
+        udKey: Key.relayUserToken, account: KeychainStore.relayUserTokenAccount)
+      return KeychainStore.get(account: KeychainStore.relayUserTokenAccount)
     }
     set {
       if let v = newValue, !v.isEmpty {
-        UserDefaults.standard.set(v, forKey: Key.relayUserToken)
+        KeychainStore.set(v, account: KeychainStore.relayUserTokenAccount)
       } else {
-        UserDefaults.standard.removeObject(forKey: Key.relayUserToken)
+        KeychainStore.delete(account: KeychainStore.relayUserTokenAccount)
       }
+      UserDefaults.standard.removeObject(forKey: Key.relayUserToken)
     }
   }
 
@@ -229,6 +240,17 @@ enum MobileSettings {
     ud.set(true, forKey: Key.migrated)
   }
 
+  /// 旧バージョンが UserDefaults に平文保存していたトークンを Keychain へ移行する。
+  /// Keychain に既に値があれば何もしない。移行後は UserDefaults 側を削除する。
+  private static func migrateTokenToKeychainIfNeeded(udKey: String, account: String) {
+    let ud = UserDefaults.standard
+    guard let legacy = ud.string(forKey: udKey), !legacy.isEmpty else { return }
+    if KeychainStore.get(account: account) == nil {
+      KeychainStore.set(legacy, account: account)
+    }
+    ud.removeObject(forKey: udKey)
+  }
+
   static func clear() {
     let ud = UserDefaults.standard
     for k in [
@@ -239,6 +261,8 @@ enum MobileSettings {
     }
     KeychainStore.delete(account: KeychainStore.sessionTokenAccount)
     KeychainStore.delete(account: KeychainStore.sessionExpiresAccount)
+    KeychainStore.delete(account: KeychainStore.lanTokenAccount)
+    KeychainStore.delete(account: KeychainStore.relayUserTokenAccount)
     // migrated フラグは残す (再 migration 不要)
   }
 
@@ -246,6 +270,7 @@ enum MobileSettings {
     let ud = UserDefaults.standard
     ud.removeObject(forKey: Key.lanUrl)
     ud.removeObject(forKey: Key.lanToken)
+    KeychainStore.delete(account: KeychainStore.lanTokenAccount)
   }
 
   static func clearRelay() {
@@ -253,6 +278,7 @@ enum MobileSettings {
     ud.removeObject(forKey: Key.relayUrl)
     ud.removeObject(forKey: Key.relayPid)
     ud.removeObject(forKey: Key.relayUserToken)
+    KeychainStore.delete(account: KeychainStore.relayUserTokenAccount)
   }
 
   static func clearAccount() {

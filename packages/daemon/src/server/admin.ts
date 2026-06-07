@@ -25,6 +25,22 @@ export const AdminRequestSchema = z.discriminatedUnion("action", [
     decision: FinalDecisionSchema,
     reason: z.string().optional(),
   }),
+  /**
+   * PostToolUse hook 用: Claude Code がツールを実行した後に呼ばれ、
+   * 対応する pending を allow で解決して Vigili 側の stale item を消す。
+   *
+   * tool_name + tool_input が与えられた場合は「session_id かつ
+   * 実行されたツールと一致する pending」だけを解決する (粒度を絞り、
+   * 同一セッションの未承認 pending の巻き込み allow を防ぐ)。
+   * tool_name 省略時は後方互換で session 全件を解決する。
+   */
+  z.object({
+    kind: z.literal("admin"),
+    action: z.literal("resolve-by-session"),
+    session_id: z.string().min(1),
+    tool_name: z.string().optional(),
+    tool_input: z.record(z.unknown()).optional(),
+  }),
   z.object({
     kind: z.literal("admin"),
     action: z.literal("reload"),
@@ -128,6 +144,12 @@ export const AdminResponseSchema = z.discriminatedUnion("action", [
     action: z.literal("resolve"),
     ok: z.boolean(),
     error: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("admin"),
+    action: z.literal("resolve-by-session"),
+    ok: z.literal(true),
+    resolved: z.number().int(),
   }),
   z.object({
     kind: z.literal("admin"),

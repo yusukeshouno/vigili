@@ -16,6 +16,10 @@ enum KeychainStore {
   static let sessionTokenAccount = "relay.session.token"
   /// session の expires_at (秒)。表示・期限判定用 (ベストエフォート)。
   static let sessionExpiresAccount = "relay.session.expires"
+  /// LAN daemon の access token (QR ペアリングで受け取る Bearer)。
+  static let lanTokenAccount = "lan.token"
+  /// legacy relay (QR pairing) の user_token。
+  static let relayUserTokenAccount = "relay.user_token"
 
   @discardableResult
   static func set(_ value: String, account: String) -> Bool {

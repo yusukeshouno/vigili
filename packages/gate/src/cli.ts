@@ -114,15 +114,59 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  // hook_event_name は PreToolUse か PermissionRequest。
-  // Claude Code は両方の event で異なる JSON 形式を期待する。
+  // hook_event_name は PreToolUse / PermissionRequest / PostToolUse のいずれか。
   const hookEventRaw =
     parsed !== null && typeof parsed === "object"
       ? (parsed as { hook_event_name?: unknown }).hook_event_name
       : undefined;
+  dbg("hook event:", hookEventRaw);
+
+  // PostToolUse: ツールが実際に実行された後に呼ばれる。
+  // 実行されたツールに対応する pending を allow で解決し、Vigili から stale item を消す。
+  if (hookEventRaw === "PostToolUse") {
+    const obj = parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    const sessionId = args.session ?? (typeof obj.session_id === "string" ? obj.session_id : undefined);
+    // tool_name / tool_input を渡すと daemon 側で「実行されたツールと一致する
+    // pending だけ」を解決でき、同一セッションの未承認 pending の巻き込みを防ぐ。
+    const toolName = typeof obj.tool_name === "string" ? obj.tool_name : undefined;
+    const toolInput =
+      obj.tool_input !== null && typeof obj.tool_input === "object"
+        ? (obj.tool_input as Record<string, unknown>)
+        : undefined;
+    if (typeof sessionId === "string" && sessionId) {
+      try {
+        const { createConnection } = await import("node:net");
+        await new Promise<void>((resolve) => {
+          const conn = createConnection(args.socketPath);
+          conn.once("connect", () => {
+            conn.write(
+              JSON.stringify({
+                kind: "admin",
+                action: "resolve-by-session",
+                session_id: sessionId,
+                ...(toolName !== undefined ? { tool_name: toolName } : {}),
+                ...(toolInput !== undefined ? { tool_input: toolInput } : {}),
+              }) + "\n",
+            );
+            conn.once("data", () => conn.destroy());
+            conn.once("close", () => resolve());
+          });
+          conn.once("error", () => resolve()); // daemon 未起動でも黙って終了
+          setTimeout(() => {
+            conn.destroy();
+            resolve();
+          }, 1000);
+        });
+        dbg("PostToolUse: resolve-by-session sent for", sessionId, toolName);
+      } catch (e) {
+        dbg("PostToolUse: error", (e as Error).message);
+      }
+    }
+    return 0; // PostToolUse は常に exit 0 (ブロックしない)
+  }
+
   const hookEvent: "PreToolUse" | "PermissionRequest" =
     hookEventRaw === "PermissionRequest" ? "PermissionRequest" : "PreToolUse";
-  dbg("hook event:", hookEvent);
 
   // hook ペイロードに session/tag フラグの値を埋め込む。
   if (parsed !== null && typeof parsed === "object") {
@@ -166,11 +210,25 @@ async function main(): Promise<number> {
     return 0;
   }
 
+  // "ask" 待機中に Claude Code 側で permission が付与されたか 2 秒ごとに確認する。
+  // settings.json の permissions.allow に該当ルールが追加された場合に即 allow で抜ける。
+  const toolReq = reqResult.data;
+  const isExternallyApproved = (): boolean => {
+    try {
+      const freshPerms = loadClaudePermissions(toolReq.cwd);
+      const match = matchClaudePermissions(freshPerms, toolReq);
+      return match.matched && match.reason !== "deny";
+    } catch {
+      return false;
+    }
+  };
+
   dbg("sending to daemon socket:", args.socketPath);
   try {
     const result = await sendToDaemon(reqResult.data, {
       socketPath: args.socketPath,
       trace: (event, detail) => dbg("daemon trace:", event, detail),
+      isExternallyApproved,
     });
     dbg("daemon result:", result);
     const additional = formatMessagesAsContext(result.messages);

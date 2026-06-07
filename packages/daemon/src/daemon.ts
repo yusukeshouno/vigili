@@ -224,6 +224,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       reconnectMaxSeconds: cfg.reconnect_max_seconds ?? 15,
       onClientMessage: handleClientMessage,
       onOpen: () => sendSnapshot?.(),
+      onRefreshSnapshot: () => sendSnapshot?.(),
       log,
     });
     sendSnapshot = () => {
@@ -259,7 +260,21 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   // relay へ pending/resolved を流す subscription は relay の有無に関わらず常時張る
   // (relay が null の間は relay?.send が no-op)。後から relay-configure で接続しても効く。
   queue.onPending((req) => relay?.send({ type: "pending", request: req }));
-  queue.onResolved((id, decision) => relay?.send({ type: "resolved", id, decision }));
+  // resolved はローカル WS クライアント (iOS/Mac LAN) と relay の両方へ送る。
+  // broadcastAll は ws?.broadcast + relay?.send の両方を呼ぶので一箇所で済む。
+  queue.onResolved((id, decision) => broadcastAll({ type: "resolved", id, decision }));
+  // ベルト＆サスペンダー: resolved のたびに現在の pending 全件を snapshot で送る。
+  // "resolved" メッセージを見逃したクライアント (relay 瞬断・LAN 再接続) も
+  // この snapshot で確実に stale item が消える。
+  // empty 判定はしない — 複数 pending 中の 1 件が resolved になるケースも含む。
+  queue.onResolved(() => {
+    broadcastAll({
+      type: "snapshot",
+      pending: queue.list(),
+      messages: messageStore.listRecent(50),
+      sessions: sessions.list(),
+    });
+  });
 
   // --- LAN 外 (relay 経路) で承認が飛んでこない問題の対策 ---
   // pending が 1 件以上残っている間だけ relay へ snapshot を周期再送する (後から接続した
@@ -800,6 +815,31 @@ async function handleAdmin(value: unknown, conn: ConnContext, ctx: DaemonContext
       return;
     }
   }
+  // resolve-by-session: PostToolUse hook 用
+  // Claude Code がツールを実行した後に呼ばれ、対応する pending を allow で解決する。
+  // tool_name が与えられた場合は「session_id かつ実行ツールと一致」する pending
+  // だけを解決し、同一セッションの未承認 pending の巻き込み allow を防ぐ。
+  if (req.action === "resolve-by-session") {
+    const candidates = ctx.queue.list().filter((r) => {
+      if (r.session_id !== req.session_id) return false;
+      // tool_name 省略時は後方互換: session 全件。
+      if (req.tool_name === undefined) return true;
+      if (r.tool_name !== req.tool_name) return false;
+      // tool_input が与えられていれば安定キーで照合 (表記揺れに強くするため
+      // Bash は command、Edit/Write は file_path のみ比較。なければ tool_name 一致で許容)。
+      if (req.tool_input === undefined) return true;
+      return toolInputMatches(r.tool_name, r.tool_input, req.tool_input);
+    });
+    let resolved = 0;
+    for (const item of candidates) {
+      const ok = ctx.queue.resolve(item.id, "allow", "human:post-tool-use", "Claude Code approved");
+      if (ok) resolved++;
+    }
+    const resp: AdminResponse = { kind: "admin", action: "resolve-by-session", ok: true, resolved };
+    conn.send(resp);
+    return;
+  }
+
   // resolve
   const ok = ctx.queue.resolve(req.id, req.decision, "human:cli", req.reason ?? null);
   const resp: AdminResponse = ok
@@ -811,6 +851,35 @@ async function handleAdmin(value: unknown, conn: ConnContext, ctx: DaemonContext
         error: `id ${req.id} は pending にありません (既に決着 / タイムアウト / 未知)`,
       };
   conn.send(resp);
+}
+
+/**
+ * PostToolUse の tool_input と pending の tool_input が「同じ操作」かを判定する。
+ * tool_input 全体の deep equal は表記揺れ (キー順・付随フィールド) に弱いため、
+ * ツール種別ごとの安定キーだけを比較する。
+ *   - Bash: command
+ *   - Edit/Write/MultiEdit/NotebookEdit: file_path
+ *   - それ以外: 安定キーが無いので tool_name 一致で許容 (true)
+ */
+function toolInputMatches(
+  toolName: string,
+  pending: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): boolean {
+  const keyFor = (name: string): string | null => {
+    if (name === "Bash") return "command";
+    if (name === "Edit" || name === "Write" || name === "MultiEdit" || name === "NotebookEdit") {
+      return "file_path";
+    }
+    return null;
+  };
+  const key = keyFor(toolName);
+  if (key === null) return true; // 安定キー無し → tool_name 一致で許容
+  const a = pending[key];
+  const b = incoming[key];
+  // どちらかが文字列として取れないなら、巻き込みを避けるため不一致扱い。
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  return a === b;
 }
 
 /**
