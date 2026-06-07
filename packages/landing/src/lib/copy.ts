@@ -179,15 +179,15 @@ const en: Copy = {
     "Requests your rules can't decide — typically 5–15% to start — get pushed to your phone. One list across all windows, worked through in order. Approve from your desk or while away. Either way, the windows resume.",
 
   secEyebrow: "Security",
-  secTitle: "Your code stays on your machine.",
+  secTitle: "Your code never leaves your machine.",
   secLead:
-    "Vigili was built so a third party never sees your code or commands. Approvals flow as encrypted identifiers — never the source. And if the service ever fails, Claude waits; it never approves on its own.",
+    "Your source files are never uploaded — only the approval prompt itself travels (the tool name and the command line being run). On the same network it stays fully local. And if the service ever fails, Claude waits; it never approves on its own.",
   sec1Title: "Same network? Direct connection.",
   sec1Body:
     "When your phone is on the same Wi-Fi as your Mac, they talk directly over your local network — nothing goes through the internet. No third party in the middle.",
   sec2Title: "Away from home? Vigili Cloud.",
   sec2Body:
-    "Sign in with Apple on your Mac and iPhone once. Vigili's cloud relay forwards notifications and approvals between your devices — never storing your source code or commands. Your Apple ID links the devices; no manual token exchange needed.",
+    "Sign in with Apple on your Mac and iPhone once. Vigili's cloud relay forwards the approval prompt between your devices over TLS — the same payload your phone shows you (the command being run), never your source files, and nothing is stored at rest. End-to-end encryption so the relay can't read the prompt either is on the roadmap.",
   sec3Title: "If Vigili stops, Claude pauses.",
   sec3Body:
     "If something goes wrong with Vigili, Claude stops and waits. It never approves on its own when you're not watching. Every window stays blocked until you're back.",
@@ -284,13 +284,13 @@ const ja: Copy = {
   secEyebrow: "セキュリティ",
   secTitle: "コードはあなたのパソコンから出ない。",
   secLead:
-    "Vigili は第三者があなたのコードやコマンドを見ない設計です。承認リクエストは暗号化された識別子として流れ、ソースコードは送信されません。Vigili が止まっても、Claude は勝手に進まず待ちます。",
+    "ソースファイルがアップロードされることはありません。流れるのは承認プロンプト自体（ツール名と実行されるコマンド行）だけです。同じネットワークなら完全にローカルで完結します。Vigili が止まっても、Claude は勝手に進まず待ちます。",
   sec1Title: "同じネットワークなら直接つながる",
   sec1Body:
     "スマホと Mac が同じ Wi-Fi にいるとき、両者はローカルネットワークで直接通信します。インターネットを経由しないので、間に第三者は入りません。",
   sec2Title: "外出先は Vigili Cloud 経由",
   sec2Body:
-    "Mac と iPhone でそれぞれ「Apple でサインイン」するだけで設定完了。Vigili のクラウド relay がデバイス間で通知と承認を転送します。ソースコードや承認内容は保存されません。Apple ID がデバイスをリンクするので、手動でのトークン交換は不要です。",
+    "Mac と iPhone でそれぞれ「Apple でサインイン」するだけで設定完了。Vigili のクラウド relay が承認プロンプトをデバイス間で TLS 越しに転送します。流れるのはスマホに表示されるのと同じ内容（実行されるコマンド）だけで、ソースファイルは送られず、保存もされません。relay 自身もプロンプトを読めない end-to-end 暗号化はロードマップにあります。",
   sec3Title: "Vigili が止まったら、Claude も止まる",
   sec3Body:
     "Vigili に問題が起きた場合、Claude はその場で止まって待ちます。あなたが見ていないときに勝手に許可することは絶対にありません。すべてのウィンドウは復帰までブロックされたままです。",
