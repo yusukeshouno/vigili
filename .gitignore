@@ -31,3 +31,6 @@ id_ed25519
 # pnpm
 .pnpm-store/
 .vercel
+
+# 配布物 (dist/) は git 管理しない — GitHub Releases で配布
+dist/

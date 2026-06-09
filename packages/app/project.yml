@@ -106,16 +106,14 @@ targets:
         PRODUCT_NAME: Vigili
         PRODUCT_BUNDLE_IDENTIFIER: io.vigili.app.shono
         MACOSX_DEPLOYMENT_TARGET: "13.0"
-        ENABLE_HARDENED_RUNTIME: "NO"
+        ENABLE_HARDENED_RUNTIME: "YES"
         SKIP_INSTALL: "NO"
         # Mac は iOS と別の Asset Catalog icon set を使う
         ASSETCATALOG_COMPILER_APPICON_NAME: MacAppIcon
-        # Personal Team で signing して widget が macOS 26 chronod に
-        # 認識されるようにする
+        # Notarization / Developer ID 配布に対応。
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_REQUIRED: "YES"
         CODE_SIGNING_ALLOWED: "YES"
-        CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: "2DG598WNT9"
     entitlements:
       path: Resources/Vigili.entitlements
@@ -186,14 +184,14 @@ targets:
         # カスタム URL スキーム: vigili://setup?u=...&t=... と
         # 旧 sentinel://setup?u=...&t=... の両方をサポート (移行期)。
         CFBundleURLTypes:
-          - CFBundleURLName: io.vigili.mobile.shono
+          - CFBundleURLName: io.vigili.mobile
             CFBundleURLSchemes:
               - vigili
               - sentinel
     settings:
       base:
         PRODUCT_NAME: Vigili
-        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile.shono
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile
         IPHONEOS_DEPLOYMENT_TARGET: "16.2"
         TARGETED_DEVICE_FAMILY: "1"
         # iOS 実機にインストールするには有効な signing が必須。
@@ -237,7 +235,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: VigiliActivity
-        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile.shono.activity
+        PRODUCT_BUNDLE_IDENTIFIER: io.vigili.mobile.activity
         IPHONEOS_DEPLOYMENT_TARGET: "16.2"
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
@@ -280,7 +278,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.vigili.app.shono.widget
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         SKIP_INSTALL: "YES"
-        ENABLE_HARDENED_RUNTIME: "NO"
+        ENABLE_HARDENED_RUNTIME: "YES"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGNING_REQUIRED: "YES"
         CODE_SIGNING_ALLOWED: "YES"
