@@ -222,9 +222,12 @@ export function createApnsSender(
               /* APNs は成功時 body 空 */
             }
           }
-          // 410 = device 無効。400 + BadDeviceToken / Unregistered も実質失効。
+          // 410 = device 無効。400 + BadDeviceToken / Unregistered / DeviceTokenNotForTopic も実質失効。
           const unregistered =
-            status === 410 || reason === "Unregistered" || reason === "BadDeviceToken";
+            status === 410 ||
+            reason === "Unregistered" ||
+            reason === "BadDeviceToken" ||
+            reason === "DeviceTokenNotForTopic";
           // exactOptionalPropertyTypes: reason は定義済みのときだけ載せる。
           const result: ApnsSendResult = { token: deviceToken, status, unregistered };
           if (reason !== undefined) result.reason = reason;
