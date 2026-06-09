@@ -26,7 +26,9 @@ describe("PairingHub", () => {
     hub.forwardAgentToClients("pid", "hello");
     expect(c1.sent.at(-1)).toBe("hello");
     expect(c2.sent.at(-1)).toBe("hello");
-    expect(agent.sent).toEqual([]);
+    // agent は client 向けの fan-out メッセージを受け取らない。
+    // (client attach 時の refresh-snapshot は受け取り得るので空チェックではなく非包含で検証)
+    expect(agent.sent).not.toContain("hello");
   });
 
   it("client → agent forwarding", () => {

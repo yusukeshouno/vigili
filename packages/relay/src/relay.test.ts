@@ -286,7 +286,11 @@ describe("relay WSS", () => {
     expect(JSON.parse(await client.next())).toMatchObject({ type: "agent-status", online: true });
 
     client.ws.send(JSON.stringify({ type: "decide", id: "y", decision: "allow" }));
-    const got = JSON.parse(await agent.next());
+    // client 接続時の refresh-snapshot がある場合はスキップして decide を探す
+    let got: { type: string; id?: string };
+    do {
+      got = JSON.parse(await agent.next());
+    } while (got.type === "refresh-snapshot");
     expect(got).toMatchObject({ type: "decide", id: "y" });
     client.close();
     agent.close();
@@ -385,6 +389,8 @@ describe("account-centric (Sign in with Apple)", () => {
       type: "agent-status",
       online: true,
     });
+    // account client 接続時に relay が agent へ "refresh-snapshot" を送るので読み捨てる。
+    expect(JSON.parse(await agent.next())).toMatchObject({ type: "refresh-snapshot" });
     acctClient.ws.send(JSON.stringify({ type: "decide", id: "z", decision: "allow" }));
     expect(JSON.parse(await agent.next())).toMatchObject({ type: "decide", id: "z" });
     acctClient.close();
