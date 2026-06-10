@@ -28,7 +28,7 @@ export function Hero({ lang, copy }: { lang: Lang; copy: Copy }) {
             </span>
           </h1>
           <p className="lead h-sub">{copy.heroSubtitle}</p>
-          <DownloadCTA />
+          <DownloadCTA copy={copy} />
         </div>
 
         <div className="stage">

@@ -5,11 +5,12 @@ import type { Copy } from "@/lib/copy";
  * Hero 直下に配置してユーザーを迷わせない。文言は copy.ts (en/ja) から。
  */
 export function QuickStart({ copy }: { copy: Copy }) {
+  // Homebrew cask は未登録のため code 行は出さない (登録後にここへ復活させる)。
   const steps = [
     {
       num: "1",
       title: copy.qsStep1Title,
-      code: "brew install --cask vigili",
+      code: null as string | null,
       body: copy.qsStep1Body,
     },
     {

@@ -12,7 +12,7 @@ export function Footer({ lang, copy }: { lang: Lang; copy: Copy }) {
             {copy.footerEyebrow}
           </span>
           <h2>{copy.footerTitle}</h2>
-          <DownloadCTA variant="dark" />
+          <DownloadCTA copy={copy} variant="dark" />
         </div>
         <div className="foot-row">
           <Link href="#top" className="brand">
