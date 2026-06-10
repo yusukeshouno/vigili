@@ -107,6 +107,11 @@ export const AdminRequestSchema = z.discriminatedUnion("action", [
     agent_key: z.string().min(1),
     reconnect_max_seconds: z.number().int().positive().optional(),
   }),
+  /** ログアウト: relay 接続停止 + config.yaml の relay 節削除 (LAN 経路は維持)。 */
+  z.object({
+    kind: z.literal("admin"),
+    action: z.literal("relay-disconnect"),
+  }),
 ]);
 
 export type AdminRequest = z.infer<typeof AdminRequestSchema>;
@@ -214,6 +219,12 @@ export const AdminResponseSchema = z.discriminatedUnion("action", [
     ok: z.boolean(),
     /** 再接続を試みた直後の接続状態 (確立は非同期なので "試行直後の値")。 */
     connected: z.boolean().optional(),
+    error: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("admin"),
+    action: z.literal("relay-disconnect"),
+    ok: z.boolean(),
     error: z.string().optional(),
   }),
 ]);

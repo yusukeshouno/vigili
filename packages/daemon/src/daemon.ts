@@ -21,6 +21,7 @@ import {
   type RelayConfigSection,
   type SentinelConfig,
   loadConfigFile,
+  removeRelayConfig,
   writeRelayConfig,
 } from "./config.js";
 import { type MessageStore, createMessageStore } from "./db/messages.js";
@@ -147,6 +148,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     generatedPolicyPath: p.policyGenerated,
     broadcast: () => {},
     reconfigureRelay: () => false,
+    disconnectRelay: async () => {},
     onMessageAdded: () => {},
     onMessageDelivered: () => {},
   };
@@ -338,6 +340,17 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       log(`[vigili-daemon] relay reconfigured via sign-in (pairing=${cfg.pairing_id})`);
     }
     return relay.isConnected();
+  };
+
+  // Mac アプリの「Logout」→ relay-disconnect admin から呼ばれる。
+  // relay 接続を停止し config.yaml の relay 節を消す (LAN 経路は維持)。
+  ctx.disconnectRelay = async () => {
+    if (relay) {
+      await relay.stop();
+      relay = null;
+    }
+    removeRelayConfig(p.config);
+    log("[vigili-daemon] relay disconnected via logout");
   };
 
   // ctx の broadcast コールバックを実体に差し替える (LAN + Relay 同時)
@@ -569,6 +582,8 @@ interface DaemonContext {
    * relay client を (再)接続する。relay 構築後に実体へ差し替える。戻り値は試行直後の接続状態。
    */
   reconfigureRelay: (cfg: RelayConfigSection) => boolean;
+  /** relay 接続を停止し config.yaml の relay 節を削除する (ログアウト)。LAN 経路は維持。 */
+  disconnectRelay: () => Promise<void>;
   /** WS から PWA に message-added / message-delivered を broadcast するコールバック。
    *  WS server が起動後に差し替える。startDaemon の構築時点では noop。 */
   onMessageAdded: (m: import("@vigili/shared").Message) => void;
@@ -667,6 +682,21 @@ async function handleAdmin(value: unknown, conn: ConnContext, ctx: DaemonContext
       ok: true,
       connected,
     } satisfies AdminResponse);
+    return;
+  }
+  if (req.action === "relay-disconnect") {
+    try {
+      await ctx.disconnectRelay();
+    } catch (err) {
+      conn.send({
+        kind: "admin",
+        action: "relay-disconnect",
+        ok: false,
+        error: (err as Error).message,
+      } satisfies AdminResponse);
+      return;
+    }
+    conn.send({ kind: "admin", action: "relay-disconnect", ok: true } satisfies AdminResponse);
     return;
   }
   if (req.action === "stats") {

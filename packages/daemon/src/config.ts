@@ -141,3 +141,17 @@ export function writeRelayConfig(configPath: string, relay: RelayConfigSection):
   existing.relay = relay;
   writeFileSync(configPath, stringifyYaml(existing), { encoding: "utf-8", mode: 0o600 });
 }
+
+/**
+ * config.yaml から relay セクションを削除する (ログアウト時)。他キーは保持。
+ * ファイルが無い / relay 節が無ければ no-op。
+ */
+export function removeRelayConfig(configPath: string): void {
+  if (!existsSync(configPath)) return;
+  const parsed = parseYaml(readFileSync(configPath, "utf-8"));
+  if (parsed === null || typeof parsed !== "object") return;
+  const existing = parsed as Record<string, unknown>;
+  if (!("relay" in existing)) return;
+  delete existing.relay;
+  writeFileSync(configPath, stringifyYaml(existing), { encoding: "utf-8", mode: 0o600 });
+}
