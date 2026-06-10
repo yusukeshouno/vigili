@@ -16,6 +16,8 @@ struct OnboardingWizardView: View {
   @State private var isLoading = true
   @State private var isWriting = false
   @State private var errorMessage: String?
+  /// caution 付き項目の「リスクを理解した」チェック。ステップ遷移ごとにリセット。
+  @State private var riskAcknowledged = false
 
   var onCompletion: ((_ wrote: Bool) -> Void)?
 
@@ -29,6 +31,8 @@ struct OnboardingWizardView: View {
     .background(Theme.bg)
     .preferredColorScheme(.dark)
     .task { await loadCatalog() }
+    // 戻る/進むのたびにリスク確認チェックをリセットする (項目ごとに毎回確認させる)
+    .onChange(of: stepIndex) { _ in riskAcknowledged = false }
   }
 
   // MARK: - sections
@@ -114,51 +118,82 @@ struct OnboardingWizardView: View {
 
   private func questionView(for item: DaemonAdminClient.CatalogItem) -> some View {
     let isDanger = item.category == "danger"
-    return VStack(alignment: .leading, spacing: 16) {
-      // カテゴリラベル
-      Text(isDanger ? "⚠ 危険操作" : "便利系")
-        .font(.mono(9, weight: .semibold))
-        .tracking(0.12 * 9)
-        .foregroundStyle(isDanger ? Theme.red : Theme.accent)
+    return ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+        // カテゴリラベル
+        Text(isDanger ? "防御ルール" : "自動許可")
+          .font(.mono(9, weight: .semibold))
+          .tracking(0.12 * 9)
+          .foregroundStyle(isDanger ? Theme.amber : Theme.accent)
 
-      // 質問の主役テキスト
-      Text(item.label)
-        .font(.display(22, weight: .semibold))
-        .foregroundStyle(Theme.fg)
-        .fixedSize(horizontal: false, vertical: true)
+        // 質問の主役テキスト
+        Text(item.label)
+          .font(.display(22, weight: .semibold))
+          .foregroundStyle(Theme.fg)
+          .fixedSize(horizontal: false, vertical: true)
 
-      Text(item.description)
-        .font(.system(size: 13))
-        .foregroundStyle(Theme.fgMid)
-        .lineSpacing(3)
-        .fixedSize(horizontal: false, vertical: true)
+        // 詳細説明 (何が許可されるか / 判定の限界)
+        Text(item.detail)
+          .font(.system(size: 13))
+          .foregroundStyle(Theme.fgMid)
+          .lineSpacing(4)
+          .fixedSize(horizontal: false, vertical: true)
 
-      // 注意書き (危険系)
-      if isDanger {
-        HStack(alignment: .top, spacing: 6) {
-          Image(systemName: "info.circle")
+        // 防御ルールの説明 (danger 系は自動許可ではない)
+        if isDanger {
+          HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "shield")
+              .font(.system(size: 11))
+              .foregroundStyle(Theme.amber.opacity(0.8))
+              .padding(.top, 2)
+            Text(
+              "この項目は操作を自動許可するものではありません。該当する操作を必ず確認に回し、最優先の通知でスマホを起こすルールです。"
+            )
             .font(.system(size: 11))
-            .foregroundStyle(Theme.red.opacity(0.7))
-            .padding(.top, 2)
-          Text(
-            "「自動で許可」を選ぶと dialog 自体が出なくなります。スマホ通知に頼りたい場合のみチェックを推奨。"
+            .foregroundStyle(Theme.fgDim)
+            .lineSpacing(2)
+          }
+          .padding(10)
+          .background(
+            RoundedRectangle(cornerRadius: 8)
+              .fill(Theme.amber.opacity(0.08))
           )
-          .font(.system(size: 11))
-          .foregroundStyle(Theme.fgDim)
-          .lineSpacing(2)
         }
-        .padding(10)
-        .background(
-          RoundedRectangle(cornerRadius: 8)
-            .fill(Theme.red.opacity(0.08))
-        )
-      }
 
-      Spacer()
+        // リスク確認 (caution 付き自動許可): チェックするまで「はい」が押せない
+        if let caution = item.caution {
+          VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 6) {
+              Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.red.opacity(0.8))
+                .padding(.top, 2)
+              Text(caution)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.fgMid)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle(isOn: $riskAcknowledged) {
+              Text("リスクを理解した上で自動許可する")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.fg)
+            }
+            .toggleStyle(.checkbox)
+          }
+          .padding(10)
+          .background(
+            RoundedRectangle(cornerRadius: 8)
+              .fill(Theme.red.opacity(0.08))
+          )
+        }
+
+        Spacer(minLength: 0)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 36)
+      .padding(.top, 4)
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 36)
-    .padding(.top, 4)
   }
 
   private var summaryView: some View {
@@ -281,14 +316,18 @@ struct OnboardingWizardView: View {
       }
       .buttonStyle(.plain)
     } else if stepIndex < catalog.count {
-      // 質問中: いいえ / はい
+      // 質問中: いいえ / はい。
+      // danger 系は「防御ルールの有効化」なので文言を変える (自動許可ではない)。
+      // caution 付きはリスク確認チェックを入れるまで「はい」を押せない。
       let item = catalog[stepIndex]
+      let isDanger = item.category == "danger"
+      let yesBlocked = item.caution != nil && !riskAcknowledged
       HStack(spacing: 8) {
         Button {
           selected.remove(item.id)
           advance()
         } label: {
-          Text("いいえ（確認する）")
+          Text(isDanger ? "設定しない" : "いいえ（毎回確認する）")
             .font(.mono(11))
             .foregroundStyle(Theme.fg)
             .padding(.horizontal, 14)
@@ -304,17 +343,19 @@ struct OnboardingWizardView: View {
           selected.insert(item.id)
           advance()
         } label: {
-          Text("はい（自動で許可）")
+          Text(isDanger ? "有効にする（推奨）" : "はい（自動で許可）")
             .font(.mono(11, weight: .semibold))
-            .foregroundStyle(Theme.fg)
+            .foregroundStyle(yesBlocked ? Theme.fgDim : Theme.fg)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(
               RoundedRectangle(cornerRadius: 8)
-                .fill(Theme.accent.opacity(0.85))
+                .fill(Theme.accent.opacity(yesBlocked ? 0.25 : 0.85))
             )
         }
         .buttonStyle(.plain)
+        .disabled(yesBlocked)
+        .help(yesBlocked ? "上のリスク確認にチェックを入れると選択できます" : "")
       }
     } else {
       // summary: 完了

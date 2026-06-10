@@ -24,8 +24,19 @@ export interface PolicyCatalogEntry {
   category: PolicyCategory;
   /** ウィザード UI に出すラベル (短く)。 */
   label: string;
-  /** ウィザード UI に出す補足説明。 */
+  /** ウィザード UI に出す補足説明 (1 行)。 */
   description: string;
+  /**
+   * ウィザードの質問画面に出す詳細説明。
+   * 「何が許可されるか (具体例)」「何が対象外か」「判定の限界」を正直に書く。
+   */
+  detail: string;
+  /**
+   * 自動許可に実リスクが伴うエントリの注意文。
+   * これが設定されている場合、ウィザードは「リスクを理解した」の明示チェック
+   * なしに「はい (自動で許可)」を押せないようにする。
+   */
+  caution?: string;
   /** 実際の PolicyRule。name はラベルと同じにする (同名昇格防止のため一意)。 */
   rule: PolicyRule;
 }
@@ -42,6 +53,11 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "Read ツール (ファイル閲覧)",
     description: "Claude Code の Read ツールによるファイル読み取りをすべて自動承認",
+    detail:
+      "Claude Code 組み込みの Read ツール (ソースコードや設定ファイルを開く操作) を自動承認します。" +
+      "コードを読んで理解する作業の大半がこれに当たるため、確認を挟むと会話が頻繁に止まります。\n\n" +
+      "対象外: Bash 経由の cat などは別項目「ファイル読み取り (Bash)」で扱います。\n" +
+      "注意: .env など秘密情報ファイルの閲覧も対象に含まれます (書き込みは含まれません)。",
     rule: {
       name: "Read ツール (ファイル読み取り)",
       when: {
@@ -55,6 +71,13 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "ファイル読み取り (Bash)",
     description: "ls, cat, grep, find 等の読み取り専用コマンド",
+    detail:
+      "ls / cat / head / tail / grep / rg / find / tree / wc / ps / which / pwd / date / echo / " +
+      "diff / jq など、読み取り中心のコマンドで始まる Bash を自動承認します。\n\n" +
+      "判定の限界: コマンドの先頭だけで判定するため、`cat a.txt > b.txt` のような" +
+      "リダイレクト書き込みや `;` で繋いだ後続コマンドも通ります。" +
+      "sed -i のようなインプレース編集も先頭が sed なら通ります。" +
+      "厳密に守りたい場合はこの項目を「いいえ」にしてください。",
     rule: {
       name: "ファイル読み取り (Bash)",
       when: {
@@ -70,6 +93,12 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "git の読み取り系",
     description: "git status, diff, log, branch 等",
+    detail:
+      "git status / diff / log / branch / show / blame / reflog / fetch / pull など、" +
+      "リポジトリの状態を見るだけの git コマンドを自動承認します。\n\n" +
+      "fetch / pull はリモートから取得するためファイルが変わりますが、" +
+      "コミット済みの履歴に沿った変更のみでロールバック可能です。\n" +
+      "対象外: commit / push / merge / rebase などの書き込み系は別項目です。",
     rule: {
       name: "git の読み取り系",
       when: {
@@ -85,6 +114,14 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "パッケージインストール",
     description: "npm install, pnpm install, yarn install 等",
+    detail:
+      "pnpm/npm/yarn の install・add・update・remove、bun add、cargo add、" +
+      "pip install、uv add などのパッケージ操作を自動承認します。\n\n" +
+      "依存関係の追加・更新は開発中に頻発するため、自動化の効果は大きい項目です。",
+    caution:
+      "パッケージのインストールは postinstall スクリプト経由で任意コードが実行されます " +
+      "(サプライチェーン攻撃の入り口)。Claude が提案した未知のパッケージも" +
+      "確認なしで入る点を理解した上で有効にしてください。",
     rule: {
       name: "パッケージインストール",
       when: {
@@ -100,6 +137,12 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "テスト実行",
     description: "npm test, vitest, jest, pytest, cargo test 等",
+    detail:
+      "pnpm/npm/yarn test、vitest / jest / playwright、go test / cargo test / pytest " +
+      "などのテスト実行を自動承認します。\n\n" +
+      "テストは「書く → 走らせる → 直す」のループで何十回も実行されるため、" +
+      "確認を挟むと最も律速になりやすい操作です。テストコード自体が任意コードである点は" +
+      "意識してください (悪意あるテストは何でもできます)。",
     rule: {
       name: "テスト実行",
       when: {
@@ -115,6 +158,11 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "型チェック・lint・build",
     description: "tsc, biome, eslint, prettier, cargo check 等",
+    detail:
+      "tsc (型チェック)、biome / eslint / prettier (lint・整形)、" +
+      "pnpm build / cargo check / cargo build などのビルド系コマンドを自動承認します。\n\n" +
+      "コード品質の検証ループで頻発する操作です。lint の --fix や prettier は" +
+      "ソースファイルを書き換えますが、対象はリポジトリ内に限られます。",
     rule: {
       name: "型チェック・lint・build",
       when: {
@@ -130,6 +178,11 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "dev サーバ起動",
     description: "npm dev, vite, uvicorn 等",
+    detail:
+      "pnpm dev / npm start、next dev、vite、uvicorn、rails server などの" +
+      "開発サーバ起動を自動承認します。\n\n" +
+      "ローカルでポートを開く操作です。基本的に LAN 内からしかアクセスされませんが、" +
+      "0.0.0.0 で bind する設定だと同一ネットワークの他端末からも見える点は把握しておいてください。",
     rule: {
       name: "dev サーバ起動",
       when: {
@@ -145,6 +198,15 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "git の commit / branch 操作",
     description: "git add, commit, checkout, merge, rebase 等",
+    detail:
+      "git add / commit / checkout / switch / merge / rebase / stash / tag / " +
+      "cherry-pick / restore などのローカル git 操作を自動承認します。\n\n" +
+      "リモートには影響しません (push は別項目)。コミット履歴に残る操作が中心なので" +
+      "ほとんどは reflog から復元可能です。",
+    caution:
+      "このルールには git reset / git rm / git restore / git checkout -- も含まれます。" +
+      "未コミットの作業中変更はこれらで失われると復元できません。" +
+      "「コミット前の変更が消えるリスク」を許容できる場合のみ有効にしてください。",
     rule: {
       name: "git の commit / branch 操作",
       when: {
@@ -160,11 +222,23 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "git push（--force 以外）",
     description: "通常の git push。--force 系は別途常に確認",
+    detail:
+      "force 系 (-f / --force / --force-with-lease / +refspec 形式) を含まない" +
+      "通常の git push を自動承認します。\n\n" +
+      "force push は対象外で、main/master への force push はルールに関係なく" +
+      "ハードコードされた不変条件が常に拒否します。",
+    caution:
+      "push はリモートに公開される操作です。CI/CD が main への push で本番デプロイされる" +
+      "構成の場合、自動 push がそのまま本番反映になります。" +
+      "デプロイ連動があるリポジトリでは有効化を推奨しません。",
     rule: {
       name: "git push（--force 以外）",
       when: {
         tool: "Bash",
-        command_matches: "^git\\s+push(?!.*(\\s-f|--force)).*$",
+        // -f / --force(-with-lease) に加え、`+refspec` (git push origin +main) も
+        // force push なので除外する。invariant "force push to protected branch" と
+        // 競合しないことが起動時検証の条件 (これを緩めると daemon が起動しなくなる)。
+        command_matches: "^git\\s+push(?!.*(\\s-f\\b|\\s--force(-with-lease)?\\b|\\s\\+\\S)).*$",
       },
       action: "allow",
     },
@@ -174,6 +248,12 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "convenience",
     label: "信頼ドメインへの WebFetch",
     description: "github.com, docs.anthropic.com 等の公式ドキュメント",
+    detail:
+      "github.com、docs.anthropic.com、developer.mozilla.org、nodejs.org、" +
+      "developer.apple.com など、定番の公式ドキュメントサイトへの WebFetch を自動承認します。\n\n" +
+      "対象はこのドメインリストに完全一致する URL のみで、それ以外のサイトへの" +
+      "アクセスは引き続き確認に回ります。github.com 上のコンテンツは誰でも公開できる点" +
+      "(悪意ある README 等) は留意してください。",
     rule: {
       name: "信頼ドメインへの WebFetch",
       when: {
@@ -191,6 +271,11 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "danger",
     label: ".env / 秘密鍵への書き込みを critical 通知",
     description: ".env、secrets/、.pem、.key への書き込みを大音量で通知",
+    detail:
+      "これは自動許可ではなく防御ルールです。.env / .env.*、secrets/ ディレクトリ、" +
+      ".pem / .key ファイルへの Edit・Write を必ず確認に回し、" +
+      "critical 通知 (消音中でも鳴るレベル) でスマホを起こします。\n\n" +
+      "秘密情報の書き換えは事故時の影響が大きいため、有効化を推奨します。",
     rule: {
       name: ".env / 秘密鍵への書き込み",
       when: {
@@ -206,6 +291,10 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "danger",
     label: "課金されうる外部 API を critical 通知",
     description: "OpenAI / Anthropic / Stripe への curl を大音量で通知",
+    detail:
+      "これは自動許可ではなく防御ルールです。api.openai.com / api.anthropic.com / " +
+      "api.stripe.com への curl を必ず確認に回し、critical 通知でスマホを起こします。\n\n" +
+      "API 課金やテスト決済の誤実行はお金が直接動くため、有効化を推奨します。",
     rule: {
       name: "課金されうる外部 API への curl",
       when: {
@@ -221,6 +310,11 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "danger",
     label: "本番 DB 接続を critical 通知",
     description: "psql / mysql / mongo / redis-cli の prod 系を大音量で通知",
+    detail:
+      "これは自動許可ではなく防御ルールです。psql / pg_dump / mysql / mongo / redis-cli の" +
+      "コマンドラインに prod / production / live が含まれる場合に必ず確認に回し、" +
+      "critical 通知でスマホを起こします。\n\n" +
+      "本番データの破壊は取り返しがつかないため、有効化を推奨します。",
     rule: {
       name: "本番 DB へ繋がりそうなコマンド",
       when: {
@@ -236,6 +330,11 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "danger",
     label: "git push --force を critical 通知",
     description: "force push 系を大音量で通知 (main/master への push は invariants で拒否)",
+    detail:
+      "これは自動許可ではなく防御ルールです。git push の -f / --force / " +
+      "--force-with-lease を必ず確認に回し、critical 通知でスマホを起こします。\n\n" +
+      "main / master / production への force push は、このルールの有無に関係なく" +
+      "ハードコードされた不変条件が常に拒否します。こちらはそれ以外のブランチ向けの防御です。",
     rule: {
       name: "git push --force / -f / --force-with-lease",
       when: {
@@ -251,6 +350,10 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     category: "danger",
     label: "システム全体への sudo を critical 通知",
     description: "sudo rm / chmod / chown / mv / cp を大音量で通知",
+    detail:
+      "これは自動許可ではなく防御ルールです。sudo 付きの rm / chmod / chown / mv / cp " +
+      "(システム領域を書き換えうる操作) を必ず確認に回し、critical 通知でスマホを起こします。\n\n" +
+      "OS 全体に影響する操作のため、有効化を推奨します。",
     rule: {
       name: "システム全体への sudo",
       when: {

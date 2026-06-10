@@ -194,6 +194,10 @@ export const AdminResponseSchema = z.discriminatedUnion("action", [
         category: z.enum(["convenience", "danger"]),
         label: z.string(),
         description: z.string(),
+        /** 質問画面に出す詳細説明 (何が許可されるか / 判定の限界)。 */
+        detail: z.string(),
+        /** 設定時に明示確認を要求する注意文 (リスクある自動許可のみ)。 */
+        caution: z.string().optional(),
       }),
     ),
   }),

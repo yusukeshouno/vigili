@@ -108,7 +108,8 @@ rules:
   - name: "git push (--force 系は上のルールで弾く)"
     when:
       tool: Bash
-      command_matches: '^git\s+push(?!.*(\s-f|--force)).*$'
+      # -f / --force(-with-lease) に加え +refspec (git push origin +main) も除外
+      command_matches: '^git\s+push(?!.*(\s-f\b|\s--force(-with-lease)?\b|\s\+\S)).*$'
     action: allow
 
   # ============================================================

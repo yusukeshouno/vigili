@@ -116,6 +116,10 @@ actor DaemonAdminClient {
     let category: String  // "convenience" | "danger"
     let label: String
     let description: String
+    /// 質問画面に出す詳細説明 (何が許可されるか / 判定の限界)。
+    let detail: String
+    /// 設定時に明示確認を要求する注意文。nil = 確認不要。
+    let caution: String?
   }
 
   /// ルールカタログを取得する。
@@ -135,7 +139,12 @@ actor DaemonAdminClient {
         let label = dict["label"] as? String,
         let description = dict["description"] as? String
       else { return nil }
-      return CatalogItem(id: id, category: category, label: label, description: description)
+      return CatalogItem(
+        id: id, category: category, label: label, description: description,
+        // detail は旧 daemon (フィールド未対応) との互換のため description にフォールバック
+        detail: (dict["detail"] as? String) ?? description,
+        caution: dict["caution"] as? String,
+      )
     }
   }
 

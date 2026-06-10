@@ -801,6 +801,8 @@ async function handleAdmin(value: unknown, conn: ConnContext, ctx: DaemonContext
         category: e.category,
         label: e.label,
         description: e.description,
+        detail: e.detail,
+        ...(e.caution !== undefined ? { caution: e.caution } : {}),
       })),
     };
     conn.send(resp);
@@ -812,6 +814,20 @@ async function handleAdmin(value: unknown, conn: ConnContext, ctx: DaemonContext
       const { stringify: stringifyYaml, parse: parseYaml } = await import("yaml");
       const selected = new Set(req.selected_ids);
       const rules = POLICY_CATALOG.filter((e) => selected.has(e.id)).map((e) => e.rule);
+
+      // 書き込み前に invariant / 正規表現の検証を通す。検証せず保存すると、
+      // reload は in-memory の旧ポリシーで動き続ける一方、次回起動時に
+      // ロード失敗 → 起動ループに陥る (フェイルセーフ deny で全リクエスト停止)。
+      {
+        const { PolicyConfigSchema } = await import("@vigili/shared");
+        const { validatePolicyAgainstInvariants, validatePolicyRegexes } = await import(
+          "./policy/loader.js"
+        );
+        const base = parseYaml(MINIMAL_POLICY_YAML) as { defaults: unknown };
+        const candidate = PolicyConfigSchema.parse({ defaults: base.defaults, rules });
+        validatePolicyRegexes(candidate);
+        validatePolicyAgainstInvariants(candidate);
+      }
 
       // 既存 policy.yaml がある場合は .bak に退避（破壊防止）
       const { writeFile, rename, readFile } = await import("node:fs/promises");

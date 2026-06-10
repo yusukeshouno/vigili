@@ -2,9 +2,14 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 import { POLICY_CATALOG, MINIMAL_POLICY_YAML, DEFAULT_POLICY_YAML } from "./default.js";
-import { loadPolicyFile } from "./loader.js";
-import { PolicyRuleSchema } from "@vigili/shared";
+import {
+  loadPolicyFile,
+  validatePolicyAgainstInvariants,
+  validatePolicyRegexes,
+} from "./loader.js";
+import { PolicyConfigSchema, PolicyRuleSchema } from "@vigili/shared";
 
 describe("MINIMAL_POLICY_YAML", () => {
   it("parses + has empty rules list (initial install state)", async () => {
@@ -59,5 +64,24 @@ describe("POLICY_CATALOG", () => {
         expect(entry.rule.notify).toBe("critical");
       }
     }
+  });
+
+  it("each entry has a non-trivial detail", () => {
+    for (const entry of POLICY_CATALOG) {
+      expect(entry.detail.length, `${entry.id} の detail が短すぎる`).toBeGreaterThan(40);
+    }
+  });
+
+  // 回帰テスト: カタログ全選択のポリシーが invariant 検証を通ること。
+  // git-push-safe の旧 regex が `git push origin +main` (+refspec force) を
+  // allow してしまい、ウィザード保存後の daemon が起動ループに陥った。
+  it("full catalog selection passes invariant + regex validation (boot safety)", () => {
+    const base = parseYaml(MINIMAL_POLICY_YAML) as { defaults: unknown };
+    const candidate = PolicyConfigSchema.parse({
+      defaults: base.defaults,
+      rules: POLICY_CATALOG.map((e) => e.rule),
+    });
+    expect(() => validatePolicyRegexes(candidate)).not.toThrow();
+    expect(() => validatePolicyAgainstInvariants(candidate)).not.toThrow();
   });
 });
