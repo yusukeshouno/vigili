@@ -89,6 +89,16 @@ export interface Copy {
   sec3Title: string;
   sec3Body: string;
 
+  // quick start
+  qsEyebrow: string;
+  qsTitle: string;
+  qsStep1Title: string;
+  qsStep1Body: string;
+  qsStep2Title: string;
+  qsStep2Body: string;
+  qsStep3Title: string;
+  qsStep3Body: string;
+
   // footer
   footerEyebrow: string;
   footerTitle: string;
@@ -192,6 +202,18 @@ const en: Copy = {
   sec3Body:
     "If something goes wrong with Vigili, Claude stops and waits. It never approves on its own when you're not watching. Every window stays blocked until you're back.",
 
+  qsEyebrow: "Get started",
+  qsTitle: "Up and running in 2 minutes.",
+  qsStep1Title: "Install on Mac",
+  qsStep1Body:
+    "Or download the .dmg and drag to Applications. Vigili adds the Claude Code hook on first launch — nothing else to configure.",
+  qsStep2Title: "Every Claude window is now in the loop",
+  qsStep2Body:
+    "Vigili sits in your menu bar. Every Claude Code session on your Mac routes its approval requests through Vigili automatically.",
+  qsStep3Title: "Pair your iPhone in one tap",
+  qsStep3Body:
+    "Sign in with Apple on Mac and iPhone using the same Apple ID. Approvals appear on your phone instantly — no QR, no token, no terminal.",
+
   footerEyebrow: "Download now",
   footerTitle: "All your Claude sessions. One list to work through.",
   footerPrivacy: "Privacy",
@@ -294,6 +316,18 @@ const ja: Copy = {
   sec3Title: "Vigili が止まったら、Claude も止まる",
   sec3Body:
     "Vigili に問題が起きた場合、Claude はその場で止まって待ちます。あなたが見ていないときに勝手に許可することは絶対にありません。すべてのウィンドウは復帰までブロックされたままです。",
+
+  qsEyebrow: "はじめる",
+  qsTitle: "2 分でセットアップ完了。",
+  qsStep1Title: "Mac にインストール",
+  qsStep1Body:
+    ".dmg をダウンロードして Applications にドラッグするだけでも OK。初回起動時に Claude Code の hook が自動で追加されます — ほかに設定するものはありません。",
+  qsStep2Title: "すべての Claude ウィンドウが対象に",
+  qsStep2Body:
+    "Vigili はメニューバーに常駐します。Mac 上のすべての Claude Code セッションの承認リクエストが、自動的に Vigili を経由するようになります。",
+  qsStep3Title: "iPhone はワンタップでペアリング",
+  qsStep3Body:
+    "Mac と iPhone で同じ Apple ID で「Apple でサインイン」するだけ。承認は即座にスマホに届きます — QR もトークンもターミナルも不要。",
 
   footerEyebrow: "近日公開",
   footerTitle: "全 Claude セッションを、1 つのリストで。",

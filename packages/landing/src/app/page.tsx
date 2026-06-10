@@ -25,7 +25,7 @@ export default async function Page({ searchParams }: PageProps) {
       <TopBar lang={lang} copy={copy} />
       <main>
         <Hero lang={lang} copy={copy} />
-        <QuickStart />
+        <QuickStart copy={copy} />
         <Surfaces copy={copy} />
         <Showcase copy={copy} />
         <WhySection copy={copy} />

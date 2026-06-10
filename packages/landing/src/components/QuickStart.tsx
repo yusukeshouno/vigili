@@ -1,34 +1,36 @@
+import type { Copy } from "@/lib/copy";
+
 /**
  * Quick Start セクション — 3ステップでセットアップ完了を示す。
- * Hero 直下に配置してユーザーを迷わせない。
+ * Hero 直下に配置してユーザーを迷わせない。文言は copy.ts (en/ja) から。
  */
-export function QuickStart() {
+export function QuickStart({ copy }: { copy: Copy }) {
   const steps = [
     {
       num: "1",
-      title: "Install on Mac",
+      title: copy.qsStep1Title,
       code: "brew install --cask vigili",
-      body: "Or download the .dmg and drag to Applications. Vigili adds the Claude Code hook on first launch — nothing else to configure.",
+      body: copy.qsStep1Body,
     },
     {
       num: "2",
-      title: "Every Claude window is now in the loop",
+      title: copy.qsStep2Title,
       code: null,
-      body: "Vigili sits in your menu bar. Every Claude Code session on your Mac routes its approval requests through Vigili automatically.",
+      body: copy.qsStep2Body,
     },
     {
       num: "3",
-      title: "Pair your iPhone in one tap",
+      title: copy.qsStep3Title,
       code: null,
-      body: "Sign in with Apple on Mac and iPhone using the same Apple ID. Approvals appear on your phone instantly — no QR, no token, no terminal.",
+      body: copy.qsStep3Body,
     },
   ] as const;
 
   return (
     <section className="qs" id="quickstart">
       <div className="wrap">
-        <span className="eyebrow">Get started</span>
-        <h2 className="qs-title">Up and running in 2 minutes.</h2>
+        <span className="eyebrow">{copy.qsEyebrow}</span>
+        <h2 className="qs-title">{copy.qsTitle}</h2>
         <div className="qs-steps">
           {steps.map((s) => (
             <div className="qs-step" key={s.num}>
