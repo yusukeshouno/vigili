@@ -119,11 +119,13 @@ targets:
       path: Resources/Vigili.entitlements
       properties:
         com.apple.security.app-sandbox: false
-        # Sign in with Apple (アカウント中心オンボーディング)。App ID で capability 有効化必須。
-        # 注: widget との IPC は App Group ではなく widget 自身のコンテナを直接読み書き
-        #     する方式 (WidgetState.swift) なので application-groups entitlement は不要。
-        com.apple.developer.applesignin:
-          - Default
+        # 注: Mac は Developer ID 配布のため com.apple.developer.applesignin は付けない。
+        # Developer ID プロビジョニングプロファイルは applesignin entitlement を認可できず、
+        # 付けると AMFI が起動を拒否する (Launchd job spawn failed / errno 163)。
+        # Mac の Sign in with Apple は Web フロー (ASWebAuthenticationSession + relay callback)
+        # で実装する。iOS は App Store 配布なのでネイティブ entitlement を維持する。
+        # widget との IPC は App Group ではなく widget 自身のコンテナを直接読み書きする
+        # (WidgetState.swift) ので application-groups entitlement は不要。
 
   # ============================================================
   # iOS: iPhone / iPad アプリ (Live Activity 対応予定)
