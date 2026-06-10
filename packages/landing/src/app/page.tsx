@@ -24,13 +24,14 @@ export default async function Page({ searchParams }: PageProps) {
     <div className={lang === "ja" ? "lang-ja" : "lang-en"} lang={lang}>
       <TopBar lang={lang} copy={copy} />
       <main>
+        {/* 物語順: フック → 問題 → 仕組み → 体験 → 画面 → 安心 → 行動 */}
         <Hero lang={lang} copy={copy} />
-        <QuickStart copy={copy} />
-        <Surfaces copy={copy} />
-        <Showcase copy={copy} />
         <WhySection copy={copy} />
         <HowSection copy={copy} />
+        <Showcase copy={copy} />
+        <Surfaces copy={copy} />
         <SecuritySection copy={copy} />
+        <QuickStart copy={copy} />
       </main>
       <Footer lang={lang} copy={copy} />
     </div>

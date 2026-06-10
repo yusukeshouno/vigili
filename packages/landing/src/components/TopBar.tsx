@@ -15,12 +15,12 @@ export function TopBar({ lang, copy }: { lang: Lang; copy: Copy }) {
         </Link>
         <div className="nav-r">
           <a href="#views">{copy.navProduct}</a>
-          <a href="#tour">{copy.navHow}</a>
+          <a href="#how">{copy.navHow}</a>
           <a href="#security">{copy.navSecurity}</a>
           <Link href={`/?lang=${otherLang}#top`} className="lang">
             {copy.langSwitchTo}
           </Link>
-          <a href="#waitlist" className="cta">
+          <a href="#quickstart" className="cta">
             {copy.navWaitlist}
             <svg
               width="13"
