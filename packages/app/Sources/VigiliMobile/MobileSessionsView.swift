@@ -113,14 +113,22 @@ struct MobileSessionsView: View {
 }
 
 /// 個別セッションの詳細: transcript チャット + 未回答の質問/plan 回答 + 返信。
+/// observed session (gate 経由の合成、SPEC §8.5.1) は transcript を持たないため、
+/// セッション情報カードのみ表示する。
 private struct MobileSessionDetail: View {
   @EnvironmentObject private var coordinator: MobileAppCoordinator
   let sessionId: String
 
   var body: some View {
-    VStack(spacing: 0) {
-      TranscriptScroll(lines: coordinator.transcripts[sessionId] ?? [])
-      answerArea
+    Group {
+      if let session, session.observed {
+        ObservedSessionInfo(session: session)
+      } else {
+        VStack(spacing: 0) {
+          TranscriptScroll(lines: coordinator.transcripts[sessionId] ?? [])
+          answerArea
+        }
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Theme.bg.ignoresSafeArea())
@@ -128,8 +136,12 @@ private struct MobileSessionDetail: View {
     .navigationBarTitleDisplayMode(.inline)
   }
 
+  private var session: HostedSession? {
+    coordinator.sessions.first { $0.id == sessionId }
+  }
+
   private var title: String {
-    coordinator.sessions.first { $0.id == sessionId }?.displayName ?? "Session"
+    session?.displayName ?? "Session"
   }
 
   @ViewBuilder

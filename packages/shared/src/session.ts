@@ -54,6 +54,9 @@ export const HostedSessionSchema = z.object({
   cwd: z.string(),
   status: HostedSessionStatusSchema,
   started_at: z.number().int().nonnegative(),
+  /** true = gate 経由で合成された observed session (SPEC §8.5.1)。
+   *  transcript / question / plan / reply を持たない。省略 = hosted (`vigili run`)。 */
+  observed: z.boolean().optional(),
 });
 
 export type HostedSession = z.infer<typeof HostedSessionSchema>;

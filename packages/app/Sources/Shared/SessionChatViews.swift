@@ -292,3 +292,56 @@ struct ReplyComposer: View {
     text = ""
   }
 }
+
+// MARK: - observed session info
+
+/// observed session (gate 経由の合成、SPEC §8.5.1) の詳細表示。
+/// transcript / 質問 / plan / 返信を持たないため、セッション情報カードを出す。
+/// 承認カードは通常どおり Queue 側に出ることを案内する。
+struct ObservedSessionInfo: View {
+  let session: HostedSession
+
+  var body: some View {
+    VStack(spacing: 14) {
+      Image(systemName: "eye")
+        .font(.system(size: 30))
+        .foregroundStyle(Theme.fgFaint)
+      Text("観測中のセッション")
+        .font(.display(15, weight: .medium))
+        .foregroundStyle(Theme.fg)
+      Text("承認リクエストから検出された Claude Code セッションです。\n承認カードは Queue に表示されます。\n会話を表示するには `vigili run` で起動してください。")
+        .font(.mono(11))
+        .multilineTextAlignment(.center)
+        .foregroundStyle(Theme.fgDim)
+        .fixedSize(horizontal: false, vertical: true)
+
+      VStack(alignment: .leading, spacing: 8) {
+        infoRow("ディレクトリ", session.cwd)
+        infoRow("開始", session.startedAt.formatted(date: .omitted, time: .shortened))
+        infoRow("状態", session.status == "awaiting" ? "承認待ちあり" : "稼働中")
+      }
+      .padding(14)
+      .frame(maxWidth: 420)
+      .background(
+        RoundedRectangle(cornerRadius: 12).fill(Theme.bgRise)
+          .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.border, lineWidth: 1))
+      )
+    }
+    .padding(24)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private func infoRow(_ label: String, _ value: String) -> some View {
+    HStack(alignment: .top, spacing: 10) {
+      Text(label)
+        .font(.mono(10))
+        .foregroundStyle(Theme.fgDim)
+        .frame(width: 76, alignment: .leading)
+      Text(value)
+        .font(.mono(11))
+        .foregroundStyle(Theme.fgMid)
+        .lineLimit(2)
+        .truncationMode(.head)
+    }
+  }
+}

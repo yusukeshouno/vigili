@@ -19,6 +19,9 @@ export const ConfigSchema = z
         // gate の ask タイムアウト (300s) より少し長くして、正常応答中の
         // リクエストを誤って expired にしないようにする。
         pending_ttl_seconds: z.number().int().positive().default(360),
+        // gate 由来 observed session (SPEC §8.5.1) を ended とみなす無活動 TTL (秒)。
+        // 切断シグナルが無いため近似。デフォルト 30 分。
+        session_idle_ttl_seconds: z.number().int().positive().default(1800),
       })
       .default({}),
     ntfy: z

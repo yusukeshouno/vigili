@@ -171,8 +171,13 @@ struct SessionsView: View {
       VStack(spacing: 0) {
         detailHeader(session)
         Rectangle().fill(Theme.border).frame(height: 1)
-        TranscriptScroll(lines: coordinator.transcripts[id] ?? [])
-        answerArea(sessionId: id)
+        if session.observed {
+          // observed session (gate 経由の合成、SPEC §8.5.1): transcript なし
+          ObservedSessionInfo(session: session)
+        } else {
+          TranscriptScroll(lines: coordinator.transcripts[id] ?? [])
+          answerArea(sessionId: id)
+        }
       }
     } else {
       Color.clear

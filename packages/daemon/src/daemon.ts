@@ -38,6 +38,7 @@ import {
 import { paths } from "./paths.js";
 import { DEFAULT_POLICY_YAML } from "./policy/default.js";
 import { type DecisionResult, decide } from "./policy/engine.js";
+import { inferRepoTag } from "./policy/extractors.js";
 import { loadPolicyFile } from "./policy/loader.js";
 import { appendGeneratedRule, loadGeneratedRules, promoteToRule } from "./policy/promote.js";
 import { type PendingQueue, type Resolution, createPendingQueue } from "./queue.js";
@@ -60,6 +61,8 @@ export interface DaemonOptions {
   config?: SentinelConfig;
   /** session_tags マップ。指定時は config.yaml の同名項目より優先。 */
   sessionTags?: Record<string, string>;
+  /** observed session の idle TTL (ms)。テスト用。デフォルトは config 値 (30 分)。 */
+  sessionIdleTtlMs?: number;
   /** notifier を差し替えたい場合 (テスト用)。 */
   notifier?: Notifier;
   /** WS サーバを起動するか。テストでは false にできる。 */
@@ -253,6 +256,25 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   // セッションハンドラ (handleSessionMessage) からも broadcast できるよう ctx に載せる。
   ctx.broadcast = broadcastAll;
 
+  // gate 由来 observed session の status を pending の有無から再評価する (SPEC §8.5.1)。
+  // pending あり→awaiting / なし→running。onResolved は後段の snapshot 購読 (下) が
+  // 最新 status を運ぶので、ここでは状態だけ直す。onPending は snapshot 購読が無いため
+  // 変化があれば自前で snapshot を流す。※購読順が意味を持つ: ここは snapshot 購読より先。
+  const reevaluateObservedSessions = (broadcastOnChange: boolean): void => {
+    const pendingSids = new Set(queue.list().map((r) => r.session_id));
+    const changed = sessions.reevaluateObserved(pendingSids);
+    if (broadcastOnChange && changed.length > 0) {
+      broadcastAll({
+        type: "snapshot",
+        pending: queue.list(),
+        messages: messageStore.listRecent(50),
+        sessions: sessions.list(),
+      });
+    }
+  };
+  queue.onPending(() => reevaluateObservedSessions(true));
+  queue.onResolved(() => reevaluateObservedSessions(false));
+
   // 決着のたびに今日の集計を作り直して push する (待機画面サマリーを最新に保つ)。
   // allow/deny カウントが動くのは resolve の瞬間なので、ここが主要な更新点。
   queue.onResolved(() => broadcastAll({ type: "stats", stats: todayStats(), week: weekStats() }));
@@ -328,18 +350,31 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   // 最新 snapshot を再送し、アプリの「pending カード」を消す (待機画面に戻す)。
   const SWEEP_INTERVAL_MS = 60 * 1000;
   const pendingTtlMs = options.pendingTtlMs ?? config.daemon.pending_ttl_seconds * 1000;
+  const sessionIdleTtlMs =
+    options.sessionIdleTtlMs ?? config.daemon.session_idle_ttl_seconds * 1000;
   const runSweep = (): void => {
     try {
-      const swept = sweepStalePending({ store, queue, now: Date.now(), ttlMs: pendingTtlMs });
-      if (swept.length === 0) return;
+      const now = Date.now();
+      const swept = sweepStalePending({ store, queue, now, ttlMs: pendingTtlMs });
+      // gate 由来 observed session の idle 終了 (SPEC §8.5.1)。hosted は対象外。
+      const endedSessions = sessions.sweepIdleObserved(now, sessionIdleTtlMs);
+      for (const s of endedSessions) {
+        broadcastAll({ type: "session-ended", session_id: s.session_id, reason: "idle" });
+      }
+      if (swept.length === 0 && endedSessions.length === 0) return;
       broadcastAll({
         type: "snapshot",
         pending: queue.list(),
         messages: messageStore.listRecent(50),
         sessions: sessions.list(),
       });
-      broadcastAll({ type: "stats", stats: todayStats(), week: weekStats() });
-      log(`[vigili-daemon] sweep: expired ${swept.length} stale pending request(s)`);
+      if (swept.length > 0) {
+        broadcastAll({ type: "stats", stats: todayStats(), week: weekStats() });
+        log(`[vigili-daemon] sweep: expired ${swept.length} stale pending request(s)`);
+      }
+      if (endedSessions.length > 0) {
+        log(`[vigili-daemon] sweep: idle-ended ${endedSessions.length} observed session(s)`);
+      }
     } catch (err) {
       log(`[vigili-daemon] sweep 失敗: ${(err as Error).message}`);
     }
@@ -1133,6 +1168,23 @@ async function handleToolRequest(
   const id = randomUUID();
   const now = Date.now();
   const sessionTag = req.session_tag ?? null;
+
+  // gate 由来セッションを Sessions 画面へ合成登録 (SPEC §8.5.1)。
+  // 初出の session_id なら session-started を broadcast し、以降は lastSeen を更新する。
+  if (req.session_id !== "") {
+    const observed = ctx.sessions.observe({
+      session_id: req.session_id,
+      tag: inferRepoTag(req, ctx.sessionTags),
+      cwd: req.cwd,
+      now,
+    });
+    if (observed.created) {
+      ctx.broadcast({ type: "session-started", session: observed.session });
+      ctx.log(
+        `[vigili-daemon] observed session started: ${req.session_id} (tag=${observed.session.tag ?? "-"})`,
+      );
+    }
+  }
 
   ctx.store.insert({
     id,

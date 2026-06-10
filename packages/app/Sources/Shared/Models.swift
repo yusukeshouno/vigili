@@ -442,15 +442,22 @@ struct HostedSession: Identifiable, Hashable {
   /// "running" | "awaiting" | "ended"
   let status: String
   let startedAt: Date
+  /// true = gate 経由で合成された observed session (SPEC §8.5.1)。
+  /// transcript / 質問 / plan / 返信を持たない。false = hosted (`vigili run`)。
+  let observed: Bool
 
   var id: String { sessionId }
 
-  init(sessionId: String, tag: String?, cwd: String, status: String, startedAt: Date) {
+  init(
+    sessionId: String, tag: String?, cwd: String, status: String, startedAt: Date,
+    observed: Bool = false
+  ) {
     self.sessionId = sessionId
     self.tag = tag
     self.cwd = cwd
     self.status = status
     self.startedAt = startedAt
+    self.observed = observed
   }
 
   init?(dict: [String: Any]) {
@@ -465,6 +472,7 @@ struct HostedSession: Identifiable, Hashable {
     self.cwd = cwd
     self.status = status
     self.startedAt = Date(timeIntervalSince1970: startedMs / 1000.0)
+    self.observed = (dict["observed"] as? Bool) ?? false
   }
 
   /// 表示用の短いラベル (tag があればそれ、無ければ cwd の末尾)。

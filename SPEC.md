@@ -453,6 +453,27 @@ HostedSession = {
 - レジストリは in-memory（再起動で揮発）。transcript は直近 N 行のみ保持（永続化は将来課題）。
 - runner との socket は長命・双方向（既存 `socket.ts` の多重 write 対応を利用）。
 
+#### 8.5.1 gate 由来セッションの合成表示（observed session）
+
+`vigili run` を使わない素の Claude Code セッション（PreToolUse hook → gate 経由）も
+Sessions 画面に出す。daemon が gate からの `ToolRequest`（`session_id` / `cwd` /
+`session_tag` を含む）を観測してセッションを**合成 (synthesize)** する：
+
+- `handleToolRequest` で `session_id` をキーに upsert。初出時に `session-started` を
+  broadcast（snapshot には既存経路で自動同梱）。`tag` は `session_tag` → `inferRepoTag(cwd)`
+  の順で決める。
+- **status**: そのセッションに pending（未決着の ask）が 1 件以上ある間は `awaiting`、
+  無ければ `running`。決着 (resolve) のたびに再評価する。
+- **終了検出**: gate 経由には切断シグナルが無いので近似する。最終 observe から
+  **30 分**（`session_idle_ttl_seconds`、config で変更可）リクエストが無ければ `ended` とし
+  `session-ended` を broadcast。既存 sweep タイマー（60s 周期）に同居させる。
+- **`vigili run` との区別**: ホスト型（live conn あり）は従来どおり切断＝終了で、TTL の
+  対象外。同一 `session_id` でホスト型が register された場合はホスト型が優先（conn 付き
+  エントリで上書き）。observed session は `sendToSession` 不可（conn 無し）であり、
+  transcript / question / plan は持たない（クライアントは一覧と status 表示のみ）。
+- クライアント (iOS/Mac/PWA) は無改修：既存の `session-started` / `session-ended` /
+  snapshot `sessions` をそのまま描画する。
+
 ### 8.6 プロトコル拡張
 
 #### runner ↔ daemon（unix socket, `kind:"session"`）
