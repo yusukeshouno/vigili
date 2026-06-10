@@ -4,7 +4,7 @@ import Foundation
 /// 単方向データ受け渡し用ファイル。
 ///
 /// 配置: widget のサンドボックスコンテナ内の `widget-state.json`
-/// (`~/Library/Containers/io.vigili.app.shono.widget/Data/widget-state.json`)。
+/// (`~/Library/Containers/io.vigili.app.widget/Data/widget-state.json`)。
 ///
 /// WidgetKit の TimelineProvider はアプリ本体のメモリにアクセスできない
 /// (別プロセスで動く)。さらに macOS の widget extension は **App Sandbox 必須**で、
@@ -24,6 +24,22 @@ public struct WidgetState: Codable, Equatable, Sendable {
   public let todayAllowCount: Int
   /// 今日 (ローカル日付) の deny 件数。
   public let todayDenyCount: Int
+  /// 今日の自動承認件数 (allow - human)。バー描画用。
+  public let todayAutoCount: Int
+  /// 今日の人間承認件数 (by you)。
+  public let todayHumanCount: Int
+  /// 直近7日のスパークライン用データ (index 0=今日, 6=7日前)。
+  public let weekSpark: [WeekDay]
+
+  public struct WeekDay: Codable, Equatable, Sendable {
+    public let total: Int
+    public let auto: Int
+    public let human: Int
+    public let blocked: Int
+    public init(total: Int, auto: Int, human: Int, blocked: Int) {
+      self.total = total; self.auto = auto; self.human = human; self.blocked = blocked
+    }
+  }
   /// daemon との接続状態。false なら widget 上で「offline」表示。
   public let connected: Bool
   /// このファイルが書かれた時刻 (UTC、ms)。stale 検知用。
@@ -79,16 +95,22 @@ public struct WidgetState: Codable, Equatable, Sendable {
     pendingCount: Int,
     todayAllowCount: Int,
     todayDenyCount: Int,
+    todayAutoCount: Int = 0,
+    todayHumanCount: Int = 0,
     connected: Bool,
     updatedAtMs: Int64,
-    recentPending: [PendingItem]
+    recentPending: [PendingItem],
+    weekSpark: [WeekDay] = []
   ) {
     self.pendingCount = pendingCount
     self.todayAllowCount = todayAllowCount
     self.todayDenyCount = todayDenyCount
+    self.todayAutoCount = todayAutoCount
+    self.todayHumanCount = todayHumanCount
     self.connected = connected
     self.updatedAtMs = updatedAtMs
     self.recentPending = recentPending
+    self.weekSpark = weekSpark
   }
 
   /// stale (widget が古いデータを描画している) と見なす閾値。
@@ -100,9 +122,12 @@ public struct WidgetState: Codable, Equatable, Sendable {
     pendingCount: 0,
     todayAllowCount: 0,
     todayDenyCount: 0,
+    todayAutoCount: 0,
+    todayHumanCount: 0,
     connected: false,
     updatedAtMs: 0,
-    recentPending: []
+    recentPending: [],
+    weekSpark: []
   )
 }
 
@@ -124,12 +149,12 @@ extension WidgetState {
 #if os(macOS)
 extension WidgetState {
   /// Widget extension の bundle id。host はこのコンテナへ書き、widget は自分のコンテナを読む。
-  public static let widgetBundleIdentifier = "io.vigili.app.shono.widget"
+  public static let widgetBundleIdentifier = "io.vigili.app.widget"
 
   /// 配置先のファイル URL。優先順位:
   /// 1. `VIGILI_HOME`/`SENTINEL_HOME` env override（テスト・CLI 用）
   /// 2. widget のサンドボックスコンテナ
-  ///    `~/Library/Containers/io.vigili.app.shono.widget/Data/widget-state.json`
+  ///    `~/Library/Containers/io.vigili.app.widget/Data/widget-state.json`
   ///
   /// widget (サンドボックス) では `NSHomeDirectory()` が自分のコンテナ `Data` を指すので
   /// そのまま読める。host (非サンドボックス) では実ホーム配下の widget コンテナを明示パスで

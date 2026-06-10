@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- アプリはユーザーをトラッキングしない -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+
+	<!-- トラッキングに使用するドメインなし -->
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!-- 収集するデータ型: なし -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+
+	<!-- 使用する Required Reason API -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- UserDefaults: LAN URL / relay URL / 接続トークン等のアプリ設定を読み書き -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- CA92.1: 自分のアプリが書き込んだ情報を読み取るため -->
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

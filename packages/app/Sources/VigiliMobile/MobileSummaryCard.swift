@@ -1,4 +1,3 @@
-import Charts
 import SwiftUI
 
 // MARK: - StandingWatchLedger (リッチ統計カード)
@@ -7,14 +6,9 @@ import SwiftUI
 //
 // レイアウト:
 //   ────────────────────────────────────────
-//   Today   47    ↑ +12 vs yesterday
-//   ────────────────────────────────────────
-//   05      │ 08      │ 03
-//   AUTO    │ BY YOU  │ BLOCKED
-//   ────────────────────────────────────────
-//   7-day activity
-//   [██ ▓▓ ░░ ██ ░░ ██ ▓▓]   ← 積み上げバーチャート
-//    M   T   W   T   F   S   S
+//   TODAY              ■ 14 AUTO ■ 162 YOU ■ 103 BLOCKED
+//   244                              ↑ +12 vs yesterday
+//   ████████████░░░░░░░░░░░░░░░░░░░  ← セグメントバー
 //   ────────────────────────────────────────
 //   ● WATCHING · LOCAL                TODAY
 //
@@ -55,183 +49,163 @@ struct StandingWatchLedger: View {
     return todayTotal - y.total
   }
 
-  private var deltaLabel: String {
-    guard let d = delta else { return "" }
-    if d == 0 { return "= yesterday" }
-    let sign = d > 0 ? "↑ +" : "↓ "
-    return "\(sign)\(abs(d)) vs yesterday"
-  }
-
   private var deltaColor: Color {
     guard let d = delta else { return Theme.fgDim }
-    // 件数増 = 活動量増 → アクセント、減 = dim、ゼロ = dim
-    return d > 0 ? Theme.accent : Theme.fgDim
+    return d > 0 ? Theme.green : Theme.fgDim
+  }
+
+  /// デルタ表示 View。正=緑の上向き三角、負=暗い下向き三角、ゼロ=テキストのみ。
+  @ViewBuilder
+  private var deltaView: some View {
+    if let d = delta {
+      HStack(alignment: .center, spacing: 4) {
+        if d != 0 {
+          Image(systemName: d > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(deltaColor)
+        }
+        Text(d == 0 ? "= yesterday" : "+\(abs(d)) vs yesterday")
+          .monoLabel(11, tracking: 0.14)
+          .foregroundStyle(deltaColor)
+      }
+      .padding(.leading, 10)
+    }
   }
 
   // MARK: - body
 
+  // セクション間の余白: hairline を VStack の独立した要素として置く。
+  // overlay 方式は hairline とテキストが同じ y に来てしまうため使わない。
+  private let gap: CGFloat = 14
+
+  // MARK: - 自動承認率バー (LP の sage→coral グラデーション)
+
+  /// auto / (auto + byYou + blocked) の割合。データ未着なら nil。
+  private var autoRate: CGFloat? {
+    guard stats != nil else { return nil }
+    let total = autoApproved + humanApproved + blocked
+    guard total > 0 else { return 0 }
+    return CGFloat(autoApproved) / CGFloat(total)
+  }
+
+  private var automationBar: some View {
+    GeometryReader { geo in
+      ZStack(alignment: .leading) {
+        // トラック
+        RoundedRectangle(cornerRadius: 999)
+          .fill(Theme.border)
+        // 塗り: sage(緑) → coral のグラデーション
+        if let rate = autoRate {
+          RoundedRectangle(cornerRadius: 999)
+            .fill(
+              LinearGradient(
+                colors: [Theme.green, Theme.accent],
+                startPoint: .leading,
+                endPoint: .trailing
+              )
+            )
+            .frame(width: max(4, geo.size.width * rate))
+            .animation(.spring(response: 0.6, dampingFraction: 0.7), value: rate)
+        }
+      }
+    }
+    .frame(height: 5)
+  }
+
   var body: some View {
     VStack(spacing: 0) {
-      headlineRow
-      hairline.padding(.top, 14)
-      kpiRow.padding(.top, 14)
-      if !week.isEmpty {
-        hairline.padding(.top, 14)
-        weekChart.padding(.top, 14)
-      }
-      statusRow.padding(.top, 12)
+      hairline
+      headlineRow        // TODAY + 内訳凡例
+      decisionBar        // セグメントバー
+      hairline
+      statusRow
     }
     .padding(.horizontal, 24)
-    .padding(.bottom, 30)
+    .padding(.bottom, 16)
   }
 
-  // MARK: - Headline (Today N  ↑ +12 vs yesterday)
+  // MARK: - Headline: TODAY + 内訳凡例 (右端) / 数字 + 変化量 (右端)
 
   private var headlineRow: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 0) {
-      Text("Today")
-        .monoLabel(11, tracking: 0.16)
-        .foregroundStyle(Theme.fgDim)
-      Spacer(minLength: 8)
-      if stats != nil {
-        Text("\(todayTotal)")
-          .font(.mono(26, weight: .semibold))
-          .foregroundStyle(Theme.fg)
-          .contentTransition(.numericText())
-          .animation(.spring(response: 0.4, dampingFraction: 0.7), value: todayTotal)
-        if !deltaLabel.isEmpty {
-          Text(deltaLabel)
-            .monoLabel(11, tracking: 0.14)
-            .foregroundStyle(deltaColor)
-            .padding(.leading, 10)
-        }
-      } else {
-        Text("--")
-          .font(.mono(26, weight: .semibold))
+    VStack(alignment: .leading, spacing: 4) {
+      // TODAY ← → ■ AUTO ■ YOU ■ BLOCKED
+      HStack(alignment: .center, spacing: 0) {
+        Text("TODAY")
+          .monoLabel(10, tracking: 0.5)
           .foregroundStyle(Theme.fgDim)
+        Spacer(minLength: 8)
+        HStack(spacing: 10) {
+          kpiLegend(autoApproved,  "AUTO",    Theme.green)
+          kpiLegend(humanApproved, "YOU",     Theme.accent)
+          kpiLegend(blocked,       "BLOCKED", Theme.fgFaint.opacity(0.35))
+        }
+      }
+      // 数字（左）と変化量（右端）を同一ベースラインに
+      HStack(alignment: .firstTextBaseline, spacing: 0) {
+        if stats != nil {
+          Text("\(todayTotal)")
+            .font(.mono(28, weight: .bold))
+            .foregroundStyle(Theme.fg)
+            .contentTransition(.numericText())
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: todayTotal)
+        } else {
+          Text("--")
+            .font(.mono(28, weight: .bold))
+            .foregroundStyle(Theme.fgDim)
+        }
+        Spacer(minLength: 8)
+        deltaView
       }
     }
-    .overlay(alignment: .top) { hairline }
-    .padding(.top, 16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.top, 12)
+    .padding(.bottom, 4)
   }
 
-  // MARK: - KPI 3 カラム
+  // MARK: - セグメントバーのみ
 
-  private var kpiRow: some View {
-    HStack(spacing: 0) {
-      kpiColumn(cell(autoApproved), label: "auto", first: true)
-      kpiColumn(cell(humanApproved), label: "by you", first: false)
-      kpiColumn(cell(blocked), label: "blocked", first: false)
+  private var autoFrac:  CGFloat {
+    let t = autoApproved + humanApproved + blocked
+    return t > 0 ? CGFloat(autoApproved) / CGFloat(t) : 0
+  }
+  private var humanFrac: CGFloat {
+    let t = autoApproved + humanApproved + blocked
+    return t > 0 ? CGFloat(humanApproved) / CGFloat(t) : 0
+  }
+
+  private var decisionBar: some View {
+    VStack(spacing: 6) {
+      // セグメントバー
+      GeometryReader { geo in
+        HStack(spacing: 2) {
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Theme.green)
+            .frame(width: max(stats != nil ? 2 : 0, geo.size.width * autoFrac))
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Theme.accent)
+            .frame(width: max(stats != nil ? 2 : 0, geo.size.width * humanFrac))
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Theme.fgFaint.opacity(0.35))
+            .frame(maxWidth: .infinity)
+        }
+      }
+      .frame(height: 5)
     }
+    .padding(.top, 4)
+    .padding(.bottom, 10)
   }
 
-  private func kpiColumn(_ value: String, label: String, first: Bool) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text(value)
-        .font(.mono(22, weight: .medium))
+  private func kpiLegend(_ value: Int, _ label: String, _ color: Color) -> some View {
+    HStack(spacing: 4) {
+      RoundedRectangle(cornerRadius: 1.5)
+        .fill(color)
+        .frame(width: 8, height: 8)
+      Text(stats == nil ? "--" : "\(value)")
+        .font(.mono(11, weight: .semibold))
         .foregroundStyle(Theme.fg)
         .contentTransition(.numericText())
       Text(label)
-        .monoLabel(10, tracking: 0.16)
-        .foregroundStyle(Theme.fgDim)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.bottom, 14)
-    .padding(.leading, first ? 0 : 16)
-    .overlay(alignment: .leading) {
-      if !first {
-        Rectangle().fill(Theme.border).frame(width: 1)
-      }
-    }
-  }
-
-  // MARK: - 7-day stacked bar chart
-
-  /// バー 1 本分のデータ (auto / human / blocked の 3 層)。
-  private struct BarEntry: Identifiable {
-    let id: String  // date "YYYY-MM-DD"
-    let label: String  // 曜日
-    let auto: Int
-    let human: Int
-    let blocked: Int
-    var total: Int { auto + human + blocked }
-  }
-
-  private var barEntries: [BarEntry] {
-    // week は index 0=今日 → 古い順に並べ替えて表示 (左=古, 右=今日)
-    week.reversed().map { b in
-      BarEntry(id: b.date, label: b.weekdayLetter,
-               auto: b.auto, human: b.humanApproved, blocked: b.denied)
-    }
-  }
-
-  /// 週のピーク件数 (y 軸 max 用)。最低 5 にして細すぎを防ぐ。
-  private var peakTotal: Int {
-    max(5, barEntries.map { $0.total }.max() ?? 0)
-  }
-
-  @ViewBuilder
-  private var weekChart: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("7-day activity")
-        .monoLabel(10, tracking: 0.16)
-        .foregroundStyle(Theme.fgDim)
-
-      Chart {
-        ForEach(barEntries) { entry in
-          // 積み上げ: auto (底) → human (中) → blocked (上)
-          BarMark(
-            x: .value("Day", entry.label),
-            y: .value("Auto", entry.auto),
-            stacking: .standard
-          )
-          .foregroundStyle(Theme.green.opacity(0.75))
-          .cornerRadius(2)
-
-          BarMark(
-            x: .value("Day", entry.label),
-            y: .value("By you", entry.human),
-            stacking: .standard
-          )
-          .foregroundStyle(Theme.accent.opacity(0.85))
-          .cornerRadius(2)
-
-          BarMark(
-            x: .value("Day", entry.label),
-            y: .value("Blocked", entry.blocked),
-            stacking: .standard
-          )
-          .foregroundStyle(Theme.red.opacity(0.70))
-          .cornerRadius(2)
-        }
-      }
-      .chartXAxis {
-        AxisMarks(values: .automatic) { _ in
-          AxisValueLabel()
-            .font(.mono(9))
-            .foregroundStyle(Theme.fgDim)
-        }
-      }
-      .chartYAxis(.hidden)
-      .chartYScale(domain: 0...peakTotal)
-      .frame(height: 72)
-
-      // 凡例 (小 pill 3 つ)
-      HStack(spacing: 12) {
-        legendPill(color: Theme.green.opacity(0.75), label: "auto")
-        legendPill(color: Theme.accent.opacity(0.85), label: "by you")
-        legendPill(color: Theme.red.opacity(0.70), label: "blocked")
-      }
-    }
-  }
-
-  private func legendPill(color: Color, label: String) -> some View {
-    HStack(spacing: 4) {
-      RoundedRectangle(cornerRadius: 2)
-        .fill(color)
-        .frame(width: 10, height: 6)
-      Text(label)
-        .monoLabel(9, tracking: 0.12)
+        .monoLabel(10, tracking: 0.12)
         .foregroundStyle(Theme.fgDim)
     }
   }
@@ -251,8 +225,8 @@ struct StandingWatchLedger: View {
         .monoLabel(11, tracking: 0.18)
         .foregroundStyle(Theme.fgDim)
     }
-    .overlay(alignment: .top) { hairline }
-    .padding(.top, 4)
+    .padding(.top, 14)
+    .padding(.bottom, 12)
   }
 
   private var statusDotColor: Color {

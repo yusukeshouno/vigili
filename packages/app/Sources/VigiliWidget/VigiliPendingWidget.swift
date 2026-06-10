@@ -154,51 +154,103 @@ private struct SmallView: View {
 private struct MediumView: View {
   let state: WidgetState
 
+  private var autoC:    Int { state.todayAutoCount }
+  private var humanC:   Int { state.todayHumanCount }
+  private var blockedC: Int { state.todayDenyCount }
+  private var totalC:   Int { autoC + humanC + blockedC }
+  private var autoFrac:  CGFloat { totalC > 0 ? CGFloat(autoC)  / CGFloat(totalC) : 0 }
+  private var humanFrac: CGFloat { totalC > 0 ? CGFloat(humanC) / CGFloat(totalC) : 0 }
+
   var body: some View {
-    HStack(spacing: 14) {
-      // 左: 件数
-      VStack(alignment: .leading, spacing: 6) {
-        HStack(spacing: 6) {
-          PetalMark(size: 16, color: accent)
-          Text("Vigili")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.primary)
+    HStack(spacing: 12) {
+      // 左: pending 件数
+      VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 5) {
+          PetalMark(size: 14, color: accent)
+          Text("Vigili").font(.system(size: 10, weight: .semibold)).foregroundStyle(.primary)
         }
         Spacer(minLength: 0)
         Text("\(state.pendingCount)")
-          .font(.system(size: 48, weight: .bold, design: .rounded))
+          .font(.system(size: 40, weight: .bold, design: .rounded))
           .foregroundStyle(state.pendingCount > 0 ? accent : .primary)
           .contentTransition(.numericText(value: Double(state.pendingCount)))
-        Text("pending")
-          .font(.system(size: 11, weight: .medium))
-          .foregroundStyle(dim)
+        Text("pending").font(.system(size: 10, weight: .medium)).foregroundStyle(dim)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(maxWidth: 80, alignment: .leading)
 
-      // 右: 今日の集計
-      VStack(alignment: .leading, spacing: 8) {
-        Text("Today")
-          .font(.system(size: 10, weight: .semibold))
-          .foregroundStyle(dim)
-          .textCase(.uppercase)
-          .tracking(0.8)
-        StatRow(label: "allow", value: state.todayAllowCount, color: .secondary)
-        StatRow(label: "deny", value: state.todayDenyCount, color: .secondary)
-        Spacer(minLength: 0)
+      // 右: TODAY / バー+凡例（同一セクション）
+      VStack(alignment: .leading, spacing: 5) {
+        // TODAY ← → N DECISIONS
+        HStack(alignment: .firstTextBaseline) {
+          Text("TODAY")
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(dim)
+            .tracking(0.5)
+          Spacer()
+          HStack(alignment: .firstTextBaseline, spacing: 2) {
+            Text("\(totalC)")
+              .font(.system(size: 13, weight: .bold, design: .rounded))
+              .foregroundStyle(.primary)
+            Text("DECISIONS")
+              .font(.system(size: 7))
+              .foregroundStyle(dim)
+              .tracking(0.4)
+          }
+        }
+
+        // バー + 凡例を1セクションに結合（iOS の decisionBar と同構造）
+        VStack(alignment: .leading, spacing: 5) {
+          GeometryReader { geo in
+            HStack(spacing: 1) {
+              RoundedRectangle(cornerRadius: 2)
+                .fill(Color(red: 0.55, green: 0.72, blue: 0.55))
+                .frame(width: max(2, geo.size.width * autoFrac))
+              RoundedRectangle(cornerRadius: 2)
+                .fill(accent)
+                .frame(width: max(2, geo.size.width * humanFrac))
+              RoundedRectangle(cornerRadius: 2)
+                .fill(Color.secondary.opacity(0.25))
+                .frame(maxWidth: .infinity)
+            }
+          }
+          .frame(height: 5)
+
+          HStack(spacing: 8) {
+            wLegend(autoC,    "AUTO",    Color(red: 0.55, green: 0.72, blue: 0.55))
+            wLegend(humanC,   "YOU",     accent)
+            wLegend(blockedC, "BLOCKED", Color.secondary.opacity(0.25))
+          }
+        }
+
         if state.isStale {
           Label("offline", systemImage: "wifi.slash")
-            .font(.system(size: 10))
-            .foregroundStyle(dim)
+            .font(.system(size: 8)).foregroundStyle(dim)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
+
+  private func wLegend(_ v: Int, _ l: String, _ c: Color) -> some View {
+    HStack(spacing: 3) {
+      RoundedRectangle(cornerRadius: 1.5).fill(c).frame(width: 7, height: 7)
+      Text("\(v)").font(.system(size: 8, weight: .semibold, design: .rounded)).foregroundStyle(.primary)
+      Text(l).font(.system(size: 7)).foregroundStyle(dim)
+    }
+  }
 }
 
 private struct LargeView: View {
   let state: WidgetState
+
+  private func wLegendL(_ v: Int, _ l: String, _ c: Color) -> some View {
+    HStack(spacing: 3) {
+      RoundedRectangle(cornerRadius: 1.5).fill(c).frame(width: 7, height: 7)
+      Text("\(v)").font(.system(size: 8, weight: .semibold, design: .rounded)).foregroundStyle(.primary)
+      Text(l).font(.system(size: 7)).foregroundStyle(dim)
+    }
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -214,40 +266,67 @@ private struct LargeView: View {
         }
       }
 
-      HStack(alignment: .top) {
+      // === iOS と同じ可視化ブロック ===
+      let autoC    = state.todayAutoCount
+      let humanC   = state.todayHumanCount
+      let blockedC = state.todayDenyCount
+      let totalC   = autoC + humanC + blockedC
+
+      HStack(alignment: .bottom, spacing: 12) {
+        // 左: pending 件数
         VStack(alignment: .leading, spacing: 2) {
           Text("\(state.pendingCount)")
-            .font(.system(size: 56, weight: .bold, design: .rounded))
+            .font(.system(size: 48, weight: .bold, design: .rounded))
             .foregroundStyle(state.pendingCount > 0 ? accent : .primary)
             .contentTransition(.numericText(value: Double(state.pendingCount)))
           Text("pending")
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 10, weight: .medium))
             .foregroundStyle(dim)
         }
         Spacer()
-        VStack(alignment: .trailing, spacing: 6) {
-          Text("Today")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(dim)
-            .textCase(.uppercase)
-            .tracking(0.8)
-          HStack(spacing: 4) {
-            Text("\(state.todayAllowCount)")
-              .font(.system(size: 16, weight: .semibold, design: .rounded))
-              .foregroundStyle(.primary)
-            Text("allow")
-              .font(.system(size: 10))
+        // 右: TODAY / バー+凡例（Medium と同構造）
+        VStack(alignment: .leading, spacing: 5) {
+          // TODAY ← → N DECISIONS
+          HStack(alignment: .firstTextBaseline) {
+            Text("TODAY")
+              .font(.system(size: 8, weight: .semibold))
               .foregroundStyle(dim)
+              .tracking(0.5)
+            Spacer()
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+              Text("\(totalC)")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+              Text("DECISIONS")
+                .font(.system(size: 7))
+                .foregroundStyle(dim)
+                .tracking(0.4)
+            }
           }
-          HStack(spacing: 4) {
-            Text("\(state.todayDenyCount)")
-              .font(.system(size: 16, weight: .semibold, design: .rounded))
-              .foregroundStyle(.primary)
-            Text("deny")
-              .font(.system(size: 10))
-              .foregroundStyle(dim)
+          // バー + 凡例
+          let autoFracL: CGFloat  = totalC > 0 ? CGFloat(autoC)  / CGFloat(totalC) : 0
+          let humanFracL: CGFloat = totalC > 0 ? CGFloat(humanC) / CGFloat(totalC) : 0
+          GeometryReader { geo in
+            HStack(spacing: 1) {
+              RoundedRectangle(cornerRadius: 2)
+                .fill(Color(red: 0.55, green: 0.72, blue: 0.55))
+                .frame(width: max(2, geo.size.width * autoFracL))
+              RoundedRectangle(cornerRadius: 2)
+                .fill(accent)
+                .frame(width: max(2, geo.size.width * humanFracL))
+              RoundedRectangle(cornerRadius: 2)
+                .fill(Color.secondary.opacity(0.25))
+                .frame(maxWidth: .infinity)
+            }
+          }
+          .frame(height: 5)
+          HStack(spacing: 8) {
+            wLegendL(autoC,    "AUTO",    Color(red: 0.55, green: 0.72, blue: 0.55))
+            wLegendL(humanC,   "YOU",     accent)
+            wLegendL(blockedC, "BLOCKED", Color.secondary.opacity(0.25))
           }
         }
+        .frame(width: 160)
       }
 
       Divider()

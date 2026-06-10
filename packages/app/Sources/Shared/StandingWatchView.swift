@@ -62,7 +62,7 @@ struct StandingWatchView: View {
     let e = appearedAt.map { t - $0 } ?? 0
     let textP = ramp(e, delay: textDelay, dur: textDur)
 
-    VStack(spacing: 28) {
+    VStack(spacing: 20) {
       radar(t: t, e: e)
         .frame(width: radarSize, height: radarSize)
 
