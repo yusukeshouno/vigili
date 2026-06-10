@@ -19,19 +19,26 @@ struct WelcomeView: View {
   @State private var showPairInstructions = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      header
-      Spacer(minLength: 18)
-      intro
-      Spacer(minLength: 22)
-      qrSection
-      Spacer(minLength: 14)
-      remoteSection
-      Spacer(minLength: 18)
+    // 中段 (header〜remote) はスクロール可能にし、footer は常に最下部に固定する。
+    // MenuBarExtra(.window) は内容を縦に伸ばせず、はみ出すと footer が切れるため。
+    VStack(spacing: 0) {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          header
+          intro
+          qrSection
+          remoteSection
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 22)
+        .padding(.bottom, 16)
+      }
+
+      Rectangle().fill(Theme.border).frame(height: 1)
       footer
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
     }
-    .padding(.horizontal, 22)
-    .padding(.vertical, 22)
     .background(Theme.bg)
     .preferredColorScheme(.dark)
   }
@@ -84,18 +91,18 @@ struct WelcomeView: View {
 
       HStack(spacing: 16) {
         // QR
-        if let payload = payload, let qr = qrImage(for: payload.url, size: 132) {
+        if let payload = payload, let qr = qrImage(for: payload.url, size: 118) {
           Image(nsImage: qr)
             .resizable()
             .interpolation(.none)
-            .frame(width: 132, height: 132)
+            .frame(width: 118, height: 118)
             .padding(8)
             .background(RoundedRectangle(cornerRadius: 12).fill(Color.white))
         } else {
           // token / IP がまだ取れない場合のプレースホルダ
           RoundedRectangle(cornerRadius: 12)
             .fill(Theme.bgRise)
-            .frame(width: 132, height: 132)
+            .frame(width: 118, height: 118)
             .overlay(
               VStack(spacing: 6) {
                 ProgressView().controlSize(.small)

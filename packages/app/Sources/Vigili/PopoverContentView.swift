@@ -30,14 +30,23 @@ struct PopoverContentView: View {
         mainContent
       }
     }
-    .onAppear {
-      // ペアリング完了済みでまだウィザードを通っていない場合に自動表示
-      if !coordinator.showWelcome && !onboardingComplete {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-          OnboardingWindow.show(coordinator: coordinator) { _ in
-            onboardingComplete = true
-          }
-        }
+    .onAppear { maybeShowWizard() }
+    // Welcome を「Got it」で閉じた直後 (showWelcome: true→false) にもウィザードを出す。
+    // onAppear は初回オープン時 showWelcome=true でガードに弾かれ再発火しないため、
+    // 遷移を onChange で拾わないと新規インストールでウィザードが一度も出ない。
+    .onChange(of: coordinator.showWelcome) { isWelcome in
+      if !isWelcome { maybeShowWizard() }
+    }
+  }
+
+  /// ウィザード未完了かつ Welcome 非表示なら、少し遅らせて 1 度だけ開く。
+  private func maybeShowWizard() {
+    guard !coordinator.showWelcome, !onboardingComplete else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+      // 遅延中に状態が変わっていないか再確認 (二重表示防止)。
+      guard !coordinator.showWelcome, !onboardingComplete else { return }
+      OnboardingWindow.show(coordinator: coordinator) { _ in
+        onboardingComplete = true
       }
     }
   }
@@ -232,12 +241,13 @@ struct PopoverContentView: View {
 
   private var emptyState: some View {
     VStack(spacing: 0) {
-      // レーダー (少し縮小してスペースを確保)
+      // Spacer でレーダーを統計ストリップとの間で垂直中央に浮かせる
+      Spacer(minLength: 0)
       StandingWatchView(wsState: coordinator.wsState, radarSize: 180)
-        .padding(.vertical, 10)
         .transition(.opacity)
+      Spacer(minLength: 0)
 
-      // 統計ストリップ (今日の件数 + 前日比 + 7日スパークライン)
+      // 統計ストリップは常に下端に固定
       if coordinator.todayStats != nil || !coordinator.weekStats.isEmpty {
         MacStatsStrip(
           stats: coordinator.todayStats,
@@ -316,6 +326,18 @@ struct PopoverContentView: View {
       }
       .buttonStyle(.plain)
       .help("Hosted sessions (vigili run)")
+
+      // Sign in with Apple → 独立ウィンドウを開いてから認証
+      // (popover 内から ASAuthorizationController を出すと popover が閉じるため)
+      Button {
+        SignInWindow.show(coordinator: coordinator)
+      } label: {
+        Image(systemName: "applelogo")
+          .font(.system(size: 12))
+          .foregroundStyle(Theme.fgMid)
+      }
+      .buttonStyle(.plain)
+      .help("Sign in with Apple — iPhone と自動リンク (QR 不要)")
 
       // iPhone ペアリング QR を再表示
       Button {
@@ -443,78 +465,93 @@ struct PopoverContentView: View {
 /// ポップオーバーの待機画面 (レーダー下) に出る 1 行 + スパークラインの統計ストリップ。
 ///
 ///  Today  47  ↑ +12  ▁▃▅▇▅▃█  (7 日スパークライン)
+/// Mac ポップオーバーの可視化ストリップ。
+/// デザイン: TODAY (左) ← → 275 DECISIONS (右) / バー / 14 AUTO ■ 158 YOU ■ 103 BLOCKED
 private struct MacStatsStrip: View {
   let stats: StatsBuckets?
   let week: [DailyBucket]
 
-  private var todayTotal: Int { stats?.total ?? 0 }
-
-  private var delta: Int? {
-    guard stats != nil, week.count > 1 else { return nil }
-    return todayTotal - week[1].total
+  private var total: Int { stats?.total ?? 0 }
+  private var humanApproved: Int {
+    guard let s = stats else { return 0 }
+    return (s.bySource["human-pwa"] ?? 0) + (s.bySource["human-cli"] ?? 0)
   }
-
-  private var deltaLabel: String {
-    guard let d = delta else { return "" }
-    if d == 0 { return "=" }
-    return d > 0 ? "↑ +\(abs(d))" : "↓ \(abs(d))"
+  private var autoApproved: Int {
+    guard let s = stats else { return 0 }
+    return max(0, s.byDecision.allow - humanApproved)
   }
+  private var blocked: Int { stats?.byDecision.deny ?? 0 }
 
-  private var deltaColor: Color {
-    guard let d = delta else { return Theme.fgDim }
-    return d > 0 ? Theme.accent : Theme.fgDim
-  }
-
-  /// 週次スパークライン用: 古い順 (左=古, 右=今日)
-  private var sparkData: [DailyBucket] { week.reversed() }
-  private var sparkMax: Int { max(1, sparkData.map { $0.total }.max() ?? 1) }
+  // バーの比率: auto(左) / human(中) / blocked(右)
+  private var autoFrac:  CGFloat { total > 0 ? CGFloat(autoApproved) / CGFloat(total) : 0 }
+  private var humanFrac: CGFloat { total > 0 ? CGFloat(humanApproved) / CGFloat(total) : 0 }
 
   var body: some View {
-    HStack(spacing: 10) {
-      // 「Today N」
-      HStack(alignment: .firstTextBaseline, spacing: 5) {
-        Text("Today")
-          .font(.mono(9))
+    VStack(alignment: .leading, spacing: 5) {
+      // 行1: TODAY ← → 275 DECISIONS
+      HStack(alignment: .firstTextBaseline) {
+        Text("TODAY")
+          .font(.mono(9, weight: .medium))
           .foregroundStyle(Theme.fgDim)
-        Text("\(todayTotal)")
-          .font(.mono(13, weight: .semibold))
-          .foregroundStyle(Theme.fg)
-          .contentTransition(.numericText())
-      }
-
-      // 前日比
-      if !deltaLabel.isEmpty {
-        Text(deltaLabel)
-          .font(.mono(9))
-          .foregroundStyle(deltaColor)
-      }
-
-      Spacer(minLength: 4)
-
-      // 7 日スパークライン (純 SwiftUI でシンプルに)
-      if !sparkData.isEmpty {
-        HStack(alignment: .bottom, spacing: 2) {
-          ForEach(sparkData) { day in
-            let h = max(2.0, 22.0 * CGFloat(day.total) / CGFloat(sparkMax))
-            let isToday = day.id == sparkData.last?.id
-            RoundedRectangle(cornerRadius: 1.5)
-              .fill(isToday ? Theme.accent : Theme.fgMid.opacity(0.45))
-              .frame(width: 5, height: h)
-          }
+          .tracking(0.6)
+        Spacer()
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+          Text("\(total)")
+            .font(.system(size: 15, weight: .bold, design: .rounded))
+            .foregroundStyle(Theme.fg)
+            .contentTransition(.numericText())
+          Text("DECISIONS")
+            .font(.mono(8))
+            .foregroundStyle(Theme.fgDim)
+            .tracking(0.5)
         }
-        .frame(height: 22)
+      }
+
+      // 行2: セグメントバー (auto / human / blocked)
+      GeometryReader { geo in
+        HStack(spacing: 2) {
+          // auto セグメント (sage green)
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Theme.green)
+            .frame(width: max(2, geo.size.width * autoFrac))
+          // human セグメント (coral)
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Theme.accent)
+            .frame(width: max(2, geo.size.width * humanFrac))
+          // blocked セグメント (dim)
+          RoundedRectangle(cornerRadius: 2)
+            .fill(Theme.fgFaint.opacity(0.4))
+            .frame(maxWidth: .infinity)
+        }
+      }
+      .frame(height: 5)
+
+      // 行3: 14 AUTO ■ 158 YOU ■ 103 BLOCKED
+      HStack(spacing: 10) {
+        legendItem(value: autoApproved,   label: "AUTO",    color: Theme.green)
+        legendItem(value: humanApproved,  label: "YOU",     color: Theme.accent)
+        legendItem(value: blocked,        label: "BLOCKED", color: Theme.fgFaint.opacity(0.4))
+        Spacer()
       }
     }
-    .padding(.horizontal, 2)
+    .padding(.horizontal, 10)
     .padding(.vertical, 8)
-    .background(
-      RoundedRectangle(cornerRadius: 6)
-        .fill(Theme.bgRise)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 6)
-        .stroke(Theme.border, lineWidth: 0.5)
-    )
+    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.bgRise))
+    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.border, lineWidth: 0.5))
+  }
+
+  private func legendItem(value: Int, label: String, color: Color) -> some View {
+    HStack(spacing: 4) {
+      RoundedRectangle(cornerRadius: 1.5)
+        .fill(color)
+        .frame(width: 8, height: 8)
+      Text("\(value)")
+        .font(.mono(9, weight: .semibold))
+        .foregroundStyle(Theme.fg)
+      Text(label)
+        .font(.mono(9))
+        .foregroundStyle(Theme.fgDim)
+    }
   }
 }
 
