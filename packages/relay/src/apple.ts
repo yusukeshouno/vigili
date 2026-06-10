@@ -10,7 +10,7 @@
  * rawNonce を relay に送り、relay は `sha256(rawNonce) == token.nonce` を定数時間比較する。
  *
  * Env:
- *   APPLE_AUD       許可する audience(bundle id) の CSV。既定 io.vigili.app.shono,io.vigili.mobile.shono
+ *   APPLE_AUD       許可する audience(bundle id) の CSV。既定 io.vigili.app,io.vigili.mobile
  *   APPLE_JWKS_URI  JWKS の URL。既定 https://appleid.apple.com/auth/keys (テストで差し替え可)
  */
 
@@ -37,12 +37,18 @@ export interface AppleIdentity {
 
 export interface AppleVerifier {
   readonly enabled: boolean;
-  /** 検証成功なら AppleIdentity を返す。失敗時は Error を throw (fail-closed)。 */
+  /** ネイティブ検証: 署名/iss/aud/exp + nonce==sha256(rawNonce)。失敗時 throw (fail-closed)。 */
   verify(identityToken: string, rawNonce: string): Promise<AppleIdentity>;
+  /**
+   * Web 検証 (SPEC §10.5): 署名/iss/aud/exp のみ。nonce はチェックしない
+   * (relay はアプリ生成 nonce を知らない。Web フローは Services ID への aud 一致 +
+   * Apple 署名で由来を保証し、state がアプリ側のバインドを担う)。失敗時 throw。
+   */
+  verifyWeb(idToken: string): Promise<AppleIdentity>;
 }
 
 export function appleConfigFromEnv(): AppleConfig {
-  const audiences = (process.env.APPLE_AUD ?? "io.vigili.app.shono,io.vigili.mobile.shono")
+  const audiences = (process.env.APPLE_AUD ?? "io.vigili.app,io.vigili.mobile,io.vigili.signin")
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
@@ -53,26 +59,39 @@ export function appleConfigFromEnv(): AppleConfig {
 export function createAppleVerifier(config: AppleConfig): AppleVerifier {
   // createRemoteJWKSet は JWKS を遅延フェッチし、鍵ローテーションをキャッシュ込みで扱う。
   const jwks = createRemoteJWKSet(new URL(config.jwksUri));
+
+  // 署名・iss・aud・exp を検証し payload を返す共通部 (nonce 検証は呼び出し側)。
+  async function verifyCommon(token: string): Promise<JWTPayload> {
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: APPLE_ISSUER,
+      audience: config.audiences,
+    });
+    return payload;
+  }
+
+  function extract(payload: JWTPayload): AppleIdentity {
+    const sub = typeof payload.sub === "string" ? payload.sub : "";
+    if (!sub) throw new Error("apple_token_missing_sub");
+    const email = typeof payload.email === "string" ? payload.email : null;
+    return { sub, email };
+  }
+
   return {
     enabled: true,
     async verify(identityToken, rawNonce) {
-      // 署名・iss・aud・exp は jose が検証する (失敗時 throw)。
-      const { payload } = await jwtVerify(identityToken, jwks, {
-        issuer: APPLE_ISSUER,
-        audience: config.audiences,
-      });
-      const sub = typeof payload.sub === "string" ? payload.sub : "";
-      if (!sub) throw new Error("apple_token_missing_sub");
-
+      const payload = await verifyCommon(identityToken);
       // nonce: Apple は token.nonce にクライアントが渡した sha256(rawNonce) をそのまま載せる。
       const expectedNonce = createHash("sha256").update(rawNonce).digest("hex");
       const tokenNonce = (payload as JWTPayload & { nonce?: unknown }).nonce;
       if (typeof tokenNonce !== "string" || !constantTimeEqualString(tokenNonce, expectedNonce)) {
         throw new Error("apple_token_nonce_mismatch");
       }
-
-      const email = typeof payload.email === "string" ? payload.email : null;
-      return { sub, email };
+      return extract(payload);
+    },
+    async verifyWeb(idToken) {
+      // Web フロー: nonce 検証なし (SPEC §10.5)。署名/iss/aud/exp のみ。
+      const payload = await verifyCommon(idToken);
+      return extract(payload);
     },
   };
 }

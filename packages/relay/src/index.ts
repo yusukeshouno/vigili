@@ -104,6 +104,21 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
   const app: FastifyInstance = Fastify({ logger: false });
   await app.register(fastifyWebsocket);
 
+  // Apple Web Sign in (§10.5) の form_post は application/x-www-form-urlencoded で来る。
+  // 依存を増やさず標準 URLSearchParams でパースする。
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "string" },
+    (_req, body, done) => {
+      try {
+        const params = new URLSearchParams(body as string);
+        done(null, Object.fromEntries(params.entries()));
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    },
+  );
+
   app.get("/healthz", async () => ({ ok: true, version: 1 }));
 
   // ---------- REST: auth ----------
@@ -164,29 +179,65 @@ export async function startRelay(options: RelayOptions): Promise<RunningRelay> {
       log(`[relay] apple auth rejected: ${(err as Error).message}`);
       return reply.code(401).send({ error: "invalid_apple_token" });
     }
-    // sub でのみ find-or-create (email では紐付けない — email 乗っ取り防止)。
-    let account = store.findAccountByAppleSub(identity.sub);
-    if (!account) {
-      const id = randomUUID();
-      const now = Date.now();
-      // email 列は UNIQUE NOT NULL のため衝突しない合成値を入れる。実 email は応答でのみ返す。
-      store.insertAppleAccount({
-        id,
-        email: `appleid:${identity.sub}`,
-        apple_sub: identity.sub,
-        created_at: now,
-      });
-      account = store.findAccountById(id);
-      log(`[relay] apple account created account=${id}`);
-    } else {
-      log(`[relay] apple signin account=${account.id}`);
-    }
+    const account = findOrCreateAppleAccount(identity.sub);
     if (!account) return reply.code(500).send({ error: "account_persist_failed" });
     const session = issueSession(store, account.id);
     return reply.send({
       account: { id: account.id, email: identity.email },
       session: { token: session.token, expires_at: session.expires_at },
     });
+  });
+
+  // Apple sub で find-or-create (email では紐付けない — email 乗っ取り防止)。
+  function findOrCreateAppleAccount(sub: string) {
+    const existing = store.findAccountByAppleSub(sub);
+    if (existing) {
+      log(`[relay] apple signin account=${existing.id}`);
+      return existing;
+    }
+    const id = randomUUID();
+    // email 列は UNIQUE NOT NULL のため衝突しない合成値を入れる。実 email は応答でのみ返す。
+    store.insertAppleAccount({
+      id,
+      email: `appleid:${sub}`,
+      apple_sub: sub,
+      created_at: Date.now(),
+    });
+    log(`[relay] apple account created account=${id}`);
+    return store.findAccountById(id);
+  }
+
+  // Web Sign in with Apple (SPEC §10.5): Mac アプリが ASWebAuthenticationSession で
+  // appleid.apple.com を開き、Apple が id_token をここに form_post する。
+  // 検証 → アカウント解決 → session 発行 → vigili://auth-callback へ 302 で戻す。
+  // 認証不要・公開エンドポイント (Apple からの POST を受けるため)。
+  app.post("/v1/auth/apple/web-callback", async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const idToken = typeof body.id_token === "string" ? body.id_token : "";
+    const state = typeof body.state === "string" ? body.state : "";
+    const errback = (reason: string) => {
+      // アプリ側にエラーを返して session を渡さない。state は CSRF/起動元バインド用に往復。
+      const qs = new URLSearchParams({ error: reason, ...(state ? { state } : {}) });
+      return reply.code(302).header("location", `vigili://auth-callback?${qs}`).send();
+    };
+    if (!idToken) return errback("missing_id_token");
+    let identity: { sub: string; email: string | null };
+    try {
+      identity = await apple.verifyWeb(idToken);
+    } catch (err) {
+      log(`[relay] apple web auth rejected: ${(err as Error).message}`);
+      return errback("invalid_apple_token");
+    }
+    const account = findOrCreateAppleAccount(identity.sub);
+    if (!account) return errback("account_persist_failed");
+    const session = issueSession(store, account.id);
+    const qs = new URLSearchParams({
+      session: session.token,
+      account_id: account.id,
+      ...(identity.email ? { email: identity.email } : {}),
+      ...(state ? { state } : {}),
+    });
+    return reply.code(302).header("location", `vigili://auth-callback?${qs}`).send();
   });
 
   app.post("/v1/signout", async (req, reply) => {

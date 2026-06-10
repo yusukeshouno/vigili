@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createAppleVerifier } from "./apple.js";
 
 const ISSUER = "https://appleid.apple.com";
-const AUD = "io.vigili.mobile.shono";
+const AUD = "io.vigili.mobile";
 const KID = "test-key-1";
 
 let server: Server;
@@ -161,5 +161,32 @@ describe("apple verifier", () => {
     const rawNonce = "n";
     const token = await makeToken({ nonceClaim: sha256hex(rawNonce) });
     await expect(v.verify(token, rawNonce)).rejects.toBeDefined();
+  });
+
+  // Web Sign in (SPEC §10.5): nonce 検証なし、aud=Services ID。
+  const SERVICES_ID = "io.vigili.signin";
+
+  it("verifyWeb accepts a valid id_token without a nonce claim", async () => {
+    const v = createAppleVerifier({ audiences: [SERVICES_ID], jwksUri });
+    const token = await makeToken({ aud: SERVICES_ID, email: "web@x.co" });
+    const id = await v.verifyWeb(token);
+    expect(id.sub).toBe("apple-sub-123");
+    expect(id.email).toBe("web@x.co");
+  });
+
+  it("verifyWeb still rejects bad aud / expired / bad signature / missing sub", async () => {
+    const v = createAppleVerifier({ audiences: [SERVICES_ID], jwksUri });
+    await expect(v.verifyWeb(await makeToken({ aud: "io.vigili.mobile" }))).rejects.toBeDefined();
+    const expired = await makeToken({
+      aud: SERVICES_ID,
+      expSeconds: Math.floor(Date.now() / 1000) - 60,
+    });
+    await expect(v.verifyWeb(expired)).rejects.toBeDefined();
+    const other = await generateKeyPair("RS256");
+    const badSig = await makeToken({ aud: SERVICES_ID, kid: "x", signWith: other.privateKey });
+    await expect(v.verifyWeb(badSig)).rejects.toBeDefined();
+    await expect(
+      v.verifyWeb(await makeToken({ aud: SERVICES_ID, sub: null })),
+    ).rejects.toBeDefined();
   });
 });

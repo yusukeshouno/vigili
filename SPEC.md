@@ -603,4 +603,26 @@ macOS 14+ の interactive widget（`Button(intent:)` + App Intents）で、large
 - 共通 (Sources/Shared): `AppleSignIn`（`ASAuthorizationController` + nonce）、`KeychainStore`（`kSecAttrAccessibleAfterFirstUnlock`、アクセスグループ無し）、`RelayAuthClient`（`/v1/auth/apple`, `/v1/pairings`, `/v1/account/devices`）。
 - Mac: 「Claude Code に接続」= `HookInstaller`（`~/.claude/settings.json` に PreToolUse hook を冪等・非破壊で追加）+ daemon 起動。「Sign in with Apple」= サインイン → `createPairing` → `relay-configure` admin で daemon をホット再接続。
 - iOS: 「Sign in with Apple」= サインイン → `accountSessionToken`(Keychain) 保存 → `POST /v1/account/devices` で APNs 登録 → account-stream へ接続。`reevaluateRoute` 優先順位は **Bonjour LAN > account-stream > legacy relay > static LAN > none**。QR スキャンは副 CTA としてフォールバック維持。
-- entitlements: 両ターゲットに `com.apple.developer.applesignin = [Default]`。Apple Developer Console で両 App ID に Sign in with Apple capability を有効化（paid program 必須）。
+- entitlements: **iOS のみ** `com.apple.developer.applesignin = [Default]`（App Store 配布）。**Mac は付けない**（§10.5 参照）。
+
+### 10.5 Mac の Sign in with Apple は Web フロー（Developer ID 制約）
+
+**制約**: Developer ID 配布の Mac アプリは `com.apple.developer.applesignin` を使えない。Developer ID プロビジョニングプロファイルがこの entitlement を認可できず、付けると AMFI が起動を拒否する（`Launchd job spawn failed` / errno 163。notarize は通るが起動不能）。MAS 配布なら可能だが、本アプリは daemon を子プロセス spawn し `~/.vigili` に書き Claude hook を入れる設計でサンドボックス非互換。
+
+**解決**: Mac はネイティブ `ASAuthorizationController` をやめ、**Web Sign in with Apple**（`ASWebAuthenticationSession`）に切替。entitlement 不要。
+
+フロー:
+1. Mac アプリが `state` + `nonce` を生成し、`https://appleid.apple.com/auth/authorize?client_id=<ServicesID>&redirect_uri=https://relay.vigili.io/v1/auth/apple/web-callback&response_type=code%20id_token&response_mode=form_post&scope=email&state=<state>&nonce=<nonce>` を `ASWebAuthenticationSession`（`callbackURLScheme: "vigili"`）で開く。`client_id` は **Services ID `io.vigili.signin`**（App bundle id ではない）。
+2. ユーザーが Apple 認証 → Apple が `id_token` を relay の `web-callback` に **form_post**。
+3. relay が `id_token` を検証（署名/`iss`/`aud=io.vigili.signin`/`exp`）→ `sub` でアカウント find-or-create → session 発行。**web フローは nonce を relay 側で検証しない**（relay はアプリ生成 nonce を知らない。署名+aud+exp が Apple 由来を保証し、`state` がアプリ側の起動元バインドを担う。id_token は短命）。
+4. relay が `vigili://auth-callback?session=<token>&account_id=<id>&email=<email>&state=<state>` へ 302 リダイレクト。
+5. `ASWebAuthenticationSession` が `vigili://` を捕捉 → アプリが `state` 一致を確認し session を取得 → 既存の `createPairing` → `relay-configure` で daemon をホット再接続（ネイティブ経路と同じ後段）。
+
+relay 追加:
+- `POST /v1/auth/apple/web-callback`（Apple からの form_post、認証不要・公開）。`id_token` を **nonce 検証なし**で検証 → アカウント解決 → session → `vigili://auth-callback?...` へ 302。
+- `appleVerifier.verifyWeb(idToken)`: 既存 `verify` から nonce チェックを除いた版。aud に Services ID を含める。
+- env `APPLE_AUD` に `io.vigili.signin` を追加。
+
+Apple Developer 設定: **Services ID `io.vigili.signin`** を作成し Sign in with Apple を有効化、Primary App ID = `io.vigili.app.shono`、Domains = `relay.vigili.io`、Return URL = `https://relay.vigili.io/v1/auth/apple/web-callback`。.p8 秘密鍵は不要（code 交換せず id_token のみ検証するため）。
+
+iOS は引き続きネイティブ（App Store 配布で entitlement が有効）。

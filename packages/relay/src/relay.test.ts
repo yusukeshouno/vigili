@@ -48,6 +48,14 @@ beforeEach(async () => {
         }
         throw new Error("apple_token_invalid");
       },
+      // Web フロー: nonce なしで同形式を受理。
+      verifyWeb: async (idToken: string) => {
+        if (idToken.startsWith("GOOD:")) {
+          const sub = idToken.slice("GOOD:".length);
+          return { sub, email: `${sub}@privaterelay.appleid.com` };
+        }
+        throw new Error("apple_token_invalid");
+      },
     },
   });
   base = `http://127.0.0.1:${relay.port}`;
@@ -332,6 +340,50 @@ describe("account-centric (Sign in with Apple)", () => {
   it("rejects an invalid apple token", async () => {
     const r = await postJson("/v1/auth/apple", { identity_token: "BAD", nonce: "x" });
     expect(r.status).toBe(401);
+  });
+
+  // Web Sign in with Apple (SPEC §10.5): Apple が form_post → 302 で vigili:// に戻す。
+  async function postForm(path: string, fields: Record<string, string>) {
+    const res = await fetch(base + path, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(fields).toString(),
+      redirect: "manual",
+    });
+    return { status: res.status, location: res.headers.get("location") ?? "" };
+  }
+
+  it("web-callback verifies id_token and 302-redirects to vigili:// with a session", async () => {
+    const r = await postForm("/v1/auth/apple/web-callback", {
+      id_token: "GOOD:web-sub-1",
+      state: "st-123",
+    });
+    expect(r.status).toBe(302);
+    const url = new URL(r.location);
+    expect(url.protocol).toBe("vigili:");
+    expect(url.searchParams.get("state")).toBe("st-123");
+    expect(url.searchParams.get("account_id")).toBeTruthy();
+    const session = url.searchParams.get("session");
+    expect(session).toBeTruthy();
+    // 返ってきた session が有効であること。
+    const me = await getJson("/v1/me", session as string);
+    expect(me.status).toBe(200);
+  });
+
+  it("web-callback reuses the account for the same apple sub (matches native flow)", async () => {
+    const native = await signInApple("shared-sub");
+    const r = await postForm("/v1/auth/apple/web-callback", { id_token: "GOOD:shared-sub" });
+    const acctId = new URL(r.location).searchParams.get("account_id");
+    expect(acctId).toBe(native.account_id);
+  });
+
+  it("web-callback on bad token redirects with error, no session", async () => {
+    const r = await postForm("/v1/auth/apple/web-callback", { id_token: "BAD", state: "s9" });
+    expect(r.status).toBe(302);
+    const url = new URL(r.location);
+    expect(url.searchParams.get("error")).toBe("invalid_apple_token");
+    expect(url.searchParams.get("session")).toBeNull();
+    expect(url.searchParams.get("state")).toBe("s9");
   });
 
   it("account device registration works with the apple session", async () => {
