@@ -24,13 +24,13 @@ describe("apnsConfigFromEnv", () => {
       APNS_KEY_PATH: "/x.p8",
       APNS_KEY_ID: "KEY1234567",
       APNS_TEAM_ID: "TEAM123456",
-      APNS_TOPIC: "io.vigili.mobile.shono",
+      APNS_TOPIC: "io.vigili.mobile",
     });
     expect(cfg).toMatchObject({
       keyPath: "/x.p8",
       keyId: "KEY1234567",
       teamId: "TEAM123456",
-      topic: "io.vigili.mobile.shono",
+      topic: "io.vigili.mobile",
       env: "sandbox",
     });
   });

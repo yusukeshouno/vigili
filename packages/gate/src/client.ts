@@ -16,6 +16,13 @@ export interface GateClientOptions {
   askTimeoutMs?: number;
   /** 内部フェーズログ (デバッグ用フック)。 */
   trace?: (event: string, detail?: unknown) => void;
+  /**
+   * ask で待機中に呼ばれる「外部承認チェック」。
+   * true を返すと daemon の応答を待たずに即 allow で抜ける。
+   * Claude Code 側で permission が付与された場合などに使う。
+   * 約 2 秒ごとに呼ばれる。
+   */
+  isExternallyApproved?: () => boolean;
 }
 
 export class GateConnectionError extends Error {
@@ -45,7 +52,7 @@ export async function sendToDaemon(
   const conn = await connectWithTimeout(options.socketPath, options.connectTimeoutMs ?? 500);
   trace("connected");
   try {
-    return await exchange(conn, req, options.askTimeoutMs ?? 5 * 60_000, trace);
+    return await exchange(conn, req, options.askTimeoutMs ?? 5 * 60_000, trace, options.isExternallyApproved);
   } finally {
     conn.destroy();
   }
@@ -74,6 +81,7 @@ async function exchange(
   req: ToolRequest,
   askTimeoutMs: number,
   trace: (event: string, detail?: unknown) => void,
+  isExternallyApproved?: () => boolean,
 ): Promise<GateResult> {
   const reader = lineReader(conn);
   conn.write(`${JSON.stringify(req)}\n`);
@@ -100,17 +108,52 @@ async function exchange(
 
   // ask: 同じソケット上で resolution を待つ
   trace("ask received, waiting for resolution", parsed.request_id);
-  return await waitForResolution(reader, parsed.request_id, askTimeoutMs);
+  return await waitForResolution(reader, parsed.request_id, askTimeoutMs, isExternallyApproved);
 }
 
 async function waitForResolution(
   reader: LineReader,
   requestId: string,
   timeoutMs: number,
+  isExternallyApproved?: () => boolean,
 ): Promise<GateResult> {
-  const next = await reader.next(timeoutMs).catch((err: unknown) => {
+  // Claude Code 側で外部承認が行われたかを 2 秒ごとに確認する。
+  // 承認済みなら daemon の応答を待たず即 allow で抜ける。
+  // gate が切断されると daemon は "cancelled:gate-disconnected" で resolve し、
+  // Vigili から pending item が消える。
+  const externalApprovalPromise: Promise<"external-allow"> | null = isExternallyApproved
+    ? new Promise((resolve) => {
+        const timer = setInterval(() => {
+          try {
+            if (isExternallyApproved()) {
+              clearInterval(timer);
+              resolve("external-allow");
+            }
+          } catch {
+            // permission ファイル読み取り失敗は無視
+          }
+        }, 2000);
+      })
+    : null;
+
+  const daemonPromise = reader.next(timeoutMs).then((line) => ({ kind: "daemon" as const, line }));
+  const racePromises: Promise<{ kind: "daemon"; line: string } | "external-allow">[] = [
+    daemonPromise,
+    ...(externalApprovalPromise ? [externalApprovalPromise] : []),
+  ];
+
+  const result = await Promise.race(racePromises).catch((err: unknown) => {
     throw new GateConnectionError(`ask の決着を待ち中にエラー: ${(err as Error).message}`, err);
   });
+
+  if (result === "external-allow") {
+    // Claude Code 側で承認されたので gate は allow で終了。
+    // socket を閉じることで daemon が "cancelled:gate-disconnected" として
+    // pending を resolve → Vigili から item が消える。
+    return { decision: "allow", reason: "approved via Claude Code" };
+  }
+
+  const next = (result as { kind: "daemon"; line: string }).line;
   const resolution: AskResolution = parseLine(next, AskResolutionSchema, "AskResolution");
   if (resolution.request_id !== requestId) {
     throw new GateConnectionError(

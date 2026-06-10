@@ -144,6 +144,12 @@ export function createPairingHub(log: (m: string) => void = () => {}): PairingHu
       log(`[hub] client attached pid=${pid} (count=${p.clients.size})`);
       // 接続直後にエージェント状態を 1 通だけ送る
       trySend(ws, JSON.stringify({ type: "agent-status", online: p.agent !== null }));
+      // 新クライアントが接続 (= 再接続含む) したとき、agent に snapshot 再送を要求する。
+      // これにより、再接続中に missed した resolved 等がクリアされる
+      // (account client と同じ方針: attachAccountClient の refreshMsg と対称)。
+      if (p.agent) {
+        trySend(p.agent, JSON.stringify({ type: "refresh-snapshot" }));
+      }
       return {
         detach: () => {
           const cur = pairings.get(pid);
@@ -160,6 +166,10 @@ export function createPairingHub(log: (m: string) => void = () => {}): PairingHu
       a.clients.add(ws);
       log(`[hub] account client attached account=${accountId} (count=${a.clients.size})`);
       trySend(ws, JSON.stringify({ type: "agent-status", online: a.agents.size > 0 }));
+      // 新クライアントが来たとき、account に属する全 agent に snapshot 再送を要求する。
+      // daemon が "refresh-snapshot" を受け取ったら snapshot + stats を再ブロードキャストする。
+      const refreshMsg = JSON.stringify({ type: "refresh-snapshot" });
+      for (const agentWs of a.agents.values()) trySend(agentWs, refreshMsg);
       return {
         detach: () => {
           const cur = accounts.get(accountId);

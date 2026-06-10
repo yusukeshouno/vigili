@@ -31,6 +31,9 @@ export interface RelayClientOptions {
   /** WS open のたびに呼ばれる。daemon は接続直後に snapshot を送り直すなど。
    *  再接続後も毎回呼ばれるので、最新の queue 状態をその都度 flush できる。 */
   onOpen?: () => void;
+  /** relay から "refresh-snapshot" が来たとき (account stream 新 client 接続時) に呼ばれる。
+   *  daemon は snapshot + stats を再ブロードキャストする。 */
+  onRefreshSnapshot?: () => void;
   log: (msg: string) => void;
 }
 
@@ -61,7 +64,7 @@ export interface RelayClient {
 const PING_INTERVAL_MS = 10_000;
 
 export function createRelayClient(options: RelayClientOptions): RelayClient {
-  const { onClientMessage, onOpen, log } = options;
+  const { onClientMessage, onOpen, onRefreshSnapshot, log } = options;
   // 接続パラメータは reconfigure() で差し替えられるよう可変にする。
   let url = options.url;
   let pairingId = options.pairingId;
@@ -164,6 +167,15 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
         (parsed as { type?: unknown }).type === "agent-status"
       ) {
         // relay 内部メッセージ。今は無視。将来 status UI に出す。
+        return;
+      }
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        (parsed as { type?: unknown }).type === "refresh-snapshot"
+      ) {
+        // account stream に新 client が接続 → snapshot + stats を再送する。
+        onRefreshSnapshot?.();
         return;
       }
       const r = WsClientMessageSchema.safeParse(parsed);

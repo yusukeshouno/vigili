@@ -51,9 +51,10 @@ export function classifyDecisionSource(decidedBy: string | null): DecisionSource
   if (head.startsWith("invariant:")) return "invariant";
   if (head === "default") return "auto-default";
   if (head === "human:ws") return "human-pwa";
+  if (head === "human:relay") return "human-pwa"; // iPhone relay 経由の承認
   if (head === "human:cli") return "human-cli";
-  if (head === "timeout") return "timeout";
-  if (head.startsWith("cancelled:")) return "cancelled";
+  if (head === "timeout" || head.startsWith("timeout:")) return "timeout";
+  if (head === "cancelled" || head.startsWith("cancelled:")) return "cancelled";
   return "other";
 }
 
@@ -160,13 +161,13 @@ export interface DailyBucket extends StatsBuckets {
 }
 
 /**
- * 直近 7 日分 (今日 + 過去 6 日) の日別統計を返す。
- * index 0 = 今日 (00:00 〜 nowMs)、index 1 = 昨日、…、index 6 = 7 日前。
+ * 直近 14 日分 (今日 + 過去 13 日) の日別統計を返す。
+ * index 0 = 今日 (00:00 〜 nowMs)、index 1 = 昨日、…、index 13 = 14 日前。
  * 各日は computeStats を呼ぶだけなので追加 SQL なし。
  */
 export function computeWeekStats(db: Database.Database, nowMs: number): DailyBucket[] {
   const result: DailyBucket[] = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 14; i++) {
     const d = new Date(nowMs);
     d.setDate(d.getDate() - i);
     d.setHours(0, 0, 0, 0);
