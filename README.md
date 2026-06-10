@@ -28,6 +28,14 @@ Claude Code: (Vigili が自動許可、ターミナルは止まらない)
 
 ---
 
+## ダウンロード
+
+**[最新リリース (DMG)](https://github.com/yusukeshouno/vigili/releases/latest)** — Developer ID 署名・Apple 公証済み。macOS 13 (Ventura) 以降。
+
+DMG を開いて Vigili.app を Applications にドラッグするだけ。iOS アプリは App Store 公開準備中です。
+
+---
+
 ## セットアップ
 
 > **オンボーディング（推奨・ターミナル不要）**
