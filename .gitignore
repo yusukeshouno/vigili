@@ -34,3 +34,10 @@ id_ed25519
 
 # 配布物 (dist/) は git 管理しない — GitHub Releases で配布
 dist/
+
+# グリッチ (confabulation) 調査のローカル成果物 — リポジトリには含めない
+GLITCH_REPORT.md
+GLITCH_REPORT.ja.md
+scripts/confab-detect.mjs
+scripts/confab-experiment.sh
+scripts/confab-experiment-v3.sh
