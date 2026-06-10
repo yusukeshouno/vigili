@@ -109,6 +109,9 @@ final class AppCoordinator: ObservableObject {
     // ~/.vigili/.welcomed (marker file) が無ければ Welcome を出す。
     let welcomedPath = Self.vigiliHome().appendingPathComponent(".welcomed")
     self.showWelcome = !FileManager.default.fileExists(atPath: welcomedPath.path)
+    // 起動時に config.yaml の relay 節からサインイン済み状態を復元する
+    // (ライブサインイン後だけでなく再起動後も「サインイン済み」を表示するため)。
+    self.relayConfigured = SetupPayload.relayConfigured()
     AppCoordinator.shared = self
 
     appLog("AppCoordinator.init socket=\(socketPath)")
@@ -284,29 +287,47 @@ final class AppCoordinator: ObservableObject {
 
   /// 「Sign in with Apple」: Apple 認証 → relay session → この Mac の pairing 作成 →
   /// daemon を再起動なしで relay 接続 (relay-configure admin)。
+  /// popover 内から呼ぶと popover が閉じてしまうため、SignInWindow 経由で呼ぶこと。
   func signInWithAppleAndPair() {
     Task { @MainActor in
       signInStatus = "サインイン中…"
       do {
-        let result = try await AppleSignInCoordinator().signIn()
-        let auth = try await RelayAuthClient.signInWithApple(
-          identityToken: result.identityToken, rawNonce: result.rawNonce,
-        )
-        let host = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-        let pairing = try await RelayAuthClient.createPairing(
-          sessionToken: auth.session.token, name: host,
-        )
-        // iPhone フォールバック (unified QR) のため user_token をローカルキャッシュ。
-        writeRelayUserTokenCache(pairing.userToken)
-        _ = try await adminClient.configureRelay(
-          url: RelayConstants.base, pairingId: pairing.id, agentKey: pairing.agentKey,
-        )
-        relayConfigured = true
+        try await performSignInWithApple()
         signInStatus = "サインイン完了 — スマホでも承認できます"
       } catch {
         signInStatus = "サインインに失敗: \(error.localizedDescription)"
       }
     }
+  }
+
+  /// async throws 版 — SignInWindow から await で呼ぶ用。
+  ///
+  /// Mac は Web Sign in with Apple (SPEC §10.5)。`ASWebAuthenticationSession` で
+  /// Apple OAuth を開き、relay の web-callback が検証して発行した session を直接受け取る
+  /// (ネイティブの identity_token → /v1/auth/apple は使わない。Developer ID 制約)。
+  @MainActor
+  func performSignInWithApple() async throws {
+    let signIn = try await WebAppleSignIn().signIn()
+    let host = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
+    let pairing = try await RelayAuthClient.createPairing(
+      sessionToken: signIn.sessionToken, name: host,
+    )
+    // iPhone フォールバック (unified QR) のため user_token をローカルキャッシュ。
+    writeRelayUserTokenCache(pairing.userToken)
+    _ = try await adminClient.configureRelay(
+      url: RelayConstants.base, pairingId: pairing.id, agentKey: pairing.agentKey,
+    )
+    relayConfigured = true
+  }
+
+  /// ログアウト: daemon の relay 接続を切り config の relay 節を削除、
+  /// user_token キャッシュも消す。LAN 経路 (Bonjour/QR) は残る。
+  @MainActor
+  func signOut() async throws {
+    try await adminClient.disconnectRelay()
+    let cache = Self.vigiliHome().appendingPathComponent("relay-user-token")
+    try? FileManager.default.removeItem(at: cache)
+    relayConfigured = false
   }
 
   private func writeRelayUserTokenCache(_ token: String) {
@@ -385,13 +406,22 @@ final class AppCoordinator: ObservableObject {
         riskDanger: risk.level == .danger
       )
     }
+    let humanAllow = (todayStats?.bySource["human-pwa"] ?? 0) + (todayStats?.bySource["human-cli"] ?? 0)
+    let autoAllow = max(0, (todayStats?.byDecision.allow ?? 0) - humanAllow)
+    // 直近7日スパークライン (weekStats[0]=今日...weekStats[6]=7日前)
+    let spark: [WidgetState.WeekDay] = weekStats.prefix(7).map { b in
+      WidgetState.WeekDay(total: b.total, auto: b.auto, human: b.humanApproved, blocked: b.denied)
+    }
     let state = WidgetState(
       pendingCount: pendingCount,
       todayAllowCount: todayStats?.byDecision.allow ?? 0,
       todayDenyCount: todayStats?.byDecision.deny ?? 0,
+      todayAutoCount: autoAllow,
+      todayHumanCount: humanAllow,
       connected: connected,
       updatedAtMs: nowMs,
-      recentPending: recent
+      recentPending: recent,
+      weekSpark: spark
     )
     // 同じ内容なら書き直さない (count + connected + recent ids で判定)
     if let last = lastWidgetState,

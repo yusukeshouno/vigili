@@ -186,10 +186,10 @@ struct WelcomeView: View {
 
       VStack(alignment: .leading, spacing: 5) {
         if hasRelay {
-          Text("外出先でも使えます")
+          Text("サインイン済み — 外出先でも使えます")
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Theme.fg)
-          Text("QR に LAN + relay 両方が入っています。iPhone を別のネットワークに移しても接続が維持されます。")
+            .foregroundStyle(Theme.green)
+          Text("この Mac は Apple アカウントにリンクされ、relay に接続済みです。同じ Apple ID で iPhone にサインインすればペアリング完了。Wi-Fi 外でもスマホに承認が届きます。")
             .font(.system(size: 10))
             .foregroundStyle(Theme.fgDim)
             .fixedSize(horizontal: false, vertical: true)

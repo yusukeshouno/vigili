@@ -293,6 +293,29 @@ struct PopoverContentView: View {
 
   private var footer: some View {
     HStack(spacing: 6) {
+      // 一番左: サインイン状態。未サインインは「Sign in」、済みは「Logout」。
+      // どちらも SignInWindow を開き、状態に応じた操作を提示する。
+      Button {
+        SignInWindow.show(coordinator: coordinator)
+      } label: {
+        HStack(spacing: 5) {
+          Image(
+            systemName: coordinator.relayConfigured
+              ? "checkmark.icloud.fill" : "applelogo",
+          )
+          .font(.system(size: 11))
+          Text(coordinator.relayConfigured ? "Logout" : "Sign in")
+            .font(.mono(10))
+        }
+        .foregroundStyle(coordinator.relayConfigured ? Theme.green : Theme.fgMid)
+      }
+      .buttonStyle(.plain)
+      .help(
+        coordinator.relayConfigured
+          ? "サインイン済み (relay 接続中) — クリックでログアウト"
+          : "Sign in with Apple — iPhone と自動リンク (QR 不要)",
+      )
+
       Button {
         coordinator.daemonController.restart()
       } label: {
@@ -327,17 +350,7 @@ struct PopoverContentView: View {
       .buttonStyle(.plain)
       .help("Hosted sessions (vigili run)")
 
-      // Sign in with Apple → 独立ウィンドウを開いてから認証
-      // (popover 内から ASAuthorizationController を出すと popover が閉じるため)
-      Button {
-        SignInWindow.show(coordinator: coordinator)
-      } label: {
-        Image(systemName: "applelogo")
-          .font(.system(size: 12))
-          .foregroundStyle(Theme.fgMid)
-      }
-      .buttonStyle(.plain)
-      .help("Sign in with Apple — iPhone と自動リンク (QR 不要)")
+      // (Sign in with Apple は footer 左端のラベル付きボタンに移動)
 
       // iPhone ペアリング QR を再表示
       Button {

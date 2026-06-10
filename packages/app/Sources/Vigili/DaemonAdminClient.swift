@@ -180,6 +180,14 @@ actor DaemonAdminClient {
     return (resp["connected"] as? Bool) ?? false
   }
 
+  /// ログアウト: daemon の relay 接続を停止し config.yaml の relay 節を削除させる。
+  func disconnectRelay() async throws {
+    let resp = try await send(request: ["kind": "admin", "action": "relay-disconnect"])
+    guard let ok = resp["ok"] as? Bool, ok else {
+      throw ClientError.responseError(resp["error"] as? String ?? "unknown")
+    }
+  }
+
   // MARK: - low level
 
   private func send(request: [String: Any]) async throws -> [String: Any] {
