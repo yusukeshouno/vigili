@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Developer ID 配布用 (Mac App Store 以外の直接ダウンロード) -->
+	<key>method</key>
+	<string>developer-id</string>
+
+	<!-- Developer ID Application 証明書で署名 -->
+	<key>signingStyle</key>
+	<string>automatic</string>
+
+	<key>teamID</key>
+	<string>2DG598WNT9</string>
+
+	<!-- Notarization 提出用に .app を zip にする -->
+	<key>exportArchivePath</key>
+	<string>export</string>
+
+	<key>stripSwiftSymbols</key>
+	<true/>
+
+	<key>uploadSymbols</key>
+	<false/>
+</dict>
+</plist>
