@@ -1,4 +1,5 @@
 import type { ToolRequest } from "@vigili/shared";
+import { type CommandSegment, scanCommand } from "./command-scan.js";
 import { extractCommand } from "./extractors.js";
 
 /**
@@ -27,10 +28,14 @@ export interface Invariant {
 // 「recursive フラグ」と「force フラグ」を独立に AND 判定する。
 // 旧実装は `-rf` の r→f 順序を強制していたため `rm -fr /` や
 // `rm -r -f /`、`rm --recursive --force /` をすり抜けていた (security audit 指摘)。
+//
+// 照合はコマンド全文ではなく scanCommand() が返す「コマンド位置」の
+// セグメント単位で行う。コミットメッセージのヒアドキュメントや
+// echo の文字列リテラルに危険パターンが書かれているだけでは
+// マッチしない (誤検知修正)。$()/バッククォート/bash -c/eval の中身、
+// 未終端ヒアドキュメントは安全側に倒して走査対象に含まれる。
 // ─────────────────────────────────────────────────────────────────────────
 
-/** コマンドに rm 呼び出しが含まれるか (語境界、大文字小文字無視)。 */
-const HAS_RM = /\brm\b/iu;
 /** recursive フラグ: -r / -R / -fr 等の短縮束、または --recursive。 */
 const RM_RECURSIVE = /(?:^|\s)-[a-z]*r|--recursive\b/iu;
 /** force フラグ: -f / -rf 等の短縮束、または --force。 */
@@ -40,8 +45,20 @@ const TARGET_ROOT = /\s['"]?\/(?:\s|$|['"]|\w|\*)/u;
 /** 削除対象が home: `~` `~/` `$HOME` `${HOME}` (引用符許容)。 */
 const TARGET_HOME = /\s['"]?(?:~|\$\{?HOME\}?)/u;
 
-function isRmRecursiveForce(cmd: string): boolean {
-  return HAS_RM.test(cmd) && RM_RECURSIVE.test(cmd) && RM_FORCE.test(cmd);
+/**
+ * rm を recursive+force で呼び出しているセグメントを返す。
+ * xargs 経由の場合は削除対象が stdin から来るため、target 照合用に
+ * パイプライン全体のテキストを合成して返す (安全側)。
+ */
+function rmRecursiveForceTexts(segments: readonly CommandSegment[]): string[] {
+  const all = segments.map((s) => s.text).join(" ");
+  const out: string[] = [];
+  for (const seg of segments) {
+    if (!seg.names.has("rm")) continue;
+    if (!(RM_RECURSIVE.test(seg.text) && RM_FORCE.test(seg.text))) continue;
+    out.push(seg.viaXargs ? `${seg.text} ${all}` : seg.text);
+  }
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -54,20 +71,28 @@ function isRmRecursiveForce(cmd: string): boolean {
 // (refspec force) をすり抜けていた (security audit 指摘)。
 // ─────────────────────────────────────────────────────────────────────────
 
-const HAS_GIT_PUSH = /\bgit\b[^\n|;&]*\bpush\b/iu;
 /** 明示 force: -f / --force / --force-with-lease (位置非依存)。 */
 const PUSH_FORCE_FLAG = /(?:^|\s)-[a-z]*f\b|--force(?:-with-lease)?\b/iu;
 const PROTECTED_BRANCH = /\b(?:main|master|production|prod|release)\b/iu;
 /** refspec force: `+main` `origin +refs/heads/main` 等 (+ で始まる保護ブランチ)。 */
 const PUSH_REFSPEC_FORCE = /\+(?:refs\/heads\/)?(?:main|master|production|prod|release)\b/iu;
 
-function isForcePushProtected(cmd: string): boolean {
-  if (!HAS_GIT_PUSH.test(cmd)) return false;
-  // (a) 明示 force フラグ + 保護ブランチ名
-  if (PUSH_FORCE_FLAG.test(cmd) && PROTECTED_BRANCH.test(cmd)) return true;
-  // (b) +refspec 形式 (フラグ無しの強制 push)
-  if (PUSH_REFSPEC_FORCE.test(cmd)) return true;
+function isForcePushProtected(segments: readonly CommandSegment[]): boolean {
+  for (const seg of segments) {
+    // push サブコマンドは引用符外のトークンとして現れた場合のみ。
+    // (git commit -m "... push --force ... main" のメッセージ誤検知を防ぐ)
+    if (!(seg.names.has("git") && seg.bareTokens.has("push"))) continue;
+    // (a) 明示 force フラグ + 保護ブランチ名
+    if (PUSH_FORCE_FLAG.test(seg.text) && PROTECTED_BRANCH.test(seg.text)) return true;
+    // (b) +refspec 形式 (フラグ無しの強制 push)
+    if (PUSH_REFSPEC_FORCE.test(seg.text)) return true;
+  }
   return false;
+}
+
+function segmentsOf(req: ToolRequest): readonly CommandSegment[] | undefined {
+  const cmd = extractCommand(req);
+  return cmd === undefined ? undefined : scanCommand(cmd);
 }
 
 export const INVARIANTS: readonly Invariant[] = [
@@ -75,24 +100,24 @@ export const INVARIANTS: readonly Invariant[] = [
     name: "rm -rf root",
     decision: "deny",
     matches: (req) => {
-      const cmd = extractCommand(req);
-      return cmd !== undefined && isRmRecursiveForce(cmd) && TARGET_ROOT.test(cmd);
+      const segs = segmentsOf(req);
+      return segs !== undefined && rmRecursiveForceTexts(segs).some((t) => TARGET_ROOT.test(t));
     },
   },
   {
     name: "rm -rf home",
     decision: "deny",
     matches: (req) => {
-      const cmd = extractCommand(req);
-      return cmd !== undefined && isRmRecursiveForce(cmd) && TARGET_HOME.test(cmd);
+      const segs = segmentsOf(req);
+      return segs !== undefined && rmRecursiveForceTexts(segs).some((t) => TARGET_HOME.test(t));
     },
   },
   {
     name: "force push to protected branch",
     decision: "deny",
     matches: (req) => {
-      const cmd = extractCommand(req);
-      return cmd !== undefined && isForcePushProtected(cmd);
+      const segs = segmentsOf(req);
+      return segs !== undefined && isForcePushProtected(segs);
     },
   },
 ];
