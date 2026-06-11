@@ -66,9 +66,9 @@
 ### 2.1 責務
 
 - `PreToolUse` hook から起動される短命 CLI
-- stdin から受け取った JSON を daemon に転送
-- daemon の判定結果に応じた exit code を返す
-- daemon が死んでいる/応答しない場合は **exit 2 (deny) を返す**
+- **ネイティブパリティ・ルーティング（§2.5）**: Claude Code 本体が確認を出さない操作は Vigili に流さず素通しする。アプリに届く承認要求 ⊆ Claude Code が出すはずだった承認要求、を不変条件とする
+- Claude Code が確認を出すはずの操作だけを daemon に転送し、判定結果に応じた exit code / hook JSON を返す
+- daemon が死んでいる/応答しない場合は **無出力 exit 0 で Claude Code のネイティブ確認フローに委ねる**（自動許可はしない。ターミナルの標準プロンプトが人間に確認する。旧仕様の exit 2 全 deny は「Vigili を入れたせいで vanilla より作業が止まる」ため廃止）
 
 ### 2.2 インターフェース
 
@@ -119,7 +119,24 @@ Unix domain socket `~/.sentinel/daemon.sock` に接続し、改行区切り JSON
 
 - daemon 接続のタイムアウト: 500ms
 - `ask` 後の決着待ちタイムアウト: 設定可能（デフォルト 5 分）
-- いずれもタイムアウトしたら exit 2
+- いずれもタイムアウトしたら **無出力 exit 0 でネイティブ確認フローにフォールバック**する。daemon に到達した時点で「Claude Code なら確認を出していた」操作と分類済みなので、フォールバック先のターミナルでも必ず標準プロンプトが出る（無確認で実行されることはない）。スマホで応答しそびれても作業はターミナルで継続できる
+
+### 2.5 ネイティブパリティ・ルーティング
+
+gate は daemon に転送する前に「Claude Code 本体ならこの操作で確認を出すか?」を再現し、出さないものは **無出力 exit 0（素通し）** で返す。素通しは権限を一切付与しない — Claude Code が自前のロジック（safe tool / permission mode / settings.json）で許可するだけなので、gate の再現が間違っていても挙動が vanilla より緩くなることはない。
+
+判定順序：
+
+1. **読み取り専用の組み込みツール** → 素通し。Claude Code が確認なしで実行するツール群: `Read` / `Glob` / `Grep` / `NotebookRead` / `TodoWrite` / `TodoRead` / `WebSearch` / `Task` / `BashOutput` / `TaskOutput` / `ExitWorktree` 等。保守的な固定リストで管理し、迷うものはリストに入れない（入れなくても native prompt に落ちるだけで、phone に余計な確認が飛ぶことはない）
+2. **permission_mode**（hook payload の `permission_mode` フィールド）:
+   - `bypassPermissions` → 全て素通し（ユーザーが明示的に「確認するな」を選んでいる。phone 通知は純粋な追加摩擦）
+   - `plan` → 素通し（Claude Code 側が読み取り専用に制限済み）
+   - `acceptEdits` → `Edit` / `Write` / `NotebookEdit` を素通し（Claude Code が自動承認するため）。それ以外は次へ
+   - `default` / 不明 → 次へ
+3. **settings.json の permissions.allow / deny**（§従来動作）→ allow 該当は allow JSON、deny 該当は deny JSON を出して即決
+4. ここまで来たもの = 「Claude Code なら確認を出していた」操作 → daemon に転送し、policy が `allow`（自動承認 = vanilla より速い）/ `deny` / `ask`（phone へ = vanilla と同頻度・別デバイス）に振り分ける
+
+この設計の不変条件: **Vigili 導入後にユーザーが受ける確認の総数は、vanilla Claude Code 以下になる**。policy の allow ルールが増えるほど確認は減り、ゼロ整備でも vanilla と同数（場所がターミナル → phone に変わるだけ）。
 
 ---
 

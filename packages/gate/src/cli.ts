@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 import { ToolRequestSchema } from "@vigili/shared";
 import { loadClaudePermissions, matchClaudePermissions } from "./claude-perms.js";
 import { GateConnectionError, sendToDaemon } from "./client.js";
+import { nativeParityPassthrough } from "./parity.js";
 
 // VIGILI_GATE_DEBUG=1 で ~/.vigili/gate.log に時系列ログを残す。
 // Claude Code との実時間挙動を追跡するための裏ログ。
@@ -78,9 +79,11 @@ Flags:
   -h, --help        この help を表示
 
 Exit codes:
-  0  allow (Claude Code に実行を許可)
+  0  allow JSON 出力時は実行許可 / 無出力時は素通し (Claude Code のネイティブ確認フローへ)
   2  deny  (Claude Code は実行を中止)
-  1  内部エラー (Claude Code は標準フォールバックプロンプトを出す)
+
+daemon 停止・タイムアウト・payload 不正時は無出力 exit 0 で素通しする (SPEC §2.5)。
+素通しは権限を付与しない — Claude Code 本体の確認プロンプトが人間に確認する。
 
 Env:
   VIGILI_HOME       ~/.vigili の代わりに使うディレクトリ (legacy: SENTINEL_HOME)
@@ -110,8 +113,11 @@ async function main(): Promise<number> {
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    console.error(`[vigili-gate] stdin が JSON ではありません: ${(err as Error).message}`);
-    return 2;
+    // パリティ原則 (SPEC §2.5): 解釈できない payload は素通しして
+    // Claude Code のネイティブフローに委ねる (将来の hook 仕様変更で gate が
+    // 全ツールをブロックする事故を防ぐ)。素通しは権限を付与しない。
+    console.error(`[vigili-gate] stdin が JSON ではありません — 素通し: ${(err as Error).message}`);
+    return 0;
   }
 
   // hook_event_name は PreToolUse / PermissionRequest / PostToolUse のいずれか。
@@ -124,8 +130,10 @@ async function main(): Promise<number> {
   // PostToolUse: ツールが実際に実行された後に呼ばれる。
   // 実行されたツールに対応する pending を allow で解決し、Vigili から stale item を消す。
   if (hookEventRaw === "PostToolUse") {
-    const obj = parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
-    const sessionId = args.session ?? (typeof obj.session_id === "string" ? obj.session_id : undefined);
+    const obj =
+      parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    const sessionId =
+      args.session ?? (typeof obj.session_id === "string" ? obj.session_id : undefined);
     // tool_name / tool_input を渡すと daemon 側で「実行されたツールと一致する
     // pending だけ」を解決でき、同一セッションの未承認 pending の巻き込みを防ぐ。
     const toolName = typeof obj.tool_name === "string" ? obj.tool_name : undefined;
@@ -183,15 +191,33 @@ async function main(): Promise<number> {
 
   const reqResult = ToolRequestSchema.safeParse(parsed);
   if (!reqResult.success) {
+    // パリティ原則: 不正 payload は素通し (deny で作業を止めない)。
     console.error(
-      `[vigili-gate] hook ペイロードが ToolRequest として不正: ${reqResult.error.issues
+      `[vigili-gate] hook ペイロードが ToolRequest として不正 — 素通し: ${reqResult.error.issues
         .map((i) => `${i.path.join(".")}: ${i.message}`)
         .join("; ")}`,
     );
-    return 2;
+    return 0;
   }
 
   dbg("tool:", reqResult.data.tool_name, "tag:", reqResult.data.session_tag);
+
+  // ネイティブパリティ・ルーティング (SPEC §2.5):
+  // Claude Code 本体が確認を出さない操作 (読み取り専用ツール、bypassPermissions /
+  // plan / acceptEdits モード) は daemon に流さず無出力 exit 0 で素通しする。
+  // これで「アプリに届く承認要求 ⊆ Claude Code が出すはずだった承認要求」を保証する。
+  const permissionMode =
+    parsed !== null && typeof parsed === "object"
+      ? (() => {
+          const v = (parsed as Record<string, unknown>).permission_mode;
+          return typeof v === "string" ? v : undefined;
+        })()
+      : undefined;
+  const passthrough = nativeParityPassthrough(reqResult.data, permissionMode);
+  if (passthrough !== null) {
+    dbg("parity passthrough:", passthrough, "→ exit 0 (no output)");
+    return 0;
+  }
 
   // Claude Code 本体が permissions.allow / .deny で既に判断するものは
   // daemon に流さず即決する。これで PWA の承認頻度を Claude Code 本体に揃える。
@@ -249,15 +275,21 @@ async function main(): Promise<number> {
     return 2;
   } catch (err) {
     dbg("error:", (err as Error).message);
+    // フェイルセーフ = ネイティブ確認フローへの素通し (SPEC §2.5 / CLAUDE.md)。
+    // ここに到達した操作は「Claude Code なら確認を出していた」と分類済みなので、
+    // 無出力 exit 0 で返せばターミナルの標準プロンプトが必ず人間に確認する。
+    // 自動許可は発生しない。旧仕様の exit 2 全 deny は daemon 停止時に
+    // 作業全体を止めてしまうため廃止した。
     if (err instanceof GateConnectionError) {
-      console.error(`[vigili-gate] daemon 通信エラー: ${err.message}`);
-      // フェイルセーフ deny (CLAUDE.md セキュリティ規約)
-      emitHookDecision("deny", `daemon unreachable: ${err.message}`, hookEvent);
-      return 2;
+      console.error(
+        `[vigili-gate] daemon 通信エラー — ネイティブ確認にフォールバック: ${err.message}`,
+      );
+      return 0;
     }
-    console.error(`[vigili-gate] 想定外エラー: ${(err as Error).message}`);
-    emitHookDecision("deny", `internal error: ${(err as Error).message}`, hookEvent);
-    return 2;
+    console.error(
+      `[vigili-gate] 想定外エラー — ネイティブ確認にフォールバック: ${(err as Error).message}`,
+    );
+    return 0;
   }
 }
 
