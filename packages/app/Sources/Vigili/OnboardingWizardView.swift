@@ -388,6 +388,11 @@ struct OnboardingWizardView: View {
     errorMessage = nil
     do {
       catalog = try await coordinator.adminClient.fetchPolicyCatalog()
+      // convenience カテゴリはデフォルト全選択。danger 系はデフォルト非選択。
+      // ユーザーは各ステップで個別に外せる。
+      if selected.isEmpty {
+        selected = Set(catalog.filter { $0.category == "convenience" }.map(\.id))
+      }
     } catch {
       errorMessage = error.localizedDescription
     }

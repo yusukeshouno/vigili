@@ -265,6 +265,65 @@ export const POLICY_CATALOG: PolicyCatalogEntry[] = [
     },
   },
 
+  {
+    id: "node-scripts",
+    category: "convenience",
+    label: "Node.js スクリプト実行",
+    description: "node -e, node script.js 等の直接実行",
+    detail:
+      "node コマンドによるスクリプト直接実行を自動承認します。\n\n" +
+      "pnpm/npm 経由のビルドや dev サーバとは別に、node -e や node cli.js など" +
+      "バイナリを直接呼ぶケースをカバーします。インターネットへの接続やファイル書き込みを" +
+      "伴う場合がありますが、他のルール (curl の外部 API、.env 書き込み等) で" +
+      "危険操作は引き続き捕捉されます。",
+    rule: {
+      name: "Node.js スクリプト実行",
+      when: { tool: "Bash", command_matches: "^node\\b" },
+      action: "allow",
+    },
+  },
+  {
+    id: "file-ops",
+    category: "convenience",
+    label: "ファイル・ディレクトリ操作 (非破壊)",
+    description: "mkdir, cp, mv, ln, touch, chmod 等 (sudo なし・rm は対象外)",
+    detail:
+      "mkdir / cp / mv / ln / touch / chmod など日常的なファイル操作を自動承認します。\n\n" +
+      "rm は誤削除のリスクとフラグ表記の多様さ (-rf / -fr / --recursive 等) を" +
+      "正規表現で安全に絞りきれないため対象外とし、引き続き確認に回します。" +
+      "sudo なしのユーザー空間操作のみが対象です。",
+    rule: {
+      name: "ファイル・ディレクトリ操作 (非破壊)",
+      when: {
+        tool: "Bash",
+        command_matches: "^(mkdir|ln|cp|mv|chmod|touch)\\b",
+      },
+      action: "allow",
+    },
+  },
+  {
+    id: "macos-dev-tools",
+    category: "convenience",
+    label: "macOS / Xcode 開発ツール",
+    description: "xcodegen, xcodebuild, xcrun, codesign, open, launchctl 等",
+    detail:
+      "macOS ネイティブ開発で頻繁に使うツール群を自動承認します。\n\n" +
+      "xcodegen / xcodebuild / xcrun / swift / codesign / stapler (公証)、" +
+      "open (ファイル・アプリ起動)、launchctl (LaunchAgent 管理)、defaults (plist 操作)、" +
+      "osascript (AppleScript) などが対象です。\n\n" +
+      "launchctl や osascript はシステム設定を変更できる操作を含むため、" +
+      "Mac ネイティブ開発を行わない場合は有効化不要です。",
+    rule: {
+      name: "macOS / Xcode 開発ツール",
+      when: {
+        tool: "Bash",
+        command_matches:
+          "^(xcodegen|xcodebuild|xcrun|swift|swiftc|codesign|stapler|spctl|open|launchctl|defaults|osascript|pbcopy|pbpaste)\\b",
+      },
+      action: "allow",
+    },
+  },
+
   // ─── 危険系: ask + critical 通知 (チェックすると critical 通知ルールが作られる) ──
   {
     id: "danger-env-secrets",
