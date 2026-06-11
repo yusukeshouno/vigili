@@ -284,7 +284,7 @@ describe("startDaemon — ask flow", () => {
     gate.close();
   });
 
-  it("ask times out to deny", async () => {
+  it("ask times out to fallback (ネイティブ確認へ委ねる)", async () => {
     // 短いタイムアウト用に daemon を再起動
     await daemon.close();
     const policy: PolicyConfig = {
@@ -303,7 +303,7 @@ describe("startDaemon — ask flow", () => {
     const first = (await gate.next()) as { decision: string };
     expect(first.decision).toBe("ask");
     const resolution = (await gate.next()) as { decision: string; reason?: string };
-    expect(resolution.decision).toBe("deny");
+    expect(resolution.decision).toBe("fallback");
     expect(resolution.reason).toMatch(/タイムアウト/u);
     gate.close();
   });

@@ -36,11 +36,11 @@ describe("PendingQueue", () => {
     expect(q.resolve(ID_A, "allow", "x", null)).toBe(false);
   });
 
-  it("times out after the deadline", async () => {
+  it("times out to fallback after the deadline (ネイティブ確認へ委ねる)", async () => {
     const q = createPendingQueue();
     const p = q.enroll(makeReq(ID_A), 30);
     const r = await p;
-    expect(r.decision).toBe("deny");
+    expect(r.decision).toBe("fallback");
     expect(r.source).toBe("timeout");
   });
 

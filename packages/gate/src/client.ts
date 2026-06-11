@@ -34,7 +34,9 @@ export class GateConnectionError extends Error {
 
 export type GateResult =
   | { decision: "allow"; reason?: string; messages?: Message[] }
-  | { decision: "deny"; reason?: string; messages?: Message[] };
+  | { decision: "deny"; reason?: string; messages?: Message[] }
+  /** ask タイムアウト。呼び出し側は無出力 exit 0 でネイティブ確認に委ねる。 */
+  | { decision: "fallback"; reason?: string; messages?: Message[] };
 
 /**
  * gate のクライアント本体。
@@ -52,7 +54,13 @@ export async function sendToDaemon(
   const conn = await connectWithTimeout(options.socketPath, options.connectTimeoutMs ?? 500);
   trace("connected");
   try {
-    return await exchange(conn, req, options.askTimeoutMs ?? 5 * 60_000, trace, options.isExternallyApproved);
+    return await exchange(
+      conn,
+      req,
+      options.askTimeoutMs ?? 5 * 60_000,
+      trace,
+      options.isExternallyApproved,
+    );
   } finally {
     conn.destroy();
   }

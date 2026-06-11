@@ -1148,10 +1148,13 @@ async function handleSessionPermission(
   ctx.sessions.setStatus(msg.session_id, "running");
 
   if (!conn.isClosed()) {
+    // runner セッションには Claude Code のネイティブ確認フローが存在しないため、
+    // fallback (ask タイムアウト) は従来どおり deny として返す。
+    const runnerDecision = resolution.decision === "fallback" ? "deny" : resolution.decision;
     conn.send({
       type: "permission-decision",
       request_id: msg.request_id,
-      decision: resolution.decision,
+      decision: runnerDecision,
       ...(resolution.reason !== null ? { reason: resolution.reason } : {}),
     } satisfies SessionDaemonMessage);
   }

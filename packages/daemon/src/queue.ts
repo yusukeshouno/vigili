@@ -75,10 +75,12 @@ export function createPendingQueue(): PendingQueue {
       return new Promise<Resolution>((resolve) => {
         const timer = setTimeout(() => {
           if (entries.has(req.id)) {
+            // タイムアウト = deny ではなくネイティブ確認へのフォールバック (SPEC §2.4)。
+            // gate は無出力 exit 0 で抜け、Claude Code 本体のプロンプトが人間に確認する。
             settle(req.id, {
-              decision: "deny",
+              decision: "fallback",
               source: "timeout",
-              reason: `応答待ちタイムアウト (${timeoutMs}ms)`,
+              reason: `応答待ちタイムアウト (${timeoutMs}ms) — ネイティブ確認にフォールバック`,
             });
           }
         }, timeoutMs);

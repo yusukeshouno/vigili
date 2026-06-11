@@ -59,7 +59,8 @@ export type PolicyRule = z.infer<typeof PolicyRuleSchema>;
 
 export const PolicyDefaultsSchema = z.object({
   unknown: PolicyActionSchema,
-  timeout_seconds: z.number().int().positive().default(300),
+  // ask 無応答でネイティブ確認にフォールバックするまでの秒数 (SPEC §2.4)
+  timeout_seconds: z.number().int().positive().default(120),
 });
 
 export type PolicyDefaults = z.infer<typeof PolicyDefaultsSchema>;

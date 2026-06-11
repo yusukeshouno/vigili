@@ -278,6 +278,15 @@ async function main(): Promise<number> {
       dbg("→ exit 0 (allow JSON emitted to stdout)");
       return 0;
     }
+    if (result.decision === "fallback") {
+      // ask タイムアウト → 無出力 exit 0 で Claude Code のネイティブ確認に委ねる (SPEC §2.4)。
+      // 権限は付与しない — 確認の場がスマホからターミナルに移るだけ。
+      console.error(
+        `[vigili-gate] ask タイムアウト — ネイティブ確認にフォールバック${result.reason ? `: ${result.reason}` : ""}`,
+      );
+      dbg("→ exit 0 (fallback, no output)");
+      return 0;
+    }
     emitHookDecision("deny", result.reason ?? "denied via Vigili", hookEvent, additional);
     console.error(`[vigili-gate] deny${result.reason ? `: ${result.reason}` : ""}`);
     dbg("→ exit 2 (deny)");

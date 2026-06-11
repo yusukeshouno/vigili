@@ -35,7 +35,9 @@ export type Decision = z.infer<typeof DecisionSchema>;
  */
 export const AskResolutionSchema = z.object({
   request_id: z.string().uuid(),
-  decision: z.enum(["allow", "deny"]),
+  // fallback: ask がタイムアウトし、gate が無出力 exit 0 で
+  // Claude Code のネイティブ確認フローに委ねる (SPEC §2.4)。
+  decision: z.enum(["allow", "deny", "fallback"]),
   reason: z.string().optional(),
   /** ask 待ち中に session 宛に届いたメッセージ。Decision と同じ意味で配送。 */
   messages: z.array(MessageSchema).optional(),
@@ -45,9 +47,13 @@ export type AskResolution = z.infer<typeof AskResolutionSchema>;
 
 /**
  * 終局的な判定（gate / queue / PWA decide が扱う値）。
- * gate に返せるのは allow / deny の二値のみ。"ask" 中のものは null。
+ *  - allow / deny: gate が exit code に変換する
+ *  - fallback: ask タイムアウト時。gate は無出力 exit 0 で終了し、
+ *    Claude Code 本体のネイティブ確認プロンプトに委ねる (SPEC §2.4)。
+ *    権限は一切付与しない — 人間への確認がターミナル側に移るだけ。
+ * "ask" 中のものは null。
  */
-export const FinalDecisionSchema = z.enum(["allow", "deny"]);
+export const FinalDecisionSchema = z.enum(["allow", "deny", "fallback"]);
 export type FinalDecision = z.infer<typeof FinalDecisionSchema>;
 
 /**
@@ -55,7 +61,8 @@ export type FinalDecision = z.infer<typeof FinalDecisionSchema>;
  * FinalDecision に加えて `expired` を持つ:
  *  - expired: TTL sweep が回収した zombie (gate は既に応答を諦めている)。
  *             fail-safe の deny 相当で、gate へ allow として返してはいけない。
+ *  - fallback: ask タイムアウトでネイティブ確認フローに委ねたもの。
  * "ask" 中のものは null。
  */
-export const StoredDecisionSchema = z.enum(["allow", "deny", "expired"]);
+export const StoredDecisionSchema = z.enum(["allow", "deny", "expired", "fallback"]);
 export type StoredDecision = z.infer<typeof StoredDecisionSchema>;

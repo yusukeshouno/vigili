@@ -444,7 +444,7 @@ export const MINIMAL_POLICY_YAML = `# Vigili Policy
 
 defaults:
   unknown: ask          # ルール未ヒット時は人間に問う
-  timeout_seconds: 300  # 5 分応答なければ deny
+  timeout_seconds: 120  # 2 分応答なければネイティブ確認にフォールバック
 
 rules: []
 `;

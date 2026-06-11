@@ -57,7 +57,7 @@
 6. `deny` なら即座に返す → gate は exit 2 → Claude Code は実行中止
 7. `ask` なら daemon は queue に記録し、WebSocket で接続中の PWA にプッシュ＆ntfy で通知
 8. PWA が `approve` または `deny` を返すと、daemon は gate に結果を返す（ブロッキング待ち）
-9. タイムアウト（デフォルト 5 分）すると daemon は `deny` で返す
+9. タイムアウト（デフォルト 2 分）すると daemon は `fallback` で返す → gate は無出力 exit 0 → Claude Code 本体のネイティブ確認プロンプトが出る（§2.4）。pending は resolved として全クライアントから消える
 
 ---
 
@@ -118,7 +118,7 @@ Unix domain socket `~/.sentinel/daemon.sock` に接続し、改行区切り JSON
 ### 2.4 タイムアウト
 
 - daemon 接続のタイムアウト: 500ms
-- `ask` 後の決着待ちタイムアウト: 設定可能（デフォルト 5 分）
+- `ask` 後の決着待ちタイムアウト: 設定可能（デフォルト 2 分 = `defaults.timeout_seconds: 120`）。タイムアウト時、daemon は `decision: "fallback"` を gate に返し、queue 上の pending を resolved として全クライアント（Mac/iPhone/PWA）から消す
 - いずれもタイムアウトしたら **無出力 exit 0 でネイティブ確認フローにフォールバック**する。daemon に到達した時点で「Claude Code なら確認を出していた」操作と分類済みなので、フォールバック先のターミナルでも必ず標準プロンプトが出る（無確認で実行されることはない）。スマホで応答しそびれても作業はターミナルで継続できる
 
 ### 2.5 ネイティブパリティ・ルーティング
@@ -174,7 +174,7 @@ policy.yaml の構造：
 ```yaml
 defaults:
   unknown: ask           # ask | allow | deny
-  timeout_seconds: 300
+  timeout_seconds: 120   # ask 無応答でネイティブ確認へフォールバック
 
 rules:
   - name: <human-readable>
