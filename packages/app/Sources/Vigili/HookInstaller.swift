@@ -34,7 +34,12 @@ enum HookInstaller {
     FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
   }
 
-  /// gate コマンドを解決する: PATH 上の `vigili-gate`/`sentinel-gate` → repo の wrapper script。
+  /// gate コマンドを解決する。
+  /// 優先順: UserDefaults override → ~/.vigili/bin/ (インストール済み) →
+  ///         アプリバンドル内 Resources/vigili-gate (DMG 配布版) → /opt/homebrew等 PATH → dev wrapper
+  ///
+  /// バンドル内バイナリが見つかった場合は ~/.vigili/bin/vigili-gate にコピーして
+  /// そのパスを返す (settings.json に安定した絶対パスが書かれるようにするため)。
   static func resolveGateCommand() -> String? {
     if let override = UserDefaults.standard.string(forKey: "sentinel.gateCommand"),
       !override.isEmpty
@@ -42,15 +47,54 @@ enum HookInstaller {
       return override
     }
     let fm = FileManager.default
+    let home = fm.homeDirectoryForCurrentUser
+
+    // 1. ~/.vigili/bin/vigili-gate — installBundledGate() が既に置いた場合
+    let installed = home.appendingPathComponent(".vigili/bin/vigili-gate")
+    if fm.isExecutableFile(atPath: installed.path) {
+      return installed.path
+    }
+
+    // 2. アプリバンドル内 Resources/vigili-gate — DMG 配布時に同梱
+    if let bundleBin = Bundle.main.url(forResource: "vigili-gate", withExtension: nil),
+      fm.isExecutableFile(atPath: bundleBin.path)
+    {
+      return installBundledGate(from: bundleBin, fm: fm, home: home) ?? bundleBin.path
+    }
+
+    // 3. PATH 上の既知ディレクトリ (Homebrew 等)
     for dir in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"] {
       for name in ["vigili-gate", "sentinel-gate"] where fm.isExecutableFile(atPath: "\(dir)/\(name)") {
-        return name
+        return "\(dir)/\(name)"
       }
     }
-    // dev レイアウト: repo の wrapper script の絶対パス。
-    let wrapper = fm.homeDirectoryForCurrentUser
-      .appendingPathComponent("Dropbox (個人)/sentinel/scripts/vigili-gate")
+
+    // 4. ~/bin/vigili-gate (このセッションで作ったシンボリックリンク)
+    let userBin = home.appendingPathComponent("bin/vigili-gate")
+    if fm.isExecutableFile(atPath: userBin.path) {
+      return userBin.path
+    }
+
+    // 5. dev レイアウト: repo の wrapper script の絶対パス
+    let wrapper = home.appendingPathComponent("Dropbox (個人)/sentinel/scripts/vigili-gate")
     return fm.isExecutableFile(atPath: wrapper.path) ? wrapper.path : nil
+  }
+
+  /// バンドル内の vigili-gate バイナリを ~/.vigili/bin/ にコピーして実行可能にする。
+  /// 失敗しても致命的ではない (バンドルパスを直接使う)。
+  @discardableResult
+  private static func installBundledGate(from src: URL, fm: FileManager, home: URL) -> String? {
+    let binDir = home.appendingPathComponent(".vigili/bin")
+    let dest = binDir.appendingPathComponent("vigili-gate")
+    do {
+      try fm.createDirectory(at: binDir, withIntermediateDirectories: true)
+      if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
+      try fm.copyItem(at: src, to: dest)
+      try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dest.path)
+      return dest.path
+    } catch {
+      return nil
+    }
   }
 
   static func isInstalled() -> Bool {

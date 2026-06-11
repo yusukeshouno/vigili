@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:bundle": "npx esbuild src/cli.ts --bundle --platform=node --format=cjs --outfile=dist/bundle.cjs --external:net --external:fs --external:path --external:os --external:child_process",
+    "build:binary": "pnpm build:bundle && npx pkg dist/bundle.cjs --targets node18-macos-arm64,node18-macos-x64 --output dist/vigili-gate-macos --compress GZip",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
@@ -17,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5"
   }

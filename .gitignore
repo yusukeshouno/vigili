@@ -41,3 +41,8 @@ GLITCH_REPORT.ja.md
 scripts/confab-detect.mjs
 scripts/confab-experiment.sh
 scripts/confab-experiment-v3.sh
+
+# vigili-gate standalone binary (pkg build output, not checked in)
+packages/gate/dist/vigili-gate-macos-*
+packages/gate/dist/bundle.cjs
+packages/app/Resources/vigili-gate

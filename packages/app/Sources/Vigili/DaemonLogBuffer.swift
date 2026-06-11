@@ -30,4 +30,9 @@ final class DaemonLogBuffer: ObservableObject {
   func clear() {
     lines.removeAll()
   }
+
+  /// 末尾 n 行のテキストを新しい順で返す。
+  func lastLines(_ n: Int) -> [String] {
+    lines.suffix(n).reversed().map(\.text)
+  }
 }

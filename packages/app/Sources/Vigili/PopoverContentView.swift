@@ -32,10 +32,20 @@ struct PopoverContentView: View {
     }
     .onAppear { maybeShowWizard() }
     // Welcome を「Got it」で閉じた直後 (showWelcome: true→false) にもウィザードを出す。
-    // onAppear は初回オープン時 showWelcome=true でガードに弾かれ再発火しないため、
-    // 遷移を onChange で拾わないと新規インストールでウィザードが一度も出ない。
     .onChange(of: coordinator.showWelcome) { isWelcome in
       if !isWelcome { maybeShowWizard() }
+    }
+    .alert("policy.yaml エラー", isPresented: $coordinator.showPolicyError) {
+      Button("~/.vigili/policy.yaml を開く") {
+        NSWorkspace.shared.open(
+          FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".vigili/policy.yaml")
+        )
+      }
+      Button("再起動") { coordinator.restartDaemon() }
+      Button("閉じる", role: .cancel) {}
+    } message: {
+      Text(coordinator.policyErrorMessage)
     }
   }
 
@@ -206,6 +216,24 @@ struct PopoverContentView: View {
     if case .connected = coordinator.wsState {
       // 接続中: 脈動する緑ドット + 大きく広がる波紋リング (timer 駆動)
       ConnectedPulseDot()
+    } else if case .policyError(_) = coordinator.daemonStatus {
+      // policy.yaml エラー: 橙ドット + テキスト (クリックで詳細)
+      Button {
+        if case .policyError(let msg) = coordinator.daemonStatus {
+          coordinator.policyErrorMessage = msg
+          coordinator.showPolicyError = true
+        }
+      } label: {
+        HStack(spacing: 4) {
+          Circle()
+            .fill(Theme.amber)
+            .frame(width: 7, height: 7)
+          Text("policy error")
+            .font(.mono(9))
+            .foregroundStyle(Theme.amber)
+        }
+      }
+      .buttonStyle(.plain)
     } else if case .crashed(_, _) = coordinator.daemonStatus {
       // クラッシュ: 赤ドット + テキスト
       HStack(spacing: 4) {

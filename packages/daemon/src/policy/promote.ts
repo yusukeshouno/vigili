@@ -24,7 +24,14 @@ function parseGenerated(raw: string): GeneratedRulesFile {
   if (!parsed || typeof parsed !== "object") return { rules: [] };
   const obj = parsed as { rules?: unknown };
   if (!obj.rules || !Array.isArray(obj.rules)) return { rules: [] };
-  const rules = obj.rules.map((r) => PolicyRuleSchema.parse(r));
+  const rules: PolicyRule[] = [];
+  for (const r of obj.rules) {
+    const result = PolicyRuleSchema.safeParse(r);
+    if (result.success) {
+      rules.push(result.data);
+    }
+    // スキーマ違反のルールは daemon クラッシュより skip を優先する
+  }
   return { rules };
 }
 

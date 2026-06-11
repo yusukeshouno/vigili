@@ -17,6 +17,8 @@ final class DaemonController: ObservableObject {
     case starting
     case running(pid: Int32)
     case crashed(exitCode: Int32, willRetryAt: Date?)
+    /// policy.yaml のスキーマ違反で起動失敗 (exit 2)。自動リトライしない。
+    case policyError(message: String)
   }
 
   @Published private(set) var status: Status = .stopped
@@ -262,6 +264,15 @@ final class DaemonController: ObservableObject {
       }
       if exitCode == 0 {
         self.status = .stopped
+      } else if exitCode == 2 {
+        // policy.yaml スキーマ違反 — 自動リトライしない (ループしても直らない)。
+        // logBuffer の最新行からエラーメッセージを拾って UI に表示する。
+        let msg = self.logBuffer.lastLines(10)
+          .first { $0.contains("ポリシーロード失敗") || $0.contains("スキーマ違反") }
+          ?? "policy.yaml に問題があります。~/.vigili/policy.yaml を確認してください。"
+        self.status = .policyError(message: msg)
+        self.logBuffer.append(line: "[Vigili.app] policy error — auto-retry suppressed")
+        return
       } else {
         self.consecutiveFailures += 1
         self.status = .crashed(exitCode: exitCode, willRetryAt: Date().addingTimeInterval(self.retryDelay()))

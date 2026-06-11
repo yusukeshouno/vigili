@@ -54,6 +54,9 @@ final class AppCoordinator: ObservableObject {
   /// 「Sign in with Apple」の結果トースト。
   @Published var signInStatus: String?
 
+  @Published var showPolicyError: Bool = false
+  @Published var policyErrorMessage: String = ""
+
   private var pollTimer: Timer?
   private var tickCount = 0
 
@@ -271,6 +274,10 @@ final class AppCoordinator: ObservableObject {
   // MARK: - ターミナル不要オンボーディング
 
   /// 「Claude Code に接続」: PreToolUse hook を ~/.claude/settings.json に冪等導入し daemon を起動。
+  func restartDaemon() {
+    daemonController.restart()
+  }
+
   func connectToClaudeCode() {
     do {
       let r = try HookInstaller.installIfNeeded()

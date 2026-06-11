@@ -81,6 +81,34 @@ targets:
         buildPhase: resources
       - path: Resources/Fonts/JetBrainsMono.ttf
         buildPhase: resources
+      # vigili-gate スタンドアロンバイナリ (pkg でビルド済み)
+      # pnpm --filter @vigili/gate build:binary で生成される。
+      # 不在時はビルドエラーにせず警告のみ (開発中は ~/bin/vigili-gate fallback を使う)。
+      - path: Resources/vigili-gate
+        optional: true
+        buildPhase: resources
+    preBuildScripts:
+      - name: "Build vigili-gate binary (if src newer than dist)"
+        script: |
+          set -e
+          GATE_SRC="${SRCROOT}/../../packages/gate/dist/cli.js"
+          GATE_BIN="${SRCROOT}/Resources/vigili-gate"
+          # dist/cli.js が存在しなければ先に tsc ビルド
+          if [ ! -f "$GATE_SRC" ]; then
+            cd "${SRCROOT}/../.." && pnpm --filter @vigili/gate build
+          fi
+          # バイナリが無いか cli.js より古ければ pkg でビルド
+          if [ ! -f "$GATE_BIN" ] || [ "$GATE_SRC" -nt "$GATE_BIN" ]; then
+            cd "${SRCROOT}/../.." && pnpm --filter @vigili/gate build:binary
+            ARCH=$(uname -m)
+            if [ "$ARCH" = "arm64" ]; then
+              cp "${SRCROOT}/../../packages/gate/dist/vigili-gate-macos-arm64" "$GATE_BIN"
+            else
+              cp "${SRCROOT}/../../packages/gate/dist/vigili-gate-macos-x64" "$GATE_BIN"
+            fi
+            chmod 755 "$GATE_BIN"
+          fi
+        basedOnDependencyAnalysis: false
     dependencies:
       - target: VigiliWidget
         embed: true
