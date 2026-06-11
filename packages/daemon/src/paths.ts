@@ -37,6 +37,8 @@ export interface SentinelPaths {
    * `vigili-daemon qr` が unified QR を生成するために使う (0600)。
    */
   relayUserToken: string;
+  /** ask ルーティングモード (SPEC §2.6) の永続化先。"integrated" | "native-first"。 */
+  askMode: string;
 }
 
 export function paths(home: string = sentinelHome()): SentinelPaths {
@@ -53,5 +55,6 @@ export function paths(home: string = sentinelHome()): SentinelPaths {
     vapid: join(home, "vapid.json"),
     pushSubs: join(home, "push-subs.json"),
     relayUserToken: join(home, "relay-user-token"),
+    askMode: join(home, "ask-mode"),
   };
 }

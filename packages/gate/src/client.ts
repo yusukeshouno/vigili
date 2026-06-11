@@ -113,6 +113,13 @@ async function exchange(
       ...(parsed.messages && parsed.messages.length > 0 ? { messages: parsed.messages } : {}),
     };
   }
+  if (parsed.decision === "fallback") {
+    // native-first モード (SPEC §2.6): 即ネイティブ確認へ。
+    return {
+      decision: "fallback",
+      ...(parsed.reason !== undefined ? { reason: parsed.reason } : {}),
+    };
+  }
 
   // ask: 同じソケット上で resolution を待つ
   trace("ask received, waiting for resolution", parsed.request_id);

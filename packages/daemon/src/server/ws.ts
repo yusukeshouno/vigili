@@ -1,5 +1,6 @@
 import fastifyWebsocket from "@fastify/websocket";
 import {
+  type AskMode,
   type HostedSession,
   type Message,
   type StatsBuckets,
@@ -41,6 +42,10 @@ export interface WsServerOptions {
    * 頼りに対応する runner socket へ書き戻す。
    */
   onSessionClient?: (msg: WsClientMessage) => void;
+  /** snapshot に同梱する ask ルーティングモード (SPEC §2.6)。省略時は送らない。 */
+  askMode?: () => AskMode;
+  /** client からの set-ask-mode。daemon 側で永続化 + 全クライアント broadcast する。 */
+  onSetAskMode?: (mode: AskMode) => void;
   log?: (msg: string) => void;
   /** Web Push のエンドポイントも同じ Fastify インスタンスに乗せる場合に渡す。 */
   push?: { vapid: VapidKeys; store: SubscriptionStore };
@@ -117,11 +122,13 @@ export async function startWsServer(options: WsServerOptions): Promise<RunningWs
       // snapshot を送信
       const recent = options.recentMessages?.() ?? [];
       const sessions = options.currentSessions?.() ?? [];
+      const mode = options.askMode?.();
       const snapshot: Extract<WsServerMessage, { type: "snapshot" }> = {
         type: "snapshot",
         pending: options.queue.list(),
         ...(recent.length > 0 ? { messages: recent } : {}),
         ...(sessions.length > 0 ? { sessions } : {}),
+        ...(mode !== undefined ? { ask_mode: mode } : {}),
       };
       wrap.send(snapshot);
 
@@ -285,6 +292,18 @@ function handleClientMessage(
     const ok = options.queue.resolve(msg.id, msg.decision, "human:ws", null);
     if (!ok) {
       (options.log ?? console.error)(`[vigili-ws] decide: id ${msg.id} は既に決着済み / 未知`);
+    }
+    return;
+  }
+  if (msg.type === "set-ask-mode") {
+    if (!options.onSetAskMode) return;
+    try {
+      // broadcast は daemon 側の setAskMode (ctx.broadcast = WS + relay) が行う。
+      options.onSetAskMode(msg.mode);
+    } catch (err) {
+      (options.log ?? console.error)(
+        `[vigili-ws] set-ask-mode handler error: ${(err as Error).message}`,
+      );
     }
     return;
   }

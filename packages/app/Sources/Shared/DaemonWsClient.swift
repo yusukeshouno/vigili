@@ -42,6 +42,9 @@ final class DaemonWsClient: ObservableObject {
   @Published private(set) var pendingQuestions: [PendingQuestion] = []
   /// 承認待ちの plan (ExitPlanMode)。request_id 単位。
   @Published private(set) var pendingPlans: [PendingPlan] = []
+  /// ask ルーティングモード (SPEC §2.6)。"integrated" | "native-first"。
+  /// daemon が単一の真実。snapshot / ask-mode broadcast で同期される。
+  @Published private(set) var askMode: String = "integrated"
   /// transcript の上限 (セッションあたり)。古い行から落とす。
   private let transcriptCap = 500
 
@@ -155,6 +158,18 @@ final class DaemonWsClient: ObservableObject {
     sendJson(msg, on: task)
     // optimistic update: ローカルでも消しておく (resolved で本確認)
     pending.removeAll { $0.id == id }
+  }
+
+  /// ask ルーティングモードの切り替え (SPEC §2.6)。
+  /// daemon が永続化し ask-mode broadcast で全クライアントに伝搬する。
+  func setAskMode(_ mode: String) {
+    guard let task = task, case .connected = state else {
+      appLog("ws.setAskMode: not connected, ignoring")
+      return
+    }
+    sendJson(["type": "set-ask-mode", "mode": mode], on: task)
+    // optimistic update (broadcast で本確認)
+    askMode = mode
   }
 
   /// "今後も自動で承認" ボタンから呼ばれる。
@@ -382,6 +397,14 @@ final class DaemonWsClient: ObservableObject {
       if let arr = obj["sessions"] as? [[String: Any]] {
         sessions = arr.compactMap(HostedSession.init(dict:))
         appLog("ws.snapshot \(sessions.count) sessions")
+      }
+      if let mode = obj["ask_mode"] as? String {
+        askMode = mode
+      }
+    case "ask-mode":
+      if let mode = obj["mode"] as? String {
+        askMode = mode
+        appLog("ws.ask-mode → \(mode)")
       }
     case "pending":
       if let r = obj["request"] as? [String: Any], let req = ApprovalRequest(dict: r) {

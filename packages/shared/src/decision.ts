@@ -25,9 +25,19 @@ export const DecisionSchema = z.discriminatedUnion("decision", [
     request_id: z.string().uuid(),
     // ask 中の drain は ask resolution と一緒に届く (下記 AskResolutionSchema)
   }),
+  z.object({
+    // native-first モード (SPEC §2.6): ask を Vigili に出さず即ネイティブ確認へ。
+    // gate は無出力 exit 0 で終了する。
+    decision: z.literal("fallback"),
+    reason: z.string().optional(),
+  }),
 ]);
 
 export type Decision = z.infer<typeof DecisionSchema>;
+
+/** ask ルーティングモード (SPEC §2.6)。daemon が単一の真実として持つ。 */
+export const AskModeSchema = z.enum(["integrated", "native-first"]);
+export type AskMode = z.infer<typeof AskModeSchema>;
 
 /**
  * ask だったリクエストが人間 / タイムアウトで決着したとき、

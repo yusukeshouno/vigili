@@ -46,6 +46,8 @@ final class MobileAppCoordinator: ObservableObject {
   @Published var transcripts: [String: [TranscriptLine]] = [:]
   @Published var pendingQuestions: [PendingQuestion] = []
   @Published var pendingPlans: [PendingPlan] = []
+  /// ask ルーティングモード (SPEC §2.6)。daemon が単一の真実、WS で同期。
+  @Published var askMode: String = "integrated"
 
   enum Route: Equatable {
     case none
@@ -92,6 +94,7 @@ final class MobileAppCoordinator: ObservableObject {
     wsClient.$transcripts.receive(on: DispatchQueue.main).assign(to: &$transcripts)
     wsClient.$pendingQuestions.receive(on: DispatchQueue.main).assign(to: &$pendingQuestions)
     wsClient.$pendingPlans.receive(on: DispatchQueue.main).assign(to: &$pendingPlans)
+    wsClient.$askMode.receive(on: DispatchQueue.main).assign(to: &$askMode)
 
     // Bonjour 発見状況が変わるたびに戦略を再評価
     bonjour.$services

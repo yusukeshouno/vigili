@@ -359,6 +359,31 @@ struct PopoverContentView: View {
 
       Spacer()
 
+      // ask ルーティングモード (SPEC §2.6)。
+      // integrated: ask は Vigili (ここ + iPhone) に出る。
+      // native-first: ask は Claude Code のネイティブ確認に直行し Vigili には出ない。
+      Button {
+        let next = coordinator.askMode == "native-first" ? "integrated" : "native-first"
+        coordinator.wsClient.setAskMode(next)
+      } label: {
+        HStack(spacing: 4) {
+          Image(
+            systemName: coordinator.askMode == "native-first"
+              ? "terminal" : "iphone.radiowaves.left.and.right",
+          )
+          .font(.system(size: 11))
+          Text(coordinator.askMode == "native-first" ? "Claude 優先" : "Vigili 統合")
+            .font(.mono(10))
+        }
+        .foregroundStyle(coordinator.askMode == "native-first" ? Theme.fgMid : Theme.green)
+      }
+      .buttonStyle(.plain)
+      .help(
+        coordinator.askMode == "native-first"
+          ? "Claude アプリ優先モード: 確認は Claude Code に直接出ます。クリックで Vigili 統合に切替"
+          : "Vigili 統合モード: 確認はここと iPhone に出ます。クリックで Claude アプリ優先に切替",
+      )
+
       // ホスト型セッション (vigili run): 会話 + 質問/plan 回答 + 返信
       Button {
         SessionsWindow.show(coordinator: coordinator)

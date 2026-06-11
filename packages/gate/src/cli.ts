@@ -279,10 +279,11 @@ async function main(): Promise<number> {
       return 0;
     }
     if (result.decision === "fallback") {
-      // ask タイムアウト → 無出力 exit 0 で Claude Code のネイティブ確認に委ねる (SPEC §2.4)。
-      // 権限は付与しない — 確認の場がスマホからターミナルに移るだけ。
+      // ask タイムアウト (SPEC §2.4) または native-first モード (SPEC §2.6)。
+      // 無出力 exit 0 で Claude Code のネイティブ確認に委ねる。
+      // 権限は付与しない — 確認の場が Vigili からターミナルに移るだけ。
       console.error(
-        `[vigili-gate] ask タイムアウト — ネイティブ確認にフォールバック${result.reason ? `: ${result.reason}` : ""}`,
+        `[vigili-gate] ネイティブ確認にフォールバック${result.reason ? `: ${result.reason}` : ""}`,
       );
       dbg("→ exit 0 (fallback, no output)");
       return 0;

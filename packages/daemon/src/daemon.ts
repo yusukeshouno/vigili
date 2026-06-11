@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   type ApprovalRequest,
+  type AskMode,
   type AskResolution,
   type Decision,
   type HostedSession,
@@ -36,6 +37,7 @@ import {
   loadOrCreateVapidKeys,
   openSubscriptionStore,
 } from "./notify/web-push.js";
+import { loadAskMode, saveAskMode } from "./ask-mode.js";
 import { paths } from "./paths.js";
 import { DEFAULT_POLICY_YAML } from "./policy/default.js";
 import { type DecisionResult, decide } from "./policy/engine.js";
@@ -134,6 +136,12 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   const sessionTags = options.sessionTags ?? config.session_tags;
 
+  // ask ルーティングモード (SPEC §2.6)。ファイルで再起動を跨いで維持する。
+  let askMode: AskMode = loadAskMode(p.askMode);
+  if (askMode !== "integrated") {
+    log(`[vigili-daemon] ask-mode: ${askMode}`);
+  }
+
   // policy はホットリロード可能にするため mutable な参照で持つ。
   const ctx: DaemonContext = {
     policy: initialPolicy,
@@ -151,6 +159,18 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     disconnectRelay: async () => {},
     onMessageAdded: () => {},
     onMessageDelivered: () => {},
+    askMode: () => askMode,
+    setAskMode: (mode) => {
+      if (mode === askMode) return;
+      askMode = mode;
+      try {
+        saveAskMode(p.askMode, mode);
+      } catch (err) {
+        log(`[vigili-daemon] ask-mode 永続化失敗: ${(err as Error).message}`);
+      }
+      log(`[vigili-daemon] ask-mode → ${mode}`);
+      ctx.broadcast({ type: "ask-mode", mode });
+    },
   };
 
   const socket = startSocketServer(p.socket, (line, conn) => handleLine(line, conn, ctx));
@@ -163,6 +183,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       if (msg.promote) void handlePromote(msg.promote, ctx);
       const ok = queue.resolve(msg.id, msg.decision, "human:relay", null);
       if (!ok) log(`[vigili-relay] decide: id ${msg.id} は既に決着済み / 未知`);
+    } else if (msg.type === "set-ask-mode") {
+      ctx.setAskMode(msg.mode);
     } else if (msg.type === "send-message") {
       const id = randomUUID();
       const stored = ctx.messageStore.insert({
@@ -203,6 +225,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       currentSessions: () => ctx.sessions.list(),
       currentStats: todayStats,
       onSessionClient: (msg) => handleSessionClientMessage(msg, ctx),
+      askMode: () => ctx.askMode(),
+      onSetAskMode: (mode) => ctx.setAskMode(mode),
       ...(pushVapid && pushStore ? { push: { vapid: pushVapid, store: pushStore } } : {}),
     });
   }
@@ -588,6 +612,10 @@ interface DaemonContext {
    *  WS server が起動後に差し替える。startDaemon の構築時点では noop。 */
   onMessageAdded: (m: import("@vigili/shared").Message) => void;
   onMessageDelivered: (id: string, delivered_at: number) => void;
+  /** ask ルーティングモード (SPEC §2.6)。daemon が単一の真実として持つ。 */
+  askMode: () => AskMode;
+  /** モードを切り替えて永続化し、全クライアントに broadcast する。 */
+  setAskMode: (mode: AskMode) => void;
 }
 
 async function handleLine(line: string, conn: ConnContext, ctx: DaemonContext): Promise<void> {
@@ -1246,6 +1274,22 @@ async function handleToolRequest(
   });
 
   const result = decide(req, ctx.policy, { sessionTags: ctx.sessionTags });
+
+  // native-first モード (SPEC §2.6): ask を Vigili に出さず即ネイティブ確認へ委ねる。
+  // pending broadcast はせず、履歴には fallback として記録する。
+  // fallback は無出力 exit 0 なので gate は Claude にメッセージを渡せない —
+  // drain する前にこの分岐を通ること (メッセージは queue に残り、次の allow/ask で届く)。
+  if (result.action === "ask" && ctx.askMode() === "native-first") {
+    ctx.store.resolve({
+      id,
+      resolved_at: Date.now(),
+      decision: "fallback",
+      decided_by: `ask-mode:native-first (policy:${result.source})`,
+      reason: "Claude アプリ優先モードのためネイティブ確認に委譲",
+    });
+    conn.send({ decision: "fallback", reason: "ask-mode: native-first" } satisfies Decision);
+    return;
+  }
 
   // この session 宛にキューされているメッセージを drain し、Decision に同梱する。
   // session_id 未指定 (gate が --session 渡さなかった) なら drain しない。

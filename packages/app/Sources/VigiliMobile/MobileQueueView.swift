@@ -345,6 +345,35 @@ struct MobileSettingsSheet: View {
           RoundedRectangle(cornerRadius: 12).fill(Theme.bgRise)
         )
 
+        // ── ask ルーティングモード (SPEC §2.6) ─────────────────────
+        // 外出先から「統合モードに戻す」ができることが重要なので iPhone にも置く。
+        VStack(alignment: .leading, spacing: 6) {
+          Toggle(isOn: Binding(
+            get: { coordinator.askMode != "native-first" },
+            set: { on in
+              coordinator.wsClient.setAskMode(on ? "integrated" : "native-first")
+            },
+          )) {
+            VStack(alignment: .leading, spacing: 2) {
+              Text("承認をこのスマホで受ける")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.fg)
+              Text(
+                coordinator.askMode == "native-first"
+                  ? "オフ: 確認は Mac の Claude Code に直接出ます"
+                  : "オン: 確認はこのスマホと Mac のメニューバーに届きます"
+              )
+              .font(.mono(11))
+              .foregroundStyle(Theme.fgDim)
+            }
+          }
+          .tint(Theme.green)
+        }
+        .padding(16)
+        .background(
+          RoundedRectangle(cornerRadius: 12).fill(Theme.bgRise)
+        )
+
         // ── Sign in with Apple ──────────────────────────────────
         Group {
           if case .account = coordinator.activeRoute {

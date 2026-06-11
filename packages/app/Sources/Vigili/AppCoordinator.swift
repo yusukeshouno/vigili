@@ -40,6 +40,8 @@ final class AppCoordinator: ObservableObject {
   @Published var transcripts: [String: [TranscriptLine]] = [:]
   @Published var pendingQuestions: [PendingQuestion] = []
   @Published var pendingPlans: [PendingPlan] = []
+  /// ask ルーティングモード (SPEC §2.6)。daemon が単一の真実、WS で同期。
+  @Published var askMode: String = "integrated"
 
   /// 初回起動時に Welcome 画面を出すかどうか。`~/.vigili/.welcomed` の有無で判定。
   @Published var showWelcome: Bool
@@ -158,6 +160,7 @@ final class AppCoordinator: ObservableObject {
     wsClient.$transcripts.receive(on: DispatchQueue.main).assign(to: &$transcripts)
     wsClient.$pendingQuestions.receive(on: DispatchQueue.main).assign(to: &$pendingQuestions)
     wsClient.$pendingPlans.receive(on: DispatchQueue.main).assign(to: &$pendingPlans)
+    wsClient.$askMode.receive(on: DispatchQueue.main).assign(to: &$askMode)
 
     // 起動
     daemonController.start()

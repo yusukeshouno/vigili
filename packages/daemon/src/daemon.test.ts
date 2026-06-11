@@ -308,6 +308,43 @@ describe("startDaemon — ask flow", () => {
     gate.close();
   });
 
+  it("native-first モードでは ask が即 fallback になり pending に乗らない (SPEC §2.6)", async () => {
+    // ask-mode ファイルを書いてから daemon を起動する
+    await daemon.close();
+    const { writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    writeFileSync(join(home, "ask-mode"), "native-first\n");
+    const policy: PolicyConfig = {
+      defaults: { unknown: "ask", timeout_seconds: 60 },
+      rules: [],
+    };
+    daemon = await startDaemon({ home, policy, log: () => undefined, enableWs: false });
+
+    const gate = openConn();
+    gate.send({
+      tool_name: "Bash",
+      tool_input: { command: "anything" },
+      cwd: "/tmp",
+      session_id: "s",
+    });
+    const first = (await gate.next()) as { decision: string; reason?: string };
+    expect(first.decision).toBe("fallback");
+    expect(first.reason).toMatch(/native-first/u);
+
+    // pending には乗っていない
+    const admin = openConn();
+    admin.send({ kind: "admin", action: "pending" });
+    const resp = (await admin.next()) as { ok: boolean; pending: unknown[] };
+    expect(resp.pending).toHaveLength(0);
+
+    gate.close();
+    admin.close();
+    // 後続テストのために integrated に戻して再起動
+    writeFileSync(join(home, "ask-mode"), "integrated\n");
+    await daemon.close();
+    daemon = await startDaemon({ home, policy, log: () => undefined, enableWs: false });
+  });
+
   it("admin pending lists current ask requests", async () => {
     const gate = openConn();
     gate.send({

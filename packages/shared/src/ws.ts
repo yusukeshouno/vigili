@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ApprovalRequestSchema } from "./approval-request.js";
-import { FinalDecisionSchema } from "./decision.js";
+import { AskModeSchema, FinalDecisionSchema } from "./decision.js";
 import { MessageSchema } from "./message.js";
 import { HostedSessionSchema, QuestionSchema, TranscriptLineSchema } from "./session.js";
 
@@ -72,10 +72,17 @@ export const WsServerMessageSchema = z.discriminatedUnion("type", [
     messages: z.array(MessageSchema).optional(),
     /** 接続時点で稼働中のホスト型セッション (L4)。後から繋いだ client 用。 */
     sessions: z.array(HostedSessionSchema).optional(),
+    /** ask ルーティングモード (SPEC §2.6)。旧 daemon は送らないので optional。 */
+    ask_mode: AskModeSchema.optional(),
   }),
   z.object({
     type: z.literal("pending"),
     request: ApprovalRequestSchema,
+  }),
+  z.object({
+    /** ask ルーティングモードが切り替わった (SPEC §2.6)。 */
+    type: z.literal("ask-mode"),
+    mode: AskModeSchema,
   }),
   z.object({
     type: z.literal("resolved"),
@@ -150,6 +157,11 @@ export const WsClientMessageSchema = z.discriminatedUnion("type", [
     // クライアントから送ることはできない。
     decision: z.enum(["allow", "deny"]),
     promote: PromoteRuleSchema.nullable().optional(),
+  }),
+  z.object({
+    /** ask ルーティングモードの切り替え (SPEC §2.6)。 */
+    type: z.literal("set-ask-mode"),
+    mode: AskModeSchema,
   }),
   z.object({
     /** session 宛に新しいメッセージを enqueue する。 */
