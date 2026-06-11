@@ -14,7 +14,11 @@ import { execFileSync } from "node:child_process";
  * vanilla より緩くなることはない。
  */
 
-const SKIP_FLAG_RE = /--(?:allow-)?dangerously-skip-permissions(?:\s|$|=)/;
+// 注意: デスクトップアプリが付ける --allow-dangerously-skip-permissions は
+// 「skip を許可できる」という capability フラグで、実際には確認を出す。
+// マッチさせるのはユーザーが明示した --dangerously-skip-permissions のみ
+// (前に allow- が付くものは除外する)。
+const SKIP_FLAG_RE = /(?:^|\s)--dangerously-skip-permissions(?:\s|$|=)/;
 
 /** コマンドライン文字列に skip-permissions フラグが含まれるか。 */
 export function hasSkipPermissionsFlag(cmdline: string): boolean {

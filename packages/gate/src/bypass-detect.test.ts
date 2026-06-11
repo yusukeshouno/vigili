@@ -7,12 +7,12 @@ describe("hasSkipPermissionsFlag", () => {
     expect(hasSkipPermissionsFlag("claude --dangerously-skip-permissions --model opus")).toBe(true);
   });
 
-  it("デスクトップアプリ経由の --allow- 変種を検出する", () => {
+  it("デスクトップアプリの --allow- 変種は検出しない (実際には確認を出すため)", () => {
     expect(
       hasSkipPermissionsFlag(
         "/path/claude --permission-mode acceptEdits --allow-dangerously-skip-permissions --resume abc",
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("フラグなしのコマンドラインは false", () => {
