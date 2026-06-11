@@ -146,7 +146,9 @@ export const WsClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("decide"),
     id: z.string().uuid(),
-    decision: FinalDecisionSchema,
+    // 人間の判定は二値。fallback は daemon のタイムアウト経路専用で、
+    // クライアントから送ることはできない。
+    decision: z.enum(["allow", "deny"]),
     promote: PromoteRuleSchema.nullable().optional(),
   }),
   z.object({

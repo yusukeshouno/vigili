@@ -71,7 +71,7 @@ const EMPTY_SOURCES: Record<DecisionSource, number> = {
 };
 
 interface Row {
-  decision: "allow" | "deny" | "expired" | null;
+  decision: "allow" | "deny" | "expired" | "fallback" | null;
   decided_by: string | null;
   created_at: number;
   resolved_at: number | null;
@@ -105,9 +105,12 @@ export function computeStats(db: Database.Database, fromMs: number, toMs: number
 
     // 外部要因による cancellation は deny にカウントしない (Claude Code dialog 等)
     // expired (TTL sweep の回収) は fail-safe deny 相当として deny に数える。
+    // fallback (ask タイムアウト → ネイティブ確認へ委譲) は Vigili では決めなかった
+    // ものなので cancelled に数える。pending に入れると未決として残り続けて見える。
     if (src === "cancelled") stats.by_decision.cancelled += 1;
     else if (r.decision === "allow") stats.by_decision.allow += 1;
     else if (r.decision === "deny" || r.decision === "expired") stats.by_decision.deny += 1;
+    else if (r.decision === "fallback") stats.by_decision.cancelled += 1;
     else stats.by_decision.pending += 1;
 
     stats.by_source[src] += 1;
