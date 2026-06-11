@@ -3,6 +3,7 @@ import { appendFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { ToolRequestSchema } from "@vigili/shared";
+import { ancestorHasSkipPermissions } from "./bypass-detect.js";
 import { loadClaudePermissions, matchClaudePermissions } from "./claude-perms.js";
 import { GateConnectionError, sendToDaemon } from "./client.js";
 import { nativeParityPassthrough } from "./parity.js";
@@ -216,6 +217,14 @@ async function main(): Promise<number> {
   const passthrough = nativeParityPassthrough(reqResult.data, permissionMode);
   if (passthrough !== null) {
     dbg("parity passthrough:", passthrough, "→ exit 0 (no output)");
+    return 0;
+  }
+
+  // --dangerously-skip-permissions で動くセッションは payload の permission_mode に
+  // 反映されない (acceptEdits 等のまま) ため、祖先 claude プロセスの引数で検出する。
+  // このフラグ下では Claude Code は一切確認を出さない → Vigili も出さない (SPEC §2.5)。
+  if (ancestorHasSkipPermissions()) {
+    dbg("parity passthrough: ancestor has --dangerously-skip-permissions → exit 0 (no output)");
     return 0;
   }
 
