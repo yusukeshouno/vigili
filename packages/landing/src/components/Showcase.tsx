@@ -27,7 +27,15 @@ export function Showcase({ copy }: { copy: Copy }) {
               STEP <b>01</b>
             </div>
             <div className="ill">
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start", maxWidth: "100%" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  alignItems: "flex-start",
+                  maxWidth: "100%",
+                }}
+              >
                 {/* Apple sign-in button mockup */}
                 <div
                   style={{

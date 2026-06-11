@@ -133,8 +133,7 @@ const en: Copy = {
 
   surfacesEyebrow: "Three surfaces",
   surfacesTitle: "The same queue, on whichever screen is closest.",
-  surfacesLead:
-    "At your desk, across the room, or out the door — Vigili meets you where you are.",
+  surfacesLead: "At your desk, across the room, or out the door — Vigili meets you where you are.",
   surfaceMacAppLabel: "Mac app",
   surfaceMacAppHeadline: "Every request, one menu-bar click away.",
   surfaceMacAppBody:
@@ -150,8 +149,7 @@ const en: Copy = {
 
   tourEyebrow: "What it feels like",
   tourTitle: "Two taps, from your pocket.",
-  tourLead:
-    "Once you're signed in, this is the entire experience — no terminal in sight.",
+  tourLead: "Once you're signed in, this is the entire experience — no terminal in sight.",
   tourStep1Title: "Link once with your Apple ID",
   tourStep1Body:
     "Sign in with Apple on the Mac, then on the iPhone. The two link in seconds — a QR fallback is there if you prefer.",
@@ -196,16 +194,16 @@ const en: Copy = {
   secEyebrow: "Security",
   secTitle: "Your code never leaves your machine.",
   secLead:
-    "Your source files are never uploaded — only the approval prompt itself travels (the tool name and the command line being run). On the same network it stays fully local. And if the service ever fails, Claude waits; it never approves on its own.",
+    "Your source files are never uploaded — only the approval prompt itself travels (the tool name and the command line being run). On the same network it stays fully local. And if the service ever fails, Claude falls back to its native confirmation prompt — it never acts on its own.",
   sec1Title: "Same network? Direct connection.",
   sec1Body:
     "When your phone is on the same Wi-Fi as your Mac, they talk directly over your local network — nothing goes through the internet. No third party in the middle.",
   sec2Title: "Away from home? Vigili Cloud.",
   sec2Body:
     "Sign in with Apple on your Mac and iPhone once. Vigili's cloud relay forwards the approval prompt between your devices over TLS — the same payload your phone shows you (the command being run), never your source files, and nothing is stored at rest. End-to-end encryption so the relay can't read the prompt either is on the roadmap.",
-  sec3Title: "If Vigili stops, Claude pauses.",
+  sec3Title: "If Vigili stops, Claude still asks.",
   sec3Body:
-    "If something goes wrong with Vigili, Claude stops and waits. It never approves on its own when you're not watching. Every window stays blocked until you're back.",
+    "If something goes wrong with Vigili, Claude automatically falls back to its native confirmation prompt — the same dialog you'd see without Vigili. It never acts on its own when you're not watching. Vigili can only reduce the prompts you see compared to vanilla Claude Code, never add to them.",
 
   dlMacButton: "Download for Mac",
   dlIphoneSoon: "iPhone · coming soon",
@@ -313,16 +311,16 @@ const ja: Copy = {
   secEyebrow: "セキュリティ",
   secTitle: "コードはあなたのパソコンから出ない。",
   secLead:
-    "ソースファイルがアップロードされることはありません。流れるのは承認プロンプト自体（ツール名と実行されるコマンド行）だけです。同じネットワークなら完全にローカルで完結します。Vigili が止まっても、Claude は勝手に進まず待ちます。",
+    "ソースファイルがアップロードされることはありません。流れるのは承認プロンプト自体（ツール名と実行されるコマンド行）だけです。同じネットワークなら完全にローカルで完結します。Vigili が止まっても、Claude は勝手に操作を進めません — ターミナルの標準確認プロンプトに自動的に戻ります。",
   sec1Title: "同じネットワークなら直接つながる",
   sec1Body:
     "スマホと Mac が同じ Wi-Fi にいるとき、両者はローカルネットワークで直接通信します。インターネットを経由しないので、間に第三者は入りません。",
   sec2Title: "外出先は Vigili Cloud 経由",
   sec2Body:
     "Mac と iPhone でそれぞれ「Apple でサインイン」するだけで設定完了。Vigili のクラウド relay が承認プロンプトをデバイス間で TLS 越しに転送します。流れるのはスマホに表示されるのと同じ内容（実行されるコマンド）だけで、ソースファイルは送られず、保存もされません。relay 自身もプロンプトを読めない end-to-end 暗号化はロードマップにあります。",
-  sec3Title: "Vigili が止まったら、Claude も止まる",
+  sec3Title: "Vigili が止まっても、勝手な実行はない",
   sec3Body:
-    "Vigili に問題が起きた場合、Claude はその場で止まって待ちます。あなたが見ていないときに勝手に許可することは絶対にありません。すべてのウィンドウは復帰までブロックされたままです。",
+    "Vigili に問題が起きた場合、Claude は Claude Code 本来の確認プロンプトに自動的に戻ります。あなたが見ていないときに勝手に許可することは絶対にありません。Vigili は Claude Code が出すはずだった確認より多くを送ることはなく、少なくすることだけができます。",
 
   dlMacButton: "Mac 版をダウンロード",
   dlIphoneSoon: "iPhone · 近日公開",

@@ -14,8 +14,8 @@ export function TopBar({ lang, copy }: { lang: Lang; copy: Copy }) {
           <span className="name">Vigili</span>
         </Link>
         <div className="nav-r">
-          <a href="#views">{copy.navProduct}</a>
           <a href="#how">{copy.navHow}</a>
+          <a href="#tour">{copy.navProduct}</a>
           <a href="#security">{copy.navSecurity}</a>
           <Link href={`/?lang=${otherLang}#top`} className="lang">
             {copy.langSwitchTo}

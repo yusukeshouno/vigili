@@ -1752,7 +1752,7 @@ section + section {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
-  align-items: stretch;  /* 全カードを同じ高さに */
+  align-items: stretch; /* 全カードを同じ高さに */
 }
 .sec-card {
   background: var(--color-surface);
@@ -1762,12 +1762,12 @@ section + section {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px -16px rgba(0, 0, 0, 0.5);
   position: relative;
   display: flex;
-  flex-direction: column;  /* 縦並びで高さ 100% を占める */
+  flex-direction: column; /* 縦並びで高さ 100% を占める */
 }
 .sec-card h3 {
   font-size: 21px;
   margin: 14px 0 10px;
-  overflow-wrap: anywhere;  /* 日本語の長い見出しも折り返す */
+  overflow-wrap: anywhere; /* 日本語の長い見出しも折り返す */
   word-break: break-word;
 }
 .sec-card p {
